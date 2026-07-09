@@ -34,14 +34,11 @@ const tools: Anthropic.Tool[] = [
   },
 ];
 
-export interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-}
+type MessageParam = Anthropic.MessageParam;
 
-const histories = new Map<number, Message[]>();
+const histories = new Map<number, MessageParam[]>();
 
-export function getHistory(chatId: number): Message[] {
+export function getHistory(chatId: number): MessageParam[] {
   if (!histories.has(chatId)) histories.set(chatId, []);
   return histories.get(chatId)!;
 }
@@ -54,7 +51,6 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
   const history = getHistory(chatId);
   history.push({ role: 'user', content: userMessage });
 
-  // Agentic loop to handle tool use
   while (true) {
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
@@ -65,8 +61,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
     });
 
     if (response.stop_reason === 'tool_use') {
-      // Add assistant message with tool use blocks
-      history.push({ role: 'assistant', content: response.content as any });
+      history.push({ role: 'assistant', content: response.content });
 
       const toolResults: Anthropic.ToolResultBlockParam[] = [];
 
@@ -90,7 +85,6 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
       continue;
     }
 
-    // Final text response
     const textBlock = response.content.find(b => b.type === 'text');
     if (!textBlock || textBlock.type !== 'text') throw new Error('No text response');
 
