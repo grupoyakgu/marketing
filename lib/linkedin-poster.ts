@@ -54,7 +54,7 @@ async function uploadMedia(uploadUrl: string, buffer: Buffer, mimeType: string):
   const res = await fetch(uploadUrl, {
     method: 'PUT',
     headers: { 'Content-Type': mimeType },
-    body: buffer,
+    body: new Uint8Array(buffer),
   });
   if (!res.ok) throw new Error(`LinkedIn media upload failed ${res.status}: ${await res.text()}`);
 }
