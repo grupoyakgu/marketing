@@ -10,7 +10,7 @@ export interface LinkedInPostResult {
 type MediaType = 'IMAGE' | 'VIDEO';
 
 export interface MediaUpload {
-  buffer: Buffer;
+  data: Uint8Array;
   mimeType: string;
   mediaType: MediaType;
 }
@@ -44,17 +44,17 @@ async function registerUpload(token: string, authorUrn: string, mediaType: Media
 
   if (!res.ok) throw new Error(`LinkedIn registerUpload failed ${res.status}: ${await res.text()}`);
 
-  const data = await res.json();
-  const uploadUrl: string = data.value.uploadMechanism['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest'].uploadUrl;
-  const asset: string = data.value.asset;
+  const json = await res.json();
+  const uploadUrl: string = json.value.uploadMechanism['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest'].uploadUrl;
+  const asset: string = json.value.asset;
   return { uploadUrl, asset };
 }
 
-async function uploadMedia(uploadUrl: string, buffer: Buffer, mimeType: string): Promise<void> {
+async function uploadMedia(uploadUrl: string, data: Uint8Array, mimeType: string): Promise<void> {
   const res = await fetch(uploadUrl, {
     method: 'PUT',
     headers: { 'Content-Type': mimeType },
-    body: new Uint8Array(buffer),
+    body: data,
   });
   if (!res.ok) throw new Error(`LinkedIn media upload failed ${res.status}: ${await res.text()}`);
 }
@@ -74,7 +74,7 @@ export async function postToLinkedIn(text: string, media?: MediaUpload): Promise
   if (media) {
     try {
       const { uploadUrl, asset } = await registerUpload(token, authorUrn, media.mediaType);
-      await uploadMedia(uploadUrl, media.buffer, media.mimeType);
+      await uploadMedia(uploadUrl, media.data, media.mimeType);
       shareMediaCategory = media.mediaType;
       mediaElements = [{ status: 'READY', media: asset }];
     } catch (err) {

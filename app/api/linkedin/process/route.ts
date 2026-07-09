@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { claimJob, markJobDone, markJobError } from '@/lib/linkedin-queue';
-import { postToLinkedIn } from '@/lib/linkedin-poster';
+import { postToLinkedIn, MediaUpload } from '@/lib/linkedin-poster';
 import { TelegramClient } from '@/lib/telegram';
 
 export const maxDuration = 300;
 
-async function downloadTelegramFile(fileId: string): Promise<{ buffer: Buffer; mimeType: string; mediaType: 'IMAGE' | 'VIDEO' } | null> {
+async function downloadTelegramFile(fileId: string): Promise<MediaUpload | null> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) return null;
 
@@ -17,9 +17,9 @@ async function downloadTelegramFile(fileId: string): Promise<{ buffer: Buffer; m
   const fileRes = await fetch(`https://api.telegram.org/file/bot${token}/${filePath}`);
   if (!fileRes.ok) return null;
 
-  const buffer = Buffer.from(await fileRes.arrayBuffer());
+  const data = new Uint8Array(await fileRes.arrayBuffer());
   const isVideo = filePath.endsWith('.mp4') || filePath.includes('video');
-  return { buffer, mimeType: isVideo ? 'video/mp4' : 'image/jpeg', mediaType: isVideo ? 'VIDEO' : 'IMAGE' };
+  return { data, mimeType: isVideo ? 'video/mp4' : 'image/jpeg', mediaType: isVideo ? 'VIDEO' : 'IMAGE' };
 }
 
 export async function POST(req: NextRequest) {
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   if (!job) return NextResponse.json({ error: 'Job not found or already claimed' }, { status: 404 });
 
   try {
-    let media: { buffer: Buffer; mimeType: string; mediaType: 'IMAGE' | 'VIDEO' } | undefined;
+    let media: MediaUpload | undefined;
     if (job.file_id && job.media_type) {
       const downloaded = await downloadTelegramFile(job.file_id);
       if (!downloaded) throw new Error('Failed to download media from Telegram');

@@ -5,7 +5,7 @@ import { enqueueLinkedInPost } from '@/lib/linkedin-queue';
 
 export const maxDuration = 60;
 
-async function downloadTelegramFile(fileId: string): Promise<{ buffer: Buffer; mimeType: string; mediaType: 'IMAGE' | 'VIDEO' } | null> {
+async function downloadTelegramFile(fileId: string): Promise<{ data: Uint8Array; mimeType: string; mediaType: 'IMAGE' | 'VIDEO' } | null> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) return null;
 
@@ -17,9 +17,9 @@ async function downloadTelegramFile(fileId: string): Promise<{ buffer: Buffer; m
   const fileRes = await fetch(`https://api.telegram.org/file/bot${token}/${filePath}`);
   if (!fileRes.ok) return null;
 
-  const buffer = Buffer.from(await fileRes.arrayBuffer());
+  const data = new Uint8Array(await fileRes.arrayBuffer());
   const isVideo = filePath.endsWith('.mp4') || filePath.includes('video');
-  return { buffer, mimeType: isVideo ? 'video/mp4' : 'image/jpeg', mediaType: isVideo ? 'VIDEO' : 'IMAGE' };
+  return { data, mimeType: isVideo ? 'video/mp4' : 'image/jpeg', mediaType: isVideo ? 'VIDEO' : 'IMAGE' };
 }
 
 export async function POST(req: NextRequest) {
