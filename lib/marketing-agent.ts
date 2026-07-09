@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { postToLinkedIn } from '@/lib/linkedin-poster';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -12,12 +13,26 @@ You have deep expertise in:
 - Targeting the right audiences: family offices, institutional investors, HNWIs, hotel operators, and lifestyle buyers
 - Campaign planning, content calendars, and messaging frameworks for pre-sales and launches
 
-When the user wants to publish something to LinkedIn, suggest they use:
-/post linkedin <message>
-
-Or send a photo/video with caption: /post linkedin <message>
+You can write LinkedIn posts and publish them directly. When you draft content for LinkedIn, always offer to post it immediately. If the user approves or says yes, use the post_to_linkedin tool to publish it — do not ask them to copy/paste a command.
 
 You speak with authority and warmth. You are direct, strategic, and deeply passionate about the intersection of hospitality and real estate. Communicate in the same language the user uses (Spanish or English).`;
+
+const tools: Anthropic.Tool[] = [
+  {
+    name: 'post_to_linkedin',
+    description: 'Publishes a post to LinkedIn on behalf of the user. Use this when the user approves content to be posted.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        content: {
+          type: 'string',
+          description: 'The text content to post on LinkedIn.',
+        },
+      },
+      required: ['content'],
+    },
+  },
+];
 
 export interface Message {
   role: 'user' | 'assistant';
@@ -39,21 +54,51 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
   const history = getHistory(chatId);
   history.push({ role: 'user', content: userMessage });
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 1024,
-    system: SYSTEM_PROMPT,
-    messages: history,
-  });
+  // Agentic loop to handle tool use
+  while (true) {
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1024,
+      system: SYSTEM_PROMPT,
+      tools,
+      messages: history,
+    });
 
-  const block = response.content[0];
-  if (block.type !== 'text') throw new Error('Unexpected response type');
+    if (response.stop_reason === 'tool_use') {
+      // Add assistant message with tool use blocks
+      history.push({ role: 'assistant', content: response.content as any });
 
-  const reply = block.text;
-  history.push({ role: 'assistant', content: reply });
+      const toolResults: Anthropic.ToolResultBlockParam[] = [];
 
-  // Keep history bounded to last 20 messages
-  if (history.length > 20) history.splice(0, history.length - 20);
+      for (const block of response.content) {
+        if (block.type !== 'tool_use') continue;
 
-  return reply;
+        if (block.name === 'post_to_linkedin') {
+          const input = block.input as { content: string };
+          const result = await postToLinkedIn(input.content);
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: block.id,
+            content: result.success
+              ? `Posted successfully!${result.url ? ` URL: ${result.url}` : ''}`
+              : `Failed to post: ${result.error}`,
+          });
+        }
+      }
+
+      history.push({ role: 'user', content: toolResults });
+      continue;
+    }
+
+    // Final text response
+    const textBlock = response.content.find(b => b.type === 'text');
+    if (!textBlock || textBlock.type !== 'text') throw new Error('No text response');
+
+    const reply = textBlock.text;
+    history.push({ role: 'assistant', content: reply });
+
+    if (history.length > 20) history.splice(0, history.length - 20);
+
+    return reply;
+  }
 }
