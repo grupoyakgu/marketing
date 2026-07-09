@@ -10,7 +10,7 @@ export interface LinkedInPostResult {
 type MediaType = 'IMAGE' | 'VIDEO';
 
 export interface MediaUpload {
-  data: Uint8Array;
+  data: ArrayBuffer;
   mimeType: string;
   mediaType: MediaType;
 }
@@ -50,7 +50,7 @@ async function registerUpload(token: string, authorUrn: string, mediaType: Media
   return { uploadUrl, asset };
 }
 
-async function uploadMedia(uploadUrl: string, data: Uint8Array, mimeType: string): Promise<void> {
+async function uploadMedia(uploadUrl: string, data: ArrayBuffer, mimeType: string): Promise<void> {
   const res = await fetch(uploadUrl, {
     method: 'PUT',
     headers: { 'Content-Type': mimeType },

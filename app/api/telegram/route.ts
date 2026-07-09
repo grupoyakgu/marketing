@@ -17,7 +17,7 @@ async function downloadTelegramFile(fileId: string): Promise<{ data: Uint8Array;
   const fileRes = await fetch(`https://api.telegram.org/file/bot${token}/${filePath}`);
   if (!fileRes.ok) return null;
 
-  const data = new Uint8Array(await fileRes.arrayBuffer());
+  const data = await fileRes.arrayBuffer();
   const isVideo = filePath.endsWith('.mp4') || filePath.includes('video');
   return { data, mimeType: isVideo ? 'video/mp4' : 'image/jpeg', mediaType: isVideo ? 'VIDEO' : 'IMAGE' };
 }
