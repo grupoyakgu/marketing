@@ -1,6 +1,1 @@
-{
-  "functions": {
-    "api/telegram": { "maxDuration": 60 },
-    "api/linkedin/process": { "maxDuration": 300 }
-  }
-}
+{}
