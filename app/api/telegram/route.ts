@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { TelegramClient } from '@/lib/telegram';
 import { postToLinkedIn } from '@/lib/linkedin-poster';
 import { enqueueLinkedInPost } from '@/lib/linkedin-queue';
+import { chat, clearHistory } from '@/lib/marketing-agent';
 
 export const maxDuration = 60;
 
@@ -41,12 +42,19 @@ export async function POST(req: NextRequest) {
     // /start or /help
     if (text === '/start' || text === '/help') {
       await telegram.sendMessage(chatId,
-        `👋 MARKETING AGENT\n\nCommands:\n/post linkedin <message> — post text to LinkedIn\n/help — show this menu\n\nTo post with media:\nSend a photo or video with caption:\n/post linkedin <your message>\n\nVideo uploads are queued and processed in the background.`
+        `👋 MARKETING AGENT\n\nJust talk to me about your LinkedIn marketing strategy — I'll help you plan content, campaigns, and messaging.\n\nCommands:\n/post linkedin <message> — post text to LinkedIn\n/reset — clear conversation\n/help — show this menu\n\nTo post with media:\nSend a photo or video with caption:\n/post linkedin <your message>`
       );
       return NextResponse.json({ ok: true });
     }
 
-    // Text-only LinkedIn post
+    // /reset
+    if (text === '/reset') {
+      clearHistory(chatId);
+      await telegram.sendMessage(chatId, '🔄 Conversation reset. What would you like to work on?');
+      return NextResponse.json({ ok: true });
+    }
+
+    // /post linkedin <text>
     if (text?.startsWith('/post linkedin ')) {
       const content = text.slice('/post linkedin '.length).trim();
       if (!content) {
@@ -76,7 +84,6 @@ export async function POST(req: NextRequest) {
         mediaType = 'VIDEO';
       }
 
-      // Videos → background queue (avoids 60s timeout)
       if (mediaType === 'VIDEO') {
         await telegram.sendMessage(chatId, '⏳ Queuing video... I\'ll notify you when it\'s posted.');
         const jobId = await enqueueLinkedInPost(chatId, content, fileId, 'VIDEO');
@@ -89,7 +96,6 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
 
-      // Images → inline
       await telegram.sendMessage(chatId, '⏳ Uploading image and posting to LinkedIn...');
       const mediaFile = await downloadTelegramFile(fileId);
       if (!mediaFile) {
@@ -101,6 +107,13 @@ export async function POST(req: NextRequest) {
         ? (result.url ? `✅ Posted!\n\n${result.url}` : '✅ Posted to LinkedIn!')
         : `❌ Failed: ${result.error}`
       );
+      return NextResponse.json({ ok: true });
+    }
+
+    // Free-text → conversational marketing agent
+    if (text) {
+      const reply = await chat(chatId, text);
+      await telegram.sendMessage(chatId, reply);
       return NextResponse.json({ ok: true });
     }
 
