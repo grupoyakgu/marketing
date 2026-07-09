@@ -1,6 +1,6 @@
 {
   "functions": {
-    "app/api/telegram/route.ts": { "maxDuration": 60 },
-    "app/api/linkedin/process/route.ts": { "maxDuration": 300 }
+    "api/telegram": { "maxDuration": 60 },
+    "api/linkedin/process": { "maxDuration": 300 }
   }
 }
