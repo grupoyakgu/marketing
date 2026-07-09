@@ -1,8 +1,8 @@
 export class TelegramClient {
   private token: string;
 
-  constructor() {
-    this.token = process.env.TELEGRAM_BOT_TOKEN!;
+  constructor(token?: string) {
+    this.token = token ?? process.env.TELEGRAM_BOT_TOKEN!;
   }
 
   async sendMessage(chatId: number, text: string): Promise<void> {
