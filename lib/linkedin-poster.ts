@@ -18,7 +18,7 @@ export interface MediaUpload {
 function buildAuthorUrn(authorId: string): string {
   if (authorId.startsWith('urn:li:')) return authorId;
   if (authorId.startsWith('organization:')) return `urn:li:${authorId}`;
-  return `urn:li:person:${authorId}`;
+  return `urn:li:member:${authorId}`;
 }
 
 async function registerUpload(token: string, authorUrn: string, mediaType: MediaType): Promise<{ uploadUrl: string; asset: string }> {
