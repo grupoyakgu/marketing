@@ -5,7 +5,7 @@ import { enqueueLinkedInPost } from '@/lib/linkedin-queue';
 
 export const maxDuration = 60;
 
-async function downloadTelegramFile(fileId: string): Promise<{ data: Uint8Array; mimeType: string; mediaType: 'IMAGE' | 'VIDEO' } | null> {
+async function downloadTelegramFile(fileId: string): Promise<{ data: ArrayBuffer; mimeType: string; mediaType: 'IMAGE' | 'VIDEO' } | null> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) return null;
 
