@@ -24,9 +24,10 @@ export async function listDriveImages(): Promise<DriveImage[]> {
   const json = await res.json();
   const files: { id: string; name: string }[] = json.files ?? [];
 
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://marketing-grupo-yakgu.vercel.app';
   return files.map(f => ({
     id: f.id,
     name: f.name,
-    url: `https://drive.google.com/uc?export=download&id=${f.id}`,
+    url: `${appUrl}/api/drive-image?id=${f.id}`,
   }));
 }
