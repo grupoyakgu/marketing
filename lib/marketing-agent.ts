@@ -1,8 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { postToLinkedIn } from '@/lib/linkedin-poster';
 import { postToFacebook, postToInstagram } from '@/lib/meta-poster';
+import { loadHistory, saveMessage, clearHistory as clearDb } from '@/lib/chat-history';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const BOT_NAME = 'pepe';
 
 const SYSTEM_PROMPT = `You are Pepe, a highly experienced marketing expert with 25+ years in real estate development focused on the hotel and hospitality ecosystem. Your background spans luxury resorts, boutique hotels, eco-lodges, mixed-use developments, and hospitality-anchored real estate projects across Latin America and Europe.
 
@@ -59,20 +61,14 @@ const tools: Anthropic.Tool[] = [
 
 type MessageParam = Anthropic.MessageParam;
 
-const histories = new Map<number, MessageParam[]>();
-
-export function getHistory(chatId: number): MessageParam[] {
-  if (!histories.has(chatId)) histories.set(chatId, []);
-  return histories.get(chatId)!;
-}
-
-export function clearHistory(chatId: number): void {
-  histories.delete(chatId);
+export async function clearHistory(chatId: number): Promise<void> {
+  await clearDb(chatId, BOT_NAME);
 }
 
 export async function chat(chatId: number, userMessage: string): Promise<string> {
-  const history = getHistory(chatId);
+  const history = await loadHistory(chatId, BOT_NAME);
   history.push({ role: 'user', content: userMessage });
+  await saveMessage(chatId, BOT_NAME, 'user', userMessage);
 
   while (true) {
     const response = await client.messages.create({
@@ -132,9 +128,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
     if (!textBlock || textBlock.type !== 'text') throw new Error('No text response');
 
     const reply = textBlock.text;
-    history.push({ role: 'assistant', content: reply });
-
-    if (history.length > 20) history.splice(0, history.length - 20);
+    await saveMessage(chatId, BOT_NAME, 'assistant', reply);
 
     return reply;
   }

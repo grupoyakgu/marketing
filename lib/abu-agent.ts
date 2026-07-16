@@ -1,6 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { loadHistory, saveMessage, clearHistory as clearDb } from '@/lib/chat-history';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const BOT_NAME = 'abu';
 
 const SYSTEM_PROMPT = `You are Abu, a seasoned CEO with 20+ years of experience leading real estate development companies in Sevilla, Spain. You specialize exclusively in tourist apartment developments — properties with AT license (Apartamento Turístico) — and you are one of the most respected figures in this niche market in Andalucía.
 
@@ -24,25 +26,14 @@ Or send a photo/video with caption: /post linkedin <message>
 
 Communicate in the same language the user uses (Spanish or English). When speaking Spanish, use a natural, professional Sevillano tone.`;
 
-export interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-}
-
-const histories = new Map<number, Message[]>();
-
-export function getHistory(chatId: number): Message[] {
-  if (!histories.has(chatId)) histories.set(chatId, []);
-  return histories.get(chatId)!;
-}
-
-export function clearHistory(chatId: number): void {
-  histories.delete(chatId);
+export async function clearHistory(chatId: number): Promise<void> {
+  await clearDb(chatId, BOT_NAME);
 }
 
 export async function chat(chatId: number, userMessage: string): Promise<string> {
-  const history = getHistory(chatId);
+  const history = await loadHistory(chatId, BOT_NAME);
   history.push({ role: 'user', content: userMessage });
+  await saveMessage(chatId, BOT_NAME, 'user', userMessage);
 
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
@@ -55,9 +46,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
   if (block.type !== 'text') throw new Error('Unexpected response type');
 
   const reply = block.text;
-  history.push({ role: 'assistant', content: reply });
-
-  if (history.length > 20) history.splice(0, history.length - 20);
+  await saveMessage(chatId, BOT_NAME, 'assistant', reply);
 
   return reply;
 }
