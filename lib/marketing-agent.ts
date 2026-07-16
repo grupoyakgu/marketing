@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { postToLinkedIn } from '@/lib/linkedin-poster';
+import { postToFacebook, postToInstagram } from '@/lib/meta-poster';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -8,28 +9,50 @@ const SYSTEM_PROMPT = `You are Pepe, a highly experienced marketing expert with 
 You have deep expertise in:
 - Positioning hotel real estate projects to investors, developers, and buyers
 - B2B and B2C marketing strategies for hospitality-driven developments
-- LinkedIn content and thought leadership for the hotel/real estate sector
+- LinkedIn, Instagram and Facebook content and thought leadership for the hotel/real estate sector
 - Crafting compelling narratives around eco-tourism, sustainable hospitality, and resort living
 - Targeting the right audiences: family offices, institutional investors, HNWIs, hotel operators, and lifestyle buyers
 - Campaign planning, content calendars, and messaging frameworks for pre-sales and launches
 
-You can write LinkedIn posts and publish them directly. When you draft content for LinkedIn, always offer to post it immediately. If the user approves or says yes, use the post_to_linkedin tool to publish it — do not ask them to copy/paste a command.
+You can write and publish content directly to LinkedIn, Facebook, and Instagram. When you draft content, always offer to post it immediately to the relevant platforms. If the user approves, use the appropriate tool to publish — do not ask them to copy/paste commands.
+
+For Instagram posts, you need an image URL. If the user wants to post to Instagram without an image, let them know they need to provide one.
 
 You speak with authority and warmth. You are direct, strategic, and deeply passionate about the intersection of hospitality and real estate. Communicate in the same language the user uses (Spanish or English).`;
 
 const tools: Anthropic.Tool[] = [
   {
     name: 'post_to_linkedin',
-    description: 'Publishes a post to LinkedIn on behalf of the user. Use this when the user approves content to be posted.',
+    description: 'Publishes a text post to LinkedIn on behalf of the user.',
     input_schema: {
       type: 'object' as const,
       properties: {
-        content: {
-          type: 'string',
-          description: 'The text content to post on LinkedIn.',
-        },
+        content: { type: 'string', description: 'The text content to post on LinkedIn.' },
       },
       required: ['content'],
+    },
+  },
+  {
+    name: 'post_to_facebook',
+    description: 'Publishes a text post to the Grupo YAKGU Facebook Page.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        message: { type: 'string', description: 'The text content to post on Facebook.' },
+      },
+      required: ['message'],
+    },
+  },
+  {
+    name: 'post_to_instagram',
+    description: 'Publishes an image post to Instagram. Requires a publicly accessible image URL.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        caption: { type: 'string', description: 'The caption for the Instagram post.' },
+        image_url: { type: 'string', description: 'A publicly accessible URL of the image to post.' },
+      },
+      required: ['caption', 'image_url'],
     },
   },
 ];
@@ -68,17 +91,37 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
       for (const block of response.content) {
         if (block.type !== 'tool_use') continue;
 
+        let resultContent = '';
+
         if (block.name === 'post_to_linkedin') {
           const input = block.input as { content: string };
           const result = await postToLinkedIn(input.content);
-          toolResults.push({
-            type: 'tool_result',
-            tool_use_id: block.id,
-            content: result.success
-              ? `Posted successfully!${result.url ? ` URL: ${result.url}` : ''}`
-              : `Failed to post: ${result.error}`,
-          });
+          resultContent = result.success
+            ? `Posted to LinkedIn!${result.url ? ` URL: ${result.url}` : ''}`
+            : `Failed: ${result.error}`;
         }
+
+        if (block.name === 'post_to_facebook') {
+          const input = block.input as { message: string };
+          const result = await postToFacebook(input.message);
+          resultContent = result.success
+            ? `Posted to Facebook!${result.url ? ` URL: ${result.url}` : ''}`
+            : `Failed: ${result.error}`;
+        }
+
+        if (block.name === 'post_to_instagram') {
+          const input = block.input as { caption: string; image_url: string };
+          const result = await postToInstagram(input.caption, input.image_url);
+          resultContent = result.success
+            ? `Posted to Instagram!${result.url ? ` URL: ${result.url}` : ''}`
+            : `Failed: ${result.error}`;
+        }
+
+        toolResults.push({
+          type: 'tool_result',
+          tool_use_id: block.id,
+          content: resultContent,
+        });
       }
 
       history.push({ role: 'user', content: toolResults });
