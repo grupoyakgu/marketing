@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { postToLinkedIn } from '@/lib/linkedin-poster';
 import { postToFacebook, postToInstagram } from '@/lib/meta-poster';
 import { loadHistory, saveMessage, clearHistory as clearDb } from '@/lib/chat-history';
+import { listDriveImages } from '@/lib/google-drive';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BOT_NAME = 'pepe';
@@ -18,7 +19,7 @@ You have deep expertise in:
 
 You can write and publish content directly to LinkedIn, Facebook, and Instagram. When you draft content, always offer to post it immediately to the relevant platforms. If the user approves, use the appropriate tool to publish — do not ask them to copy/paste commands.
 
-For Instagram posts, you need an image URL. If the user wants to post to Instagram without an image, let them know they need to provide one.
+For Instagram posts, you need an image URL. You have access to a Google Drive folder with images — use the browse_drive_images tool to list available images and pick the most suitable one for the post. Only ask the user for an image if the Drive folder is empty or none of the images fit.
 
 You speak with authority and warmth. You are direct, strategic, and deeply passionate about the intersection of hospitality and real estate. Communicate in the same language the user uses (Spanish or English).`;
 
@@ -55,6 +56,15 @@ const tools: Anthropic.Tool[] = [
         image_url: { type: 'string', description: 'A publicly accessible URL of the image to post.' },
       },
       required: ['caption', 'image_url'],
+    },
+  },
+  {
+    name: 'browse_drive_images',
+    description: 'Lists all available images in the Google Drive folder. Use this to find a suitable image before posting to Instagram or Facebook.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
     },
   },
 ];
@@ -111,6 +121,20 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
           resultContent = result.success
             ? `Posted to Instagram!${result.url ? ` URL: ${result.url}` : ''}`
             : `Failed: ${result.error}`;
+        }
+
+        if (block.name === 'browse_drive_images') {
+          try {
+            const images = await listDriveImages();
+            if (images.length === 0) {
+              resultContent = 'No images found in the Google Drive folder.';
+            } else {
+              resultContent = `Found ${images.length} images:\n` +
+                images.map(img => `- ${img.name} | URL: ${img.url}`).join('\n');
+            }
+          } catch (err) {
+            resultContent = `Failed to browse Drive: ${err instanceof Error ? err.message : String(err)}`;
+          }
         }
 
         toolResults.push({
