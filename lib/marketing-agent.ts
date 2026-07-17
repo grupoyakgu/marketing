@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { postToLinkedIn } from '@/lib/linkedin-poster';
 import { postToFacebook, postToInstagram } from '@/lib/meta-poster';
 import { loadHistory, saveMessage, clearHistory as clearDb } from '@/lib/chat-history';
-import { listDriveImages } from '@/lib/google-drive';
+import { listCloudinaryImages } from '@/lib/cloudinary';
 import {
   saveDraftPlan,
   getWeeklyPlan,
@@ -127,7 +127,7 @@ When asked to generate a marketing plan:
 - post_to_linkedin — publish to LinkedIn (with optional image_url)
 - post_to_facebook — publish to Facebook (with optional image_url)
 - post_to_instagram — publish to Instagram (requires image_url)
-- browse_drive_images — list available images (call ONCE per plan)
+- browse_drive_images — list available images from Cloudinary (call ONCE per plan)
 - save_marketing_plan — save draft plan to database
 - get_weekly_plan — retrieve plan for a given week
 - approve_posts — approve posts for auto-publishing
@@ -175,7 +175,7 @@ const tools: Anthropic.Tool[] = [
   },
   {
     name: 'browse_drive_images',
-    description: 'Lists all available images. Call this ONCE per plan session to get all images, then pick from the list for each post.',
+    description: 'Lists all available images from Cloudinary. Call this ONCE per plan session to get all images, then pick from the list for each post.',
     input_schema: {
       type: 'object' as const,
       properties: {},
@@ -299,9 +299,9 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
 
         if (block.name === 'browse_drive_images') {
           try {
-            const images = await listDriveImages();
+            const images = await listCloudinaryImages();
             if (images.length === 0) {
-              resultContent = 'No images found.';
+              resultContent = 'No images found in Cloudinary.';
             } else {
               resultContent =
                 `Found ${images.length} images:\n` +
