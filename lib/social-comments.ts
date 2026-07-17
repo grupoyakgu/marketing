@@ -19,6 +19,8 @@ function db() {
   );
 }
 
+// ─── Comment reply tracking ──────────────────────────────────────────────
+
 export async function hasReplied(commentId: string): Promise<boolean> {
   const { data } = await db()
     .from('comment_replies')
@@ -32,17 +34,41 @@ export async function markReplied(commentId: string, platform: string): Promise<
   await db().from('comment_replies').upsert({ comment_id: commentId, platform });
 }
 
+// ─── Milestone tracking ──────────────────────────────────────────────────
+
+export async function hasMilestone(
+  platform: string,
+  postId: string,
+  milestone: string
+): Promise<boolean> {
+  const { data } = await db()
+    .from('post_milestones')
+    .select('id')
+    .eq('platform', platform)
+    .eq('platform_post_id', postId)
+    .eq('milestone', milestone)
+    .maybeSingle();
+  return !!data;
+}
+
+export async function recordMilestone(
+  platform: string,
+  postId: string,
+  milestone: string
+): Promise<void> {
+  await db()
+    .from('post_milestones')
+    .upsert({ platform, platform_post_id: postId, milestone });
+}
+
+// ─── Fetch comments ────────────────────────────────────────────────────────
+
 export async function getLinkedInComments(postUrn: string): Promise<SocialComment[]> {
   const token = process.env.LINKEDIN_ACCESS_TOKEN;
   if (!token) return [];
   const res = await fetch(
     `${LINKEDIN_API}/socialActions/${encodeURIComponent(postUrn)}/comments?count=20`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'X-Restli-Protocol-Version': '2.0.0',
-      },
-    }
+    { headers: { Authorization: `Bearer ${token}`, 'X-Restli-Protocol-Version': '2.0.0' } }
   );
   if (!res.ok) return [];
   const json = await res.json();
@@ -92,6 +118,52 @@ export async function getInstagramComments(mediaId: string): Promise<SocialComme
   }));
 }
 
+// ─── Post top-level comment (thank-you / shoutout) ────────────────────────────
+
+export async function postLinkedInComment(postUrn: string, text: string): Promise<boolean> {
+  const token = process.env.LINKEDIN_ACCESS_TOKEN;
+  const authorId = process.env.LINKEDIN_AUTHOR_ID;
+  if (!token || !authorId) return false;
+  const authorUrn = authorId.startsWith('urn:li:') ? authorId : `urn:li:organization:${authorId}`;
+  const res = await fetch(
+    `${LINKEDIN_API}/socialActions/${encodeURIComponent(postUrn)}/comments`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'X-Restli-Protocol-Version': '2.0.0',
+      },
+      body: JSON.stringify({ actor: authorUrn, message: { text } }),
+    }
+  );
+  return res.ok;
+}
+
+export async function postFacebookComment(postId: string, text: string): Promise<boolean> {
+  const token = process.env.INSTAGRAM_PAGE_ACCESS_TOKEN;
+  if (!token) return false;
+  const res = await fetch(`${GRAPH_API}/${postId}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: text, access_token: token }),
+  });
+  return res.ok;
+}
+
+export async function postInstagramComment(mediaId: string, text: string): Promise<boolean> {
+  const token = process.env.INSTAGRAM_PAGE_ACCESS_TOKEN;
+  if (!token) return false;
+  const res = await fetch(`${GRAPH_API}/${mediaId}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: text, access_token: token }),
+  });
+  return res.ok;
+}
+
+// ─── Reply to comment ─────────────────────────────────────────────────────
+
 export async function replyToLinkedInComment(
   postUrn: string,
   commentUrn: string,
@@ -110,11 +182,7 @@ export async function replyToLinkedInComment(
         'Content-Type': 'application/json',
         'X-Restli-Protocol-Version': '2.0.0',
       },
-      body: JSON.stringify({
-        actor: authorUrn,
-        message: { text },
-        parentComment: commentUrn,
-      }),
+      body: JSON.stringify({ actor: authorUrn, message: { text }, parentComment: commentUrn }),
     }
   );
   return res.ok;

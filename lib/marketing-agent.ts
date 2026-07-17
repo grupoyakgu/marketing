@@ -7,6 +7,9 @@ import {
   replyToLinkedInComment,
   replyToFacebookComment,
   replyToInstagramComment,
+  postLinkedInComment,
+  postFacebookComment,
+  postInstagramComment,
   markReplied,
 } from '@/lib/social-comments';
 import {
@@ -46,7 +49,8 @@ Today is **${today}** (Spain local time). Next Monday is **${nextMonday}**. Alwa
 
 - **ALL social media posts (LinkedIn, Instagram, Facebook) MUST be written in Spanish (Spain).** This is non-negotiable. Never post in English, even if the user asks in English.
 - **Comment replies** should match the language of the commenter — reply in Spanish if they wrote in Spanish, English if they wrote in English.
-- **Conversations with the user are in English.** Respond to the user in whichever language they use.
+- **Thank-you comments and shoutout posts** must be in Spanish (Spain).
+- **Conversations with the user are in English.**
 - Spanish posts must use Spain Spanish: "vosotros", "apartamento" not "departamento", etc.
 
 ---
@@ -74,7 +78,9 @@ Real estate developer focused on the hotel and hospitality ecosystem in Spain. W
 - **LinkedIn:** Professional, data-driven, thought leadership, investor-focused
 - **Instagram:** Visual, aspirational, lifestyle, emotional
 - **Facebook:** Warm, accessible, experience-driven, local pride
-- **Comment replies (all platforms):** Warm, personal, on-brand. Thank commenters. Build intrigue. Never reveal details not yet public. Always sign off warmly as Grupo YAKGU.
+- **Comment replies:** Warm, personal, on-brand. Thank commenters. Build intrigue. Never reveal details not yet public.
+- **Thank-you comments:** Short, warm, genuine. E.g. "¡Gracias por vuestro apoyo! Os mantendremos informados 🙏"
+- **Shoutout posts:** Celebratory, community-focused, builds further intrigue about AT Sevilla.
 
 ### Campaign Phase — Teaser Campaign
 Current key messages:
@@ -87,28 +93,24 @@ Current key messages:
 - More details revealed gradually over coming weeks
 
 ### Market Intelligence — Nervión Is Booming
-You have access to these proof points. **Spread them strategically across many posts over multiple weeks. Never use more than 1–2 of these data points in a single post, and never dump all of them in one week.** Rotate gradually to build sustained momentum.
+You have access to these proof points. **Spread them strategically across many posts over multiple weeks. Never use more than 1–2 of these data points in a single post, and never dump all of them in one week.**
 
 - **Grupo Insur:** Breaking ground on new 4-star hotel in Nervión
 - **El Corte Inglés:** Converting iconic Nervión building into a 10-floor hotel
 - **Katégora:** Started construction of new aparthotel in the area
 - **Urbanitae:** Successfully crowdfunded a hospitality project in Nervión
 - **Market trend:** Nervión set to add 44+ new tourist accommodation units
-- **Key narrative:** Nervión is transitioning from a purely commercial district into a mixed-use, hospitality-anchored urban destination — year-round demand (corporate, sports events, families), not seasonally dependent like the historic centre.
-
-When drafting a plan, select at most 1 market intelligence proof point for the 5-post block. Save the rest for future weeks.
+- **Key narrative:** Nervión is transitioning from a purely commercial district into a mixed-use, hospitality-anchored urban destination.
 
 ---
 
 ## IMAGES — ALL PLATFORMS
 
-**Every post on every platform (LinkedIn, Instagram, Facebook) should have an image attached.** Call browse_drive_images ONCE at the start to see all available images, then pick the best match for each post. Only skip the image if no images are returned.
+**Every post should have an image.** Call browse_drive_images ONCE at the start to see all available images.
 
 ---
 
 ## POSTING SCHEDULE — 5 POSTS PER BLOCK (SPAIN LOCAL TIME)
-
-Each plan covers Monday–Thursday (5 posts). The user can request a second block for Friday–Sunday separately.
 
 | # | Platform | Day | Time |
 |---|----------|-----|------|
@@ -122,34 +124,28 @@ Each plan covers Monday–Thursday (5 posts). The user can request a second bloc
 
 ## HOW TO GENERATE A MARKETING PLAN
 
-When asked to generate a marketing plan:
-1. Use **${nextMonday}** as the week_start — this is next Monday's date
-2. Call browse_drive_images ONCE to see available images
-3. Draft exactly 5 posts in **Spanish (Spain)**, following the schedule above
-4. Choose at most 1 market intelligence proof point for the whole block
-5. For every post, note which image to use
-6. Call save_marketing_plan with all 5 posts
-7. Present the plan to the user in English, numbered 1–5, showing: platform, day/time, image, and content
-8. End with: "Would you like to approve the full plan? Say *approve all* or let me know which posts to adjust or remove."
+1. Use **${nextMonday}** as the week_start
+2. Call browse_drive_images ONCE
+3. Draft 5 posts in Spanish (Spain)
+4. Choose at most 1 market intelligence proof point
+5. Call save_marketing_plan with all 5 posts
+6. Present the plan numbered 1–5 in English
+7. End with: "Would you like to approve the full plan? Say *approve all* or let me know which posts to adjust."
 
 ## APPROVAL FLOW
-- User says "approve all" → call approve_posts with mode "all" and week_start "${nextMonday}"
-- User says "reject post 3" → call reject_post with that post's id
-- User asks to edit a post → update and re-save, then ask for approval again
+- "approve all" → call approve_posts with mode "all" and week_start "${nextMonday}"
+- "reject post 3" → call reject_post
+- Edit request → update, re-save, re-ask
 
 ---
 
 ## TOOLS SUMMARY
-- post_to_linkedin — publish to LinkedIn (with optional image_url)
-- post_to_facebook — publish to Facebook (with optional image_url)
-- post_to_instagram — publish to Instagram (requires image_url)
-- browse_drive_images — list available images from Cloudinary (call ONCE per plan)
-- save_marketing_plan — save draft plan to database
-- get_weekly_plan — retrieve plan for a given week
-- approve_posts — approve posts for auto-publishing
-- reject_post — remove a post from the plan
-- reply_to_comment — post a reply to a social media comment
-- get_engagement — fetch engagement stats for recent posts and account follower counts
+- post_to_linkedin, post_to_facebook, post_to_instagram — publish posts
+- browse_drive_images — list Cloudinary images (call ONCE per plan)
+- save_marketing_plan, get_weekly_plan, approve_posts, reject_post — plan management
+- reply_to_comment — reply to a specific comment
+- post_comment — post a new top-level comment on a post (for thank-yous)
+- get_engagement — fetch likes/comments/reach stats
 
 You speak with authority and warmth. You are direct, strategic, and deeply passionate about the intersection of hospitality and real estate.`;
 }
@@ -157,67 +153,62 @@ You speak with authority and warmth. You are direct, strategic, and deeply passi
 const tools: Anthropic.Tool[] = [
   {
     name: 'post_to_linkedin',
-    description: 'Publishes a post to LinkedIn. Always include an image_url when one is available.',
+    description: 'Publishes a post to LinkedIn.',
     input_schema: {
       type: 'object' as const,
       properties: {
-        content: { type: 'string', description: 'The text content to post on LinkedIn.' },
-        image_url: { type: 'string', description: 'Publicly accessible image URL to attach to the post.' },
+        content: { type: 'string' },
+        image_url: { type: 'string' },
       },
       required: ['content'],
     },
   },
   {
     name: 'post_to_facebook',
-    description: 'Publishes a post to the Grupo YAKGU Facebook Page. Always include an image_url when one is available.',
+    description: 'Publishes a post to the Grupo YAKGU Facebook Page.',
     input_schema: {
       type: 'object' as const,
       properties: {
-        message: { type: 'string', description: 'The text content to post on Facebook.' },
-        image_url: { type: 'string', description: 'Publicly accessible image URL to attach to the post.' },
+        message: { type: 'string' },
+        image_url: { type: 'string' },
       },
       required: ['message'],
     },
   },
   {
     name: 'post_to_instagram',
-    description: 'Publishes an image post to Instagram. Requires a publicly accessible image URL.',
+    description: 'Publishes an image post to Instagram. Requires image_url.',
     input_schema: {
       type: 'object' as const,
       properties: {
-        caption: { type: 'string', description: 'The caption for the Instagram post.' },
-        image_url: { type: 'string', description: 'A publicly accessible URL of the image to post.' },
+        caption: { type: 'string' },
+        image_url: { type: 'string' },
       },
       required: ['caption', 'image_url'],
     },
   },
   {
     name: 'browse_drive_images',
-    description: 'Lists all available images from Cloudinary. Call this ONCE per plan session to get all images, then pick from the list for each post.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {},
-      required: [],
-    },
+    description: 'Lists all available images from Cloudinary. Call ONCE per plan.',
+    input_schema: { type: 'object' as const, properties: {}, required: [] },
   },
   {
     name: 'save_marketing_plan',
-    description: 'Saves a marketing plan to the database as drafts pending user approval.',
+    description: 'Saves a marketing plan to the database as drafts.',
     input_schema: {
       type: 'object' as const,
       properties: {
-        week_start: { type: 'string', description: 'The Monday date in YYYY-MM-DD format.' },
+        week_start: { type: 'string', description: 'Monday date YYYY-MM-DD.' },
         posts: {
           type: 'array',
-          description: 'Array of posts to schedule.',
           items: {
             type: 'object',
             properties: {
               platform: { type: 'string', enum: ['linkedin', 'instagram', 'facebook'] },
-              scheduled_date: { type: 'string', description: 'YYYY-MM-DD' },
-              scheduled_time: { type: 'string', description: 'HH:MM in Spain local time' },
-              content: { type: 'string', description: 'Post content in Spanish (Spain).' },
-              image_note: { type: 'string', description: 'Which image to use for this post.' },
+              scheduled_date: { type: 'string' },
+              scheduled_time: { type: 'string' },
+              content: { type: 'string' },
+              image_note: { type: 'string' },
             },
             required: ['platform', 'scheduled_date', 'scheduled_time', 'content'],
           },
@@ -228,61 +219,70 @@ const tools: Anthropic.Tool[] = [
   },
   {
     name: 'get_weekly_plan',
-    description: 'Retrieves the saved marketing plan for a specific week.',
+    description: 'Retrieves the saved marketing plan for a given week.',
     input_schema: {
       type: 'object' as const,
-      properties: {
-        week_start: { type: 'string', description: 'The Monday date (YYYY-MM-DD). Leave empty to get next week.' },
-      },
+      properties: { week_start: { type: 'string' } },
       required: [],
     },
   },
   {
     name: 'approve_posts',
-    description: 'Approves marketing posts so they will be automatically published at their scheduled time.',
+    description: 'Approves marketing posts for auto-publishing.',
     input_schema: {
       type: 'object' as const,
       properties: {
-        mode: { type: 'string', enum: ['all'], description: 'Use "all" to approve all draft posts for the week.' },
-        week_start: { type: 'string', description: 'The Monday date (YYYY-MM-DD) of the week to approve.' },
-        post_ids: { type: 'array', items: { type: 'string' }, description: 'Specific post IDs to approve individually.' },
+        mode: { type: 'string', enum: ['all'] },
+        week_start: { type: 'string' },
+        post_ids: { type: 'array', items: { type: 'string' } },
       },
       required: [],
     },
   },
   {
     name: 'reject_post',
-    description: 'Removes a specific post from the marketing plan.',
+    description: 'Removes a post from the marketing plan.',
     input_schema: {
       type: 'object' as const,
-      properties: {
-        post_id: { type: 'string', description: 'The UUID of the post to remove.' },
-      },
+      properties: { post_id: { type: 'string' } },
       required: ['post_id'],
     },
   },
   {
     name: 'reply_to_comment',
-    description: 'Posts a reply to a comment on LinkedIn, Instagram, or Facebook.',
+    description: 'Posts a reply to a specific comment on LinkedIn, Instagram, or Facebook.',
     input_schema: {
       type: 'object' as const,
       properties: {
         platform: { type: 'string', enum: ['linkedin', 'instagram', 'facebook'] },
-        comment_id: { type: 'string', description: 'The ID of the comment to reply to.' },
-        post_id: { type: 'string', description: 'The ID of the post (required for LinkedIn).' },
-        reply_text: { type: 'string', description: 'The reply text. Match the language of the original comment.' },
+        comment_id: { type: 'string' },
+        post_id: { type: 'string', description: 'Required for LinkedIn.' },
+        reply_text: { type: 'string' },
       },
       required: ['platform', 'comment_id', 'reply_text'],
     },
   },
   {
-    name: 'get_engagement',
-    description: 'Fetches engagement stats (likes, comments, shares, impressions, reach) for recent posts and follower counts across all platforms.',
+    name: 'post_comment',
+    description: 'Posts a new top-level comment on one of your own posts (e.g. a thank-you when a post gets many likes).',
     input_schema: {
       type: 'object' as const,
       properties: {
-        post_id: { type: 'string', description: 'Optional: fetch stats for a specific post ID.' },
-        platform: { type: 'string', enum: ['linkedin', 'instagram', 'facebook'], description: 'Required if post_id is provided.' },
+        platform: { type: 'string', enum: ['linkedin', 'instagram', 'facebook'] },
+        post_id: { type: 'string', description: 'The platform post ID to comment on.' },
+        text: { type: 'string', description: 'The comment text. Write in Spanish (Spain).' },
+      },
+      required: ['platform', 'post_id', 'text'],
+    },
+  },
+  {
+    name: 'get_engagement',
+    description: 'Fetches engagement stats for recent posts and follower counts across all platforms.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        post_id: { type: 'string' },
+        platform: { type: 'string', enum: ['linkedin', 'instagram', 'facebook'] },
       },
       required: [],
     },
@@ -309,39 +309,31 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
 
     if (response.stop_reason === 'tool_use') {
       history.push({ role: 'assistant', content: response.content });
-
       const toolResults: Anthropic.ToolResultBlockParam[] = [];
 
       for (const block of response.content) {
         if (block.type !== 'tool_use') continue;
-
         let resultContent = '';
 
         if (block.name === 'post_to_linkedin') {
           const input = block.input as { content: string; image_url?: string };
           const result = await postToLinkedIn(input.content, input.image_url);
           if (result.success && result.postId) await trackDirectPost('linkedin', result.postId);
-          resultContent = result.success
-            ? `Posted to LinkedIn!${result.url ? ` URL: ${result.url}` : ''}`
-            : `Failed: ${result.error}`;
+          resultContent = result.success ? `Posted to LinkedIn!${result.url ? ` URL: ${result.url}` : ''}` : `Failed: ${result.error}`;
         }
 
         if (block.name === 'post_to_facebook') {
           const input = block.input as { message: string; image_url?: string };
           const result = await postToFacebook(input.message, input.image_url);
           if (result.success && result.postId) await trackDirectPost('facebook', result.postId);
-          resultContent = result.success
-            ? `Posted to Facebook!${result.url ? ` URL: ${result.url}` : ''}`
-            : `Failed: ${result.error}`;
+          resultContent = result.success ? `Posted to Facebook!${result.url ? ` URL: ${result.url}` : ''}` : `Failed: ${result.error}`;
         }
 
         if (block.name === 'post_to_instagram') {
           const input = block.input as { caption: string; image_url: string };
           const result = await postToInstagram(input.caption, input.image_url);
           if (result.success && result.postId) await trackDirectPost('instagram', result.postId);
-          resultContent = result.success
-            ? `Posted to Instagram!${result.url ? ` URL: ${result.url}` : ''}`
-            : `Failed: ${result.error}`;
+          resultContent = result.success ? `Posted to Instagram!${result.url ? ` URL: ${result.url}` : ''}` : `Failed: ${result.error}`;
         }
 
         if (block.name === 'browse_drive_images') {
@@ -358,13 +350,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
         if (block.name === 'save_marketing_plan') {
           const input = block.input as {
             week_start: string;
-            posts: Array<{
-              platform: 'linkedin' | 'instagram' | 'facebook';
-              scheduled_date: string;
-              scheduled_time: string;
-              content: string;
-              image_note?: string;
-            }>;
+            posts: Array<{ platform: 'linkedin' | 'instagram' | 'facebook'; scheduled_date: string; scheduled_time: string; content: string; image_note?: string }>;
           };
           try {
             const saved = await saveDraftPlan(input.posts.map(p => ({ ...p, week_start: input.week_start })));
@@ -384,9 +370,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
             resultContent = posts.length === 0
               ? `No posts found for week of ${weekStart}.`
               : `Plan for week of ${weekStart} (${posts.length} posts):\n${
-                  posts.map((p, i) =>
-                    `${i + 1}. [${p.platform}] ${p.scheduled_date} ${p.scheduled_time} [${p.status}]\n   ID: ${p.id}\n   ${p.content.substring(0, 80)}...`
-                  ).join('\n\n')
+                  posts.map((p, i) => `${i + 1}. [${p.platform}] ${p.scheduled_date} ${p.scheduled_time} [${p.status}]\n   ID: ${p.id}\n   ${p.content.substring(0, 80)}...`).join('\n\n')
                 }`;
           } catch (err) {
             resultContent = `Failed to get plan: ${err instanceof Error ? err.message : String(err)}`;
@@ -403,7 +387,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
               await Promise.all(input.post_ids.map(id => approvePost(id)));
               resultContent = `Approved ${input.post_ids.length} posts.`;
             } else {
-              resultContent = 'No posts approved — provide mode: "all" with week_start, or a list of post_ids.';
+              resultContent = 'No posts approved — provide mode "all" with week_start, or a list of post_ids.';
             }
           } catch (err) {
             resultContent = `Failed to approve: ${err instanceof Error ? err.message : String(err)}`;
@@ -414,36 +398,36 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
           const input = block.input as { post_id: string };
           try {
             await deletePost(input.post_id);
-            resultContent = `Post ${input.post_id} removed from the plan.`;
+            resultContent = `Post ${input.post_id} removed.`;
           } catch (err) {
-            resultContent = `Failed to reject post: ${err instanceof Error ? err.message : String(err)}`;
+            resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
           }
         }
 
         if (block.name === 'reply_to_comment') {
-          const input = block.input as {
-            platform: 'linkedin' | 'instagram' | 'facebook';
-            comment_id: string;
-            post_id?: string;
-            reply_text: string;
-          };
+          const input = block.input as { platform: 'linkedin' | 'instagram' | 'facebook'; comment_id: string; post_id?: string; reply_text: string };
           try {
             let ok = false;
-            if (input.platform === 'linkedin' && input.post_id) {
-              ok = await replyToLinkedInComment(input.post_id, input.comment_id, input.reply_text);
-            } else if (input.platform === 'facebook') {
-              ok = await replyToFacebookComment(input.comment_id, input.reply_text);
-            } else if (input.platform === 'instagram') {
-              ok = await replyToInstagramComment(input.comment_id, input.reply_text);
-            }
-            if (ok) {
-              await markReplied(input.comment_id, input.platform);
-              resultContent = `Reply posted on ${input.platform}.`;
-            } else {
-              resultContent = `Failed to post reply on ${input.platform}.`;
-            }
+            if (input.platform === 'linkedin' && input.post_id) ok = await replyToLinkedInComment(input.post_id, input.comment_id, input.reply_text);
+            else if (input.platform === 'facebook') ok = await replyToFacebookComment(input.comment_id, input.reply_text);
+            else if (input.platform === 'instagram') ok = await replyToInstagramComment(input.comment_id, input.reply_text);
+            if (ok) await markReplied(input.comment_id, input.platform);
+            resultContent = ok ? `Reply posted on ${input.platform}.` : `Failed to post reply on ${input.platform}.`;
           } catch (err) {
-            resultContent = `Error replying: ${err instanceof Error ? err.message : String(err)}`;
+            resultContent = `Error: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        }
+
+        if (block.name === 'post_comment') {
+          const input = block.input as { platform: 'linkedin' | 'instagram' | 'facebook'; post_id: string; text: string };
+          try {
+            let ok = false;
+            if (input.platform === 'linkedin') ok = await postLinkedInComment(input.post_id, input.text);
+            else if (input.platform === 'facebook') ok = await postFacebookComment(input.post_id, input.text);
+            else if (input.platform === 'instagram') ok = await postInstagramComment(input.post_id, input.text);
+            resultContent = ok ? `Comment posted on ${input.platform}.` : `Failed to post comment on ${input.platform}.`;
+          } catch (err) {
+            resultContent = `Error: ${err instanceof Error ? err.message : String(err)}`;
           }
         }
 
@@ -457,32 +441,24 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
               else if (input.platform === 'linkedin') eng = await getLinkedInPostEngagement(input.post_id);
               resultContent = eng
                 ? `[${eng.platform}] Likes: ${eng.likes} | Comments: ${eng.comments} | Shares: ${eng.shares} | Impressions: ${eng.impressions} | Reach: ${eng.reach}`
-                : 'Could not fetch engagement for that post.';
+                : 'No data available.';
             } else {
-              // Fetch all recent posts + account stats
-              const [posts, accountStats] = await Promise.all([
-                getPostedPostsForCommentCheck(),
-                getAllAccountStats(),
-              ]);
-              const engagements = await Promise.all(
-                posts.map(async p => {
-                  try {
-                    if (p.platform === 'facebook') return getFacebookPostEngagement(p.platform_post_id);
-                    if (p.platform === 'instagram') return getInstagramPostEngagement(p.platform_post_id);
-                    if (p.platform === 'linkedin') return getLinkedInPostEngagement(p.platform_post_id);
-                  } catch {}
-                  return null;
-                })
-              );
+              const [posts, accountStats] = await Promise.all([getPostedPostsForCommentCheck(), getAllAccountStats()]);
+              const engagements = await Promise.all(posts.map(async p => {
+                try {
+                  if (p.platform === 'facebook') return getFacebookPostEngagement(p.platform_post_id);
+                  if (p.platform === 'instagram') return getInstagramPostEngagement(p.platform_post_id);
+                  if (p.platform === 'linkedin') return getLinkedInPostEngagement(p.platform_post_id);
+                } catch {}
+                return null;
+              }));
               const valid = engagements.filter(Boolean);
               const statsLine = accountStats.map(s => `${s.platform}: ${s.followers} followers`).join(' | ');
-              const postLines = valid.map(e =>
-                `[${e!.platform}] Likes: ${e!.likes} | Comments: ${e!.comments} | Shares: ${e!.shares} | Impressions: ${e!.impressions} | Reach: ${e!.reach}`
-              ).join('\n');
-              resultContent = `Account stats: ${statsLine}\n\nPost engagement (last 7 days):\n${postLines || 'No data available.'}`;
+              const postLines = valid.map(e => `[${e!.platform}] Likes: ${e!.likes} | Comments: ${e!.comments} | Shares: ${e!.shares} | Impressions: ${e!.impressions} | Reach: ${e!.reach}`).join('\n');
+              resultContent = `Account stats: ${statsLine}\n\nPost engagement (last 7 days):\n${postLines || 'No data.'}`;
             }
           } catch (err) {
-            resultContent = `Failed to fetch engagement: ${err instanceof Error ? err.message : String(err)}`;
+            resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
           }
         }
 
@@ -495,7 +471,6 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
 
     const textBlock = response.content.find(b => b.type === 'text');
     if (!textBlock || textBlock.type !== 'text') throw new Error('No text response');
-
     const reply = textBlock.text;
     await saveMessage(chatId, BOT_NAME, 'assistant', reply);
     return reply;
