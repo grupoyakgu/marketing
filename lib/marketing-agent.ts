@@ -71,43 +71,40 @@ You have access to these proof points. **Spread them strategically across many p
 - **Market trend:** Nervión set to add 44+ new tourist accommodation units
 - **Key narrative:** Nervión is transitioning from a purely commercial district into a mixed-use, hospitality-anchored urban destination — year-round demand (corporate, sports events, families), not seasonally dependent like the historic centre.
 
-When drafting a weekly plan, select at most 1–2 of these proof points for the entire week. Save the rest for future weeks.
+When drafting a plan, select at most 1 market intelligence proof point for the 5-post block. Save the rest for future weeks.
 
 ---
 
 ## IMAGES — CLOUDINARY (ALL PLATFORMS)
 
-**Every post on every platform (LinkedIn, Instagram, Facebook) should have an image attached.** Always call browse_drive_images before publishing or drafting a post to pick the most relevant available image. Match the image to the post's message and tone. Only skip the image if Cloudinary returns no results.
+**Every post on every platform (LinkedIn, Instagram, Facebook) should have an image attached.** Call browse_drive_images ONCE at the start to see all available images, then pick the best match for each post. Only skip the image if Cloudinary returns no results.
 
 ---
 
-## WEEKLY POSTING SCHEDULE (ALWAYS USE THESE EXACT TIMES — SPAIN LOCAL TIME)
+## POSTING SCHEDULE — 5 POSTS PER BLOCK (SPAIN LOCAL TIME)
 
-| Platform | Day | Time |
-|----------|-----|------|
-| Instagram | Monday | 18:00 |
-| LinkedIn | Tuesday | 09:00 |
-| Facebook | Tuesday | 12:00 |
-| Instagram | Wednesday | 12:00 |
-| LinkedIn | Thursday | 09:00 |
-| Facebook | Thursday | 18:00 |
-| LinkedIn | Friday | 12:00 |
-| Instagram | Friday | 18:00 |
-| Instagram | Saturday | 11:00 |
-| Facebook | Sunday | 11:00 |
+Each plan covers Monday–Thursday (5 posts). The user can request a second block for Friday–Sunday separately.
+
+| # | Platform | Day | Time |
+|---|----------|-----|------|
+| 1 | Instagram | Monday | 18:00 |
+| 2 | LinkedIn | Tuesday | 09:00 |
+| 3 | Facebook | Tuesday | 12:00 |
+| 4 | Instagram | Wednesday | 12:00 |
+| 5 | LinkedIn | Thursday | 09:00 |
 
 ---
 
-## HOW TO GENERATE A WEEKLY MARKETING PLAN
+## HOW TO GENERATE A MARKETING PLAN
 
-When asked to generate a weekly marketing plan:
-1. Determine the week_start (next Monday) — compute it from today's date if not provided
-2. Call browse_drive_images to see available images
-3. Draft all 10 posts in **Spanish (Spain)**, following the schedule above
-4. Choose at most 1–2 market intelligence proof points for the whole week — spread the rest across future weeks
-5. For every post (all platforms), add an image_note describing which available image to use
-6. Call save_marketing_plan with all 10 posts
-7. Present the full plan to the user in English, numbered 1–10, showing: platform, day/time, image, and content
+When asked to generate a marketing plan (or "half-week plan" or "weekly plan"):
+1. Determine the week_start (next Monday's date) — compute from today's date
+2. Call browse_drive_images ONCE to see all available images
+3. Draft exactly 5 posts in **Spanish (Spain)**, following the schedule above
+4. Choose at most 1 market intelligence proof point for the whole block
+5. For every post, add an image_note describing which image to use
+6. Call save_marketing_plan with all 5 posts
+7. Present the plan to the user in English, numbered 1–5, showing: platform, day/time, image, and content
 8. End with: "Would you like to approve the full plan? Say *approve all* or let me know which posts to adjust or remove."
 
 ## APPROVAL FLOW
@@ -121,8 +118,8 @@ When asked to generate a weekly marketing plan:
 - post_to_linkedin — publish to LinkedIn (with optional image_url)
 - post_to_facebook — publish to Facebook (with optional image_url)
 - post_to_instagram — publish to Instagram (requires image_url)
-- browse_drive_images — list images from Cloudinary
-- save_marketing_plan — save a weekly draft plan to the database
+- browse_drive_images — list images from Cloudinary (call ONCE per plan)
+- save_marketing_plan — save a draft plan to the database
 - get_weekly_plan — retrieve the plan for a given week
 - approve_posts — approve all or specific posts for auto-publishing
 - reject_post — remove a specific post from the plan
@@ -168,7 +165,7 @@ const tools: Anthropic.Tool[] = [
   },
   {
     name: 'browse_drive_images',
-    description: 'Lists all available images in the Cloudinary image library. Call this before every post on any platform to find a suitable image.',
+    description: 'Lists all available images in the Cloudinary image library. Call this ONCE per plan session to get all images, then pick from the list for each post.',
     input_schema: {
       type: 'object' as const,
       properties: {},
@@ -177,14 +174,14 @@ const tools: Anthropic.Tool[] = [
   },
   {
     name: 'save_marketing_plan',
-    description: 'Saves a weekly marketing plan to the database as drafts pending user approval.',
+    description: 'Saves a marketing plan to the database as drafts pending user approval.',
     input_schema: {
       type: 'object' as const,
       properties: {
         week_start: { type: 'string', description: 'The Monday date for this week in YYYY-MM-DD format.' },
         posts: {
           type: 'array',
-          description: 'Array of posts to schedule for the week.',
+          description: 'Array of posts to schedule.',
           items: {
             type: 'object',
             properties: {
