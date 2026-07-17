@@ -16,6 +16,7 @@ import {
   approvePost,
   deletePost,
   getNextMonday,
+  trackDirectPost,
 } from '@/lib/marketing-plan';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -299,6 +300,9 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
         if (block.name === 'post_to_linkedin') {
           const input = block.input as { content: string; image_url?: string };
           const result = await postToLinkedIn(input.content, input.image_url);
+          if (result.success && result.postId) {
+            await trackDirectPost('linkedin', result.postId);
+          }
           resultContent = result.success
             ? `Posted to LinkedIn!${result.url ? ` URL: ${result.url}` : ''}`
             : `Failed: ${result.error}`;
@@ -307,6 +311,9 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
         if (block.name === 'post_to_facebook') {
           const input = block.input as { message: string; image_url?: string };
           const result = await postToFacebook(input.message, input.image_url);
+          if (result.success && result.postId) {
+            await trackDirectPost('facebook', result.postId);
+          }
           resultContent = result.success
             ? `Posted to Facebook!${result.url ? ` URL: ${result.url}` : ''}`
             : `Failed: ${result.error}`;
@@ -315,6 +322,9 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
         if (block.name === 'post_to_instagram') {
           const input = block.input as { caption: string; image_url: string };
           const result = await postToInstagram(input.caption, input.image_url);
+          if (result.success && result.postId) {
+            await trackDirectPost('instagram', result.postId);
+          }
           resultContent = result.success
             ? `Posted to Instagram!${result.url ? ` URL: ${result.url}` : ''}`
             : `Failed: ${result.error}`;

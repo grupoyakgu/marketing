@@ -1,8 +1,5 @@
 import { NextResponse } from 'next/server';
-import {
-  getPostedPostsForCommentCheck,
-  getMostRecentPepeChatId,
-} from '@/lib/marketing-plan';
+import { getPostedPostsForCommentCheck, getMostRecentPepeChatId } from '@/lib/marketing-plan';
 import {
   getLinkedInComments,
   getFacebookComments,
@@ -35,15 +32,13 @@ export async function GET(req: Request) {
   const chatId = await getMostRecentPepeChatId();
   if (!chatId) return NextResponse.json({ skipped: 'no chat id' });
 
-  // Fetch all posted posts from the last 7 days
   const posts = await getPostedPostsForCommentCheck();
   if (posts.length === 0) return NextResponse.json({ skipped: 'no posted posts' });
 
-  // Collect all new (unreplied) comments
   const newComments: SocialComment[] = [];
 
   for (const post of posts) {
-    const postId = post.platform_post_id!;
+    const postId = post.platform_post_id;
     let comments: SocialComment[] = [];
 
     try {
@@ -67,7 +62,6 @@ export async function GET(req: Request) {
     return NextResponse.json({ skipped: 'no new comments' });
   }
 
-  // Build the message for Pepe
   const commentList = newComments
     .map(
       (c, i) =>
@@ -80,10 +74,7 @@ export async function GET(req: Request) {
     `Please draft a warm, professional reply for each one in the same language as the comment (Spanish for Spanish, English for English). ` +
     `Use the reply_to_comment tool to post each reply immediately.\n\n${commentList}`;
 
-  // Let Pepe handle the comments and reply via tool calls
   const reply = await chat(chatId, agentMessage);
-
-  // Send Pepe's summary back to the user
   await sendTelegramMessage(chatId, reply);
 
   return NextResponse.json({ handled: newComments.length });

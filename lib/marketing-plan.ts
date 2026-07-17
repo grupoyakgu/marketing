@@ -108,19 +108,43 @@ export async function markPostStatus(
   if (error) throw new Error(error.message);
 }
 
-export async function getPostedPostsForCommentCheck(): Promise<MarketingPost[]> {
+/** Track a directly-posted post (not via the scheduled cron) so the comment cron can find it. */
+export async function trackDirectPost(
+  platform: 'linkedin' | 'instagram' | 'facebook',
+  platformPostId: string
+): Promise<void> {
+  await supabase
+    .from('tracked_posts')
+    .upsert({ platform, platform_post_id: platformPostId });
+}
+
+/** Returns all post IDs (from both marketing_plan and tracked_posts) for comment checking. */
+export async function getPostedPostsForCommentCheck(): Promise<
+  { platform: 'linkedin' | 'instagram' | 'facebook'; platform_post_id: string }[]
+> {
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-  const cutoff = sevenDaysAgo.toISOString().split('T')[0];
+  const cutoffDate = sevenDaysAgo.toISOString().split('T')[0];
+  const cutoffTs = sevenDaysAgo.toISOString();
 
-  const { data, error } = await supabase
-    .from('marketing_plan')
-    .select('*')
-    .eq('status', 'posted')
-    .gte('scheduled_date', cutoff)
-    .not('platform_post_id', 'is', null);
-  if (error) throw new Error(error.message);
-  return data ?? [];
+  const [planned, tracked] = await Promise.all([
+    supabase
+      .from('marketing_plan')
+      .select('platform, platform_post_id')
+      .eq('status', 'posted')
+      .gte('scheduled_date', cutoffDate)
+      .not('platform_post_id', 'is', null),
+    supabase
+      .from('tracked_posts')
+      .select('platform, platform_post_id')
+      .gte('posted_at', cutoffTs),
+  ]);
+
+  const results: { platform: 'linkedin' | 'instagram' | 'facebook'; platform_post_id: string }[] = [];
+  for (const row of [...(planned.data ?? []), ...(tracked.data ?? [])]) {
+    if (row.platform_post_id) results.push(row as typeof results[number]);
+  }
+  return results;
 }
 
 export async function getMostRecentPepeChatId(): Promise<number | null> {
