@@ -10,6 +10,12 @@ import {
   markReplied,
 } from '@/lib/social-comments';
 import {
+  getFacebookPostEngagement,
+  getInstagramPostEngagement,
+  getLinkedInPostEngagement,
+  getAllAccountStats,
+} from '@/lib/engagement';
+import {
   saveDraftPlan,
   getWeeklyPlan,
   approveAllDrafts,
@@ -17,6 +23,7 @@ import {
   deletePost,
   getNextMonday,
   trackDirectPost,
+  getPostedPostsForCommentCheck,
 } from '@/lib/marketing-plan';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -142,6 +149,7 @@ When asked to generate a marketing plan:
 - approve_posts — approve posts for auto-publishing
 - reject_post — remove a post from the plan
 - reply_to_comment — post a reply to a social media comment
+- get_engagement — fetch engagement stats for recent posts and account follower counts
 
 You speak with authority and warmth. You are direct, strategic, and deeply passionate about the intersection of hospitality and real estate.`;
 }
@@ -255,16 +263,28 @@ const tools: Anthropic.Tool[] = [
   },
   {
     name: 'reply_to_comment',
-    description: 'Posts a reply to a comment on LinkedIn, Instagram, or Facebook. Call this once per comment to reply.',
+    description: 'Posts a reply to a comment on LinkedIn, Instagram, or Facebook.',
     input_schema: {
       type: 'object' as const,
       properties: {
-        platform: { type: 'string', enum: ['linkedin', 'instagram', 'facebook'], description: 'The platform the comment is on.' },
+        platform: { type: 'string', enum: ['linkedin', 'instagram', 'facebook'] },
         comment_id: { type: 'string', description: 'The ID of the comment to reply to.' },
-        post_id: { type: 'string', description: 'The ID of the post the comment is on (required for LinkedIn).' },
-        reply_text: { type: 'string', description: 'The reply text to post. Match the language of the original comment.' },
+        post_id: { type: 'string', description: 'The ID of the post (required for LinkedIn).' },
+        reply_text: { type: 'string', description: 'The reply text. Match the language of the original comment.' },
       },
       required: ['platform', 'comment_id', 'reply_text'],
+    },
+  },
+  {
+    name: 'get_engagement',
+    description: 'Fetches engagement stats (likes, comments, shares, impressions, reach) for recent posts and follower counts across all platforms.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        post_id: { type: 'string', description: 'Optional: fetch stats for a specific post ID.' },
+        platform: { type: 'string', enum: ['linkedin', 'instagram', 'facebook'], description: 'Required if post_id is provided.' },
+      },
+      required: [],
     },
   },
 ];
@@ -300,9 +320,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
         if (block.name === 'post_to_linkedin') {
           const input = block.input as { content: string; image_url?: string };
           const result = await postToLinkedIn(input.content, input.image_url);
-          if (result.success && result.postId) {
-            await trackDirectPost('linkedin', result.postId);
-          }
+          if (result.success && result.postId) await trackDirectPost('linkedin', result.postId);
           resultContent = result.success
             ? `Posted to LinkedIn!${result.url ? ` URL: ${result.url}` : ''}`
             : `Failed: ${result.error}`;
@@ -311,9 +329,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
         if (block.name === 'post_to_facebook') {
           const input = block.input as { message: string; image_url?: string };
           const result = await postToFacebook(input.message, input.image_url);
-          if (result.success && result.postId) {
-            await trackDirectPost('facebook', result.postId);
-          }
+          if (result.success && result.postId) await trackDirectPost('facebook', result.postId);
           resultContent = result.success
             ? `Posted to Facebook!${result.url ? ` URL: ${result.url}` : ''}`
             : `Failed: ${result.error}`;
@@ -322,9 +338,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
         if (block.name === 'post_to_instagram') {
           const input = block.input as { caption: string; image_url: string };
           const result = await postToInstagram(input.caption, input.image_url);
-          if (result.success && result.postId) {
-            await trackDirectPost('instagram', result.postId);
-          }
+          if (result.success && result.postId) await trackDirectPost('instagram', result.postId);
           resultContent = result.success
             ? `Posted to Instagram!${result.url ? ` URL: ${result.url}` : ''}`
             : `Failed: ${result.error}`;
@@ -333,17 +347,11 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
         if (block.name === 'browse_drive_images') {
           try {
             const images = await listCloudinaryImages();
-            if (images.length === 0) {
-              resultContent = 'No images found in Cloudinary.';
-            } else {
-              resultContent =
-                `Found ${images.length} images:\n` +
-                images.map(img => `- ${img.name} | URL: ${img.url}`).join('\n');
-            }
+            resultContent = images.length === 0
+              ? 'No images found in Cloudinary.'
+              : `Found ${images.length} images:\n` + images.map(img => `- ${img.name} | URL: ${img.url}`).join('\n');
           } catch (err) {
-            resultContent = `Failed to browse images: ${
-              err instanceof Error ? err.message : String(err)
-            }`;
+            resultContent = `Failed to browse images: ${err instanceof Error ? err.message : String(err)}`;
           }
         }
 
@@ -359,16 +367,9 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
             }>;
           };
           try {
-            const saved = await saveDraftPlan(
-              input.posts.map(p => ({ ...p, week_start: input.week_start }))
-            );
+            const saved = await saveDraftPlan(input.posts.map(p => ({ ...p, week_start: input.week_start })));
             resultContent = `Saved ${saved.length} posts as drafts for week of ${input.week_start}.\nPost IDs:\n${
-              saved
-                .map(
-                  (p, i) =>
-                    `${i + 1}. [${p.platform}] ${p.scheduled_date} ${p.scheduled_time} — ID: ${p.id}`
-                )
-                .join('\n')
+              saved.map((p, i) => `${i + 1}. [${p.platform}] ${p.scheduled_date} ${p.scheduled_time} — ID: ${p.id}`).join('\n')
             }`;
           } catch (err) {
             resultContent = `Failed to save plan: ${err instanceof Error ? err.message : String(err)}`;
@@ -380,34 +381,25 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
           const weekStart = input.week_start ?? getNextMonday();
           try {
             const posts = await getWeeklyPlan(weekStart);
-            if (posts.length === 0) {
-              resultContent = `No posts found for week of ${weekStart}.`;
-            } else {
-              resultContent = `Plan for week of ${weekStart} (${posts.length} posts):\n${
-                posts
-                  .map(
-                    (p, i) =>
-                      `${i + 1}. [${p.platform}] ${p.scheduled_date} ${p.scheduled_time} [${p.status}]\n   ID: ${p.id}\n   ${p.content.substring(0, 80)}...`
-                  )
-                  .join('\n\n')
-              }`;
-            }
+            resultContent = posts.length === 0
+              ? `No posts found for week of ${weekStart}.`
+              : `Plan for week of ${weekStart} (${posts.length} posts):\n${
+                  posts.map((p, i) =>
+                    `${i + 1}. [${p.platform}] ${p.scheduled_date} ${p.scheduled_time} [${p.status}]\n   ID: ${p.id}\n   ${p.content.substring(0, 80)}...`
+                  ).join('\n\n')
+                }`;
           } catch (err) {
             resultContent = `Failed to get plan: ${err instanceof Error ? err.message : String(err)}`;
           }
         }
 
         if (block.name === 'approve_posts') {
-          const input = block.input as {
-            mode?: 'all';
-            week_start?: string;
-            post_ids?: string[];
-          };
+          const input = block.input as { mode?: 'all'; week_start?: string; post_ids?: string[] };
           try {
             if (input.mode === 'all' && input.week_start) {
               await approveAllDrafts(input.week_start);
-              resultContent = `All draft posts for week of ${input.week_start} approved. They will publish automatically at their scheduled times.`;
-            } else if (input.post_ids && input.post_ids.length > 0) {
+              resultContent = `All draft posts for week of ${input.week_start} approved.`;
+            } else if (input.post_ids?.length) {
               await Promise.all(input.post_ids.map(id => approvePost(id)));
               resultContent = `Approved ${input.post_ids.length} posts.`;
             } else {
@@ -455,11 +447,46 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
           }
         }
 
-        toolResults.push({
-          type: 'tool_result',
-          tool_use_id: block.id,
-          content: resultContent,
-        });
+        if (block.name === 'get_engagement') {
+          const input = block.input as { post_id?: string; platform?: 'linkedin' | 'instagram' | 'facebook' };
+          try {
+            if (input.post_id && input.platform) {
+              let eng = null;
+              if (input.platform === 'facebook') eng = await getFacebookPostEngagement(input.post_id);
+              else if (input.platform === 'instagram') eng = await getInstagramPostEngagement(input.post_id);
+              else if (input.platform === 'linkedin') eng = await getLinkedInPostEngagement(input.post_id);
+              resultContent = eng
+                ? `[${eng.platform}] Likes: ${eng.likes} | Comments: ${eng.comments} | Shares: ${eng.shares} | Impressions: ${eng.impressions} | Reach: ${eng.reach}`
+                : 'Could not fetch engagement for that post.';
+            } else {
+              // Fetch all recent posts + account stats
+              const [posts, accountStats] = await Promise.all([
+                getPostedPostsForCommentCheck(),
+                getAllAccountStats(),
+              ]);
+              const engagements = await Promise.all(
+                posts.map(async p => {
+                  try {
+                    if (p.platform === 'facebook') return getFacebookPostEngagement(p.platform_post_id);
+                    if (p.platform === 'instagram') return getInstagramPostEngagement(p.platform_post_id);
+                    if (p.platform === 'linkedin') return getLinkedInPostEngagement(p.platform_post_id);
+                  } catch {}
+                  return null;
+                })
+              );
+              const valid = engagements.filter(Boolean);
+              const statsLine = accountStats.map(s => `${s.platform}: ${s.followers} followers`).join(' | ');
+              const postLines = valid.map(e =>
+                `[${e!.platform}] Likes: ${e!.likes} | Comments: ${e!.comments} | Shares: ${e!.shares} | Impressions: ${e!.impressions} | Reach: ${e!.reach}`
+              ).join('\n');
+              resultContent = `Account stats: ${statsLine}\n\nPost engagement (last 7 days):\n${postLines || 'No data available.'}`;
+            }
+          } catch (err) {
+            resultContent = `Failed to fetch engagement: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        }
+
+        toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: resultContent });
       }
 
       history.push({ role: 'user', content: toolResults });
@@ -471,7 +498,6 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
 
     const reply = textBlock.text;
     await saveMessage(chatId, BOT_NAME, 'assistant', reply);
-
     return reply;
   }
 }
