@@ -3,6 +3,7 @@ import { TelegramClient } from '@/lib/telegram';
 import { postToLinkedIn } from '@/lib/linkedin-poster';
 import { enqueueLinkedInPost } from '@/lib/linkedin-queue';
 import { clearHistory, chat } from '@/lib/marketing-agent';
+import { trackDirectPost } from '@/lib/marketing-plan';
 
 export const maxDuration = 300;
 
@@ -71,6 +72,7 @@ export async function POST(req: NextRequest) {
       }
       await telegram.sendMessage(chatId, '⏳ Posting to LinkedIn...');
       const result = await postToLinkedIn(content);
+      if (result.success && result.postId) await trackDirectPost('linkedin', result.postId);
       await telegram.sendMessage(chatId, result.success
         ? (result.url ? `✅ Posted!\n\n${result.url}` : '✅ Posted to LinkedIn!')
         : `❌ Failed: ${result.error}`
@@ -110,6 +112,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
       const result = await postToLinkedIn(content, mediaFile);
+      if (result.success && result.postId) await trackDirectPost('linkedin', result.postId);
       await telegram.sendMessage(chatId, result.success
         ? (result.url ? `✅ Posted!\n\n${result.url}` : '✅ Posted to LinkedIn!')
         : `❌ Failed: ${result.error}`

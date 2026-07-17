@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { claimJob, markJobDone, markJobError } from '@/lib/linkedin-queue';
 import { postToLinkedIn, MediaUpload } from '@/lib/linkedin-poster';
 import { TelegramClient } from '@/lib/telegram';
+import { trackDirectPost } from '@/lib/marketing-plan';
 
 export const maxDuration = 300;
 
@@ -45,6 +46,7 @@ export async function POST(req: NextRequest) {
 
     const result = await postToLinkedIn(job.text, media);
     if (!result.success) throw new Error(result.error ?? 'Unknown LinkedIn error');
+    if (result.postId) await trackDirectPost('linkedin', result.postId);
 
     await markJobDone(job.id);
     await telegram.sendMessage(job.chat_id, result.url ? `✅ Posted to LinkedIn!\n\n${result.url}` : '✅ Posted to LinkedIn!');
