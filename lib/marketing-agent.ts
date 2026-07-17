@@ -11,6 +11,7 @@ import {
   postFacebookComment,
   postInstagramComment,
   markReplied,
+  type CommentPostResult,
 } from '@/lib/social-comments';
 import {
   getFacebookPostEngagement,
@@ -407,12 +408,18 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
         if (block.name === 'reply_to_comment') {
           const input = block.input as { platform: 'linkedin' | 'instagram' | 'facebook'; comment_id: string; post_id?: string; reply_text: string };
           try {
-            let ok = false;
-            if (input.platform === 'linkedin' && input.post_id) ok = await replyToLinkedInComment(input.post_id, input.comment_id, input.reply_text);
-            else if (input.platform === 'facebook') ok = await replyToFacebookComment(input.comment_id, input.reply_text);
-            else if (input.platform === 'instagram') ok = await replyToInstagramComment(input.comment_id, input.reply_text);
-            if (ok) await markReplied(input.comment_id, input.platform);
-            resultContent = ok ? `Reply posted on ${input.platform}.` : `Failed to post reply on ${input.platform}.`;
+            let result: CommentPostResult = { success: false };
+            if (input.platform === 'linkedin' && input.post_id) result = await replyToLinkedInComment(input.post_id, input.comment_id, input.reply_text);
+            else if (input.platform === 'facebook') result = await replyToFacebookComment(input.comment_id, input.reply_text);
+            else if (input.platform === 'instagram') result = await replyToInstagramComment(input.comment_id, input.reply_text);
+            if (result.success) {
+              // Mark the comment we replied to so it's never answered again, and — since our own
+              // reply can itself reappear as a "comment" on the next poll — mark it too, so the bot
+              // never mistakes its own reply for a new one requiring a response.
+              await markReplied(input.comment_id, input.platform);
+              if (result.commentId) await markReplied(result.commentId, input.platform);
+            }
+            resultContent = result.success ? `Reply posted on ${input.platform}.` : `Failed to post reply on ${input.platform}.`;
           } catch (err) {
             resultContent = `Error: ${err instanceof Error ? err.message : String(err)}`;
           }
@@ -421,11 +428,14 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
         if (block.name === 'post_comment') {
           const input = block.input as { platform: 'linkedin' | 'instagram' | 'facebook'; post_id: string; text: string };
           try {
-            let ok = false;
-            if (input.platform === 'linkedin') ok = await postLinkedInComment(input.post_id, input.text);
-            else if (input.platform === 'facebook') ok = await postFacebookComment(input.post_id, input.text);
-            else if (input.platform === 'instagram') ok = await postInstagramComment(input.post_id, input.text);
-            resultContent = ok ? `Comment posted on ${input.platform}.` : `Failed to post comment on ${input.platform}.`;
+            let result: CommentPostResult = { success: false };
+            if (input.platform === 'linkedin') result = await postLinkedInComment(input.post_id, input.text);
+            else if (input.platform === 'facebook') result = await postFacebookComment(input.post_id, input.text);
+            else if (input.platform === 'instagram') result = await postInstagramComment(input.post_id, input.text);
+            // Mark our own top-level comment as handled so a later poll doesn't treat it as a new,
+            // unanswered comment and reply to it.
+            if (result.success && result.commentId) await markReplied(result.commentId, input.platform);
+            resultContent = result.success ? `Comment posted on ${input.platform}.` : `Failed to post comment on ${input.platform}.`;
           } catch (err) {
             resultContent = `Error: ${err instanceof Error ? err.message : String(err)}`;
           }

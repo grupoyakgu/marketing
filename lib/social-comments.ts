@@ -131,12 +131,18 @@ export async function getInstagramComments(mediaId: string): Promise<SocialComme
   }));
 }
 
+export interface CommentPostResult {
+  success: boolean;
+  /** ID of the comment/reply we just created — used to mark it as already-handled so it's never mistaken for a new incoming comment. */
+  commentId?: string;
+}
+
 // ─── Post top-level comment (thank-you / shoutout) ────────────────────────────
 
-export async function postLinkedInComment(postUrn: string, text: string): Promise<boolean> {
+export async function postLinkedInComment(postUrn: string, text: string): Promise<CommentPostResult> {
   const token = process.env.LINKEDIN_ACCESS_TOKEN;
   const authorId = process.env.LINKEDIN_AUTHOR_ID;
-  if (!token || !authorId) return false;
+  if (!token || !authorId) return { success: false };
   const authorUrn = authorId.startsWith('urn:li:') ? authorId : `urn:li:organization:${authorId}`;
   const res = await fetch(
     `${LINKEDIN_API}/socialActions/${encodeURIComponent(postUrn)}/comments`,
@@ -150,42 +156,60 @@ export async function postLinkedInComment(postUrn: string, text: string): Promis
       body: JSON.stringify({ actor: authorUrn, message: { text } }),
     }
   );
-  if (!res.ok) console.error(`LinkedIn postComment failed for ${postUrn}: ${res.status} ${await res.text()}`);
-  return res.ok;
+  if (!res.ok) {
+    console.error(`LinkedIn postComment failed for ${postUrn}: ${res.status} ${await res.text()}`);
+    return { success: false };
+  }
+  return { success: true, commentId: await extractLinkedInCreatedId(res) };
 }
 
-export async function postFacebookComment(postId: string, text: string): Promise<boolean> {
+export async function postFacebookComment(postId: string, text: string): Promise<CommentPostResult> {
   const token = process.env.INSTAGRAM_PAGE_ACCESS_TOKEN;
-  if (!token) return false;
+  if (!token) return { success: false };
   const res = await fetch(`${GRAPH_API}/${postId}/comments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message: text, access_token: token }),
   });
-  return res.ok;
+  if (!res.ok) return { success: false };
+  const json = await res.json();
+  return { success: true, commentId: json?.id ? String(json.id) : undefined };
 }
 
-export async function postInstagramComment(mediaId: string, text: string): Promise<boolean> {
+export async function postInstagramComment(mediaId: string, text: string): Promise<CommentPostResult> {
   const token = process.env.INSTAGRAM_PAGE_ACCESS_TOKEN;
-  if (!token) return false;
+  if (!token) return { success: false };
   const res = await fetch(`${GRAPH_API}/${mediaId}/comments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message: text, access_token: token }),
   });
-  return res.ok;
+  if (!res.ok) return { success: false };
+  const json = await res.json();
+  return { success: true, commentId: json?.id ? String(json.id) : undefined };
 }
 
 // ─── Reply to comment ─────────────────────────────────────────────────────
+
+async function extractLinkedInCreatedId(res: Response): Promise<string | undefined> {
+  const headerId = res.headers.get('x-restli-id');
+  if (headerId) return headerId;
+  try {
+    const body = await res.json();
+    return body?.id ? String(body.id) : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export async function replyToLinkedInComment(
   postUrn: string,
   commentUrn: string,
   text: string
-): Promise<boolean> {
+): Promise<CommentPostResult> {
   const token = process.env.LINKEDIN_ACCESS_TOKEN;
   const authorId = process.env.LINKEDIN_AUTHOR_ID;
-  if (!token || !authorId) return false;
+  if (!token || !authorId) return { success: false };
   const authorUrn = authorId.startsWith('urn:li:') ? authorId : `urn:li:organization:${authorId}`;
   const res = await fetch(
     `${LINKEDIN_API}/socialActions/${encodeURIComponent(postUrn)}/comments`,
@@ -199,28 +223,35 @@ export async function replyToLinkedInComment(
       body: JSON.stringify({ actor: authorUrn, message: { text }, parentComment: commentUrn }),
     }
   );
-  if (!res.ok) console.error(`LinkedIn replyToComment failed for ${postUrn}/${commentUrn}: ${res.status} ${await res.text()}`);
-  return res.ok;
+  if (!res.ok) {
+    console.error(`LinkedIn replyToComment failed for ${postUrn}/${commentUrn}: ${res.status} ${await res.text()}`);
+    return { success: false };
+  }
+  return { success: true, commentId: await extractLinkedInCreatedId(res) };
 }
 
-export async function replyToFacebookComment(commentId: string, text: string): Promise<boolean> {
+export async function replyToFacebookComment(commentId: string, text: string): Promise<CommentPostResult> {
   const token = process.env.INSTAGRAM_PAGE_ACCESS_TOKEN;
-  if (!token) return false;
+  if (!token) return { success: false };
   const res = await fetch(`${GRAPH_API}/${commentId}/comments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message: text, access_token: token }),
   });
-  return res.ok;
+  if (!res.ok) return { success: false };
+  const json = await res.json();
+  return { success: true, commentId: json?.id ? String(json.id) : undefined };
 }
 
-export async function replyToInstagramComment(commentId: string, text: string): Promise<boolean> {
+export async function replyToInstagramComment(commentId: string, text: string): Promise<CommentPostResult> {
   const token = process.env.INSTAGRAM_PAGE_ACCESS_TOKEN;
-  if (!token) return false;
+  if (!token) return { success: false };
   const res = await fetch(`${GRAPH_API}/${commentId}/replies`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message: text, access_token: token }),
   });
-  return res.ok;
+  if (!res.ok) return { success: false };
+  const json = await res.json();
+  return { success: true, commentId: json?.id ? String(json.id) : undefined };
 }
