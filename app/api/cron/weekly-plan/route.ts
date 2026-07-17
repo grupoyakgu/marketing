@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { chat } from '@/lib/marketing-agent';
 import { getMostRecentPepeChatId, getNextMonday } from '@/lib/marketing-plan';
 
+export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
 export async function GET(req: Request) {

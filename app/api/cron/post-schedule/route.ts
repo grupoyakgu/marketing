@@ -4,6 +4,7 @@ import { postToLinkedIn } from '@/lib/linkedin-poster';
 import { postToFacebook, postToInstagram } from '@/lib/meta-poster';
 import { listDriveImages } from '@/lib/google-drive';
 
+export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 async function sendTelegramMessage(chatId: number, text: string) {
