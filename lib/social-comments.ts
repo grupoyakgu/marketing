@@ -1,6 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
-const LINKEDIN_API = 'https://api.linkedin.com/v2';
+// The legacy unversioned /v2 socialActions endpoints are blocked for comment
+// read/write even with r_organization_social granted — LinkedIn's error
+// ("socialActions.GET_ALL.NO_VERSION") indicates this resource now requires
+// the versioned /rest API with a LinkedIn-Version header.
+const LINKEDIN_REST_API = 'https://api.linkedin.com/rest';
+const LINKEDIN_API_VERSION = process.env.LINKEDIN_API_VERSION ?? '202506';
 const GRAPH_API = 'https://graph.facebook.com/v19.0';
 
 export interface SocialComment {
@@ -67,8 +72,14 @@ export async function getLinkedInComments(postUrn: string): Promise<SocialCommen
   const token = process.env.LINKEDIN_ACCESS_TOKEN;
   if (!token) return [];
   const res = await fetch(
-    `${LINKEDIN_API}/socialActions/${encodeURIComponent(postUrn)}/comments?count=20`,
-    { headers: { Authorization: `Bearer ${token}`, 'X-Restli-Protocol-Version': '2.0.0' } }
+    `${LINKEDIN_REST_API}/socialActions/${encodeURIComponent(postUrn)}/comments?count=20`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'X-Restli-Protocol-Version': '2.0.0',
+        'LinkedIn-Version': LINKEDIN_API_VERSION,
+      },
+    }
   );
   if (!res.ok) {
     console.error(`LinkedIn getComments failed for ${postUrn}: ${res.status} ${await res.text()}`);
@@ -145,13 +156,14 @@ export async function postLinkedInComment(postUrn: string, text: string): Promis
   if (!token || !authorId) return { success: false };
   const authorUrn = authorId.startsWith('urn:li:') ? authorId : `urn:li:organization:${authorId}`;
   const res = await fetch(
-    `${LINKEDIN_API}/socialActions/${encodeURIComponent(postUrn)}/comments`,
+    `${LINKEDIN_REST_API}/socialActions/${encodeURIComponent(postUrn)}/comments`,
     {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
         'X-Restli-Protocol-Version': '2.0.0',
+        'LinkedIn-Version': LINKEDIN_API_VERSION,
       },
       body: JSON.stringify({ actor: authorUrn, message: { text } }),
     }
@@ -212,13 +224,14 @@ export async function replyToLinkedInComment(
   if (!token || !authorId) return { success: false };
   const authorUrn = authorId.startsWith('urn:li:') ? authorId : `urn:li:organization:${authorId}`;
   const res = await fetch(
-    `${LINKEDIN_API}/socialActions/${encodeURIComponent(postUrn)}/comments`,
+    `${LINKEDIN_REST_API}/socialActions/${encodeURIComponent(postUrn)}/comments`,
     {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
         'X-Restli-Protocol-Version': '2.0.0',
+        'LinkedIn-Version': LINKEDIN_API_VERSION,
       },
       body: JSON.stringify({ actor: authorUrn, message: { text }, parentComment: commentUrn }),
     }
