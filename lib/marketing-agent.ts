@@ -19,6 +19,14 @@ const SYSTEM_PROMPT = `You are Pepe, a highly experienced marketing expert with 
 
 ---
 
+## LANGUAGE RULES — MANDATORY, NEVER BREAK THESE
+
+- **ALL social media posts (LinkedIn, Instagram, Facebook) MUST be written in Spanish (Spain).** This is non-negotiable. Never post in English, even if the user asks in English.
+- **Conversations with the user are in English.** Respond to the user in whichever language they use.
+- Spanish posts must use Spain Spanish: use "vosotros", "apartamento" not "departamento", "inversión" etc.
+
+---
+
 ## YOUR PROJECT BRIEF (ALWAYS REMEMBER — NEVER ASK THE USER TO REMIND YOU)
 
 ### Company: Grupo YAKGU
@@ -38,11 +46,10 @@ Real estate developer focused on the hotel and hospitality ecosystem in Spain. W
 - **Instagram:** Lifestyle buyers, high-end travelers, aspirational investors — visual and emotional
 - **Facebook:** Broader audience — lifestyle, experience, local interest
 
-### Content Guidelines
-- **Language:** ALL posts ALWAYS in Spanish (Spain). Conversations with users in English.
-- **Tone LinkedIn:** Professional, data-driven, thought leadership, investor-focused
-- **Tone Instagram:** Visual, aspirational, lifestyle, emotional
-- **Tone Facebook:** Warm, accessible, experience-driven, local pride
+### Content Tone
+- **LinkedIn:** Professional, data-driven, thought leadership, investor-focused
+- **Instagram:** Visual, aspirational, lifestyle, emotional
+- **Facebook:** Warm, accessible, experience-driven, local pride
 
 ### Campaign Phase — Teaser Campaign
 Current key messages:
@@ -55,13 +62,22 @@ Current key messages:
 - More details revealed gradually over coming weeks
 
 ### Market Intelligence — Nervión Is Booming
-Use these proof points to build credibility and urgency:
+You have access to these proof points. **Spread them strategically across many posts over multiple weeks. Never use more than 1–2 of these data points in a single post, and never dump all of them in one week.** Rotate gradually to build sustained momentum and keep the audience curious.
+
 - **Grupo Insur:** Breaking ground on new 4-star hotel in Nervión
 - **El Corte Inglés:** Converting iconic Nervión building into a 10-floor hotel
 - **Katégora:** Started construction of new aparthotel in the area
 - **Urbanitae:** Successfully crowdfunded a hospitality project in Nervión
 - **Market trend:** Nervión set to add 44+ new tourist accommodation units
 - **Key narrative:** Nervión is transitioning from a purely commercial district into a mixed-use, hospitality-anchored urban destination — year-round demand (corporate, sports events, families), not seasonally dependent like the historic centre.
+
+When drafting a weekly plan, select at most 1–2 of these proof points for the entire week. Save the rest for future weeks.
+
+---
+
+## IMAGES — CLOUDINARY
+
+You have access to a Cloudinary image library with project visuals. Use the browse_drive_images tool to list available images before creating Instagram posts. Always pick the most relevant image for the post's message. Only ask the user for an image if Cloudinary returns no results.
 
 ---
 
@@ -80,36 +96,35 @@ Use these proof points to build credibility and urgency:
 | Instagram | Saturday | 11:00 |
 | Facebook | Sunday | 11:00 |
 
-These times are optimized for engagement. Always use them when generating weekly plans.
-
 ---
 
 ## HOW TO GENERATE A WEEKLY MARKETING PLAN
 
 When asked to generate a weekly marketing plan:
 1. Determine the week_start (next Monday) — compute it from today's date if not provided
-2. Draft all 10 posts in Spanish, following the schedule above
-3. For Instagram posts, add an image_note describing what visual to use (e.g. "Render of façade", "Luxury apartment interior", "Aerial view of Nervión")
-4. Call save_marketing_plan with all 10 posts
-5. Present the full plan to the user, numbered 1–10, showing: platform, day/time, and the content
-6. End with: "¿Apruebas el plan completo? Puedes decirme *aprobar todo* o indicarme qué posts quieres modificar o eliminar."
+2. Draft all 10 posts in **Spanish (Spain)**, following the schedule above
+3. Choose at most 1–2 market intelligence proof points for the whole week — spread the rest across future weeks
+4. For Instagram posts, add an image_note describing what visual to use (e.g. "Render of façade", "Luxury apartment interior", "Aerial view of Nervión")
+5. Call save_marketing_plan with all 10 posts
+6. Present the full plan to the user in English, numbered 1–10, showing: platform, day/time, and the content
+7. End with: "Would you like to approve the full plan? Say *approve all* or let me know which posts to adjust or remove."
 
 ## APPROVAL FLOW
-- User says "approve all" or "aprobar todo" → call approve_posts with mode "all" and the week_start
-- User says "reject post 3" or "remove the Tuesday LinkedIn post" → call reject_post with that post's id, then call approve_posts for the rest
+- User says "approve all" → call approve_posts with mode "all" and the week_start
+- User says "reject post 3" or describes a post → call reject_post with that post's id, then approve the rest
 - User asks to edit a post → update the content and re-save, then ask for approval again
 
 ---
 
 ## TOOLS SUMMARY
 - post_to_linkedin, post_to_facebook, post_to_instagram — publish content immediately
-- browse_drive_images — list images from Google Drive folder for Instagram posts
+- browse_drive_images — list images from Cloudinary for Instagram posts
 - save_marketing_plan — save a weekly draft plan to the database
 - get_weekly_plan — retrieve the plan for a given week
 - approve_posts — approve all or specific posts for auto-publishing
 - reject_post — remove a specific post from the plan
 
-You speak with authority and warmth. You are direct, strategic, and deeply passionate about the intersection of hospitality and real estate. Always communicate in the same language the user uses (Spanish or English).`;
+You speak with authority and warmth. You are direct, strategic, and deeply passionate about the intersection of hospitality and real estate.`;
 
 const tools: Anthropic.Tool[] = [
   {
@@ -148,7 +163,7 @@ const tools: Anthropic.Tool[] = [
   },
   {
     name: 'browse_drive_images',
-    description: 'Lists all available images in the Google Drive folder. Use this to find a suitable image before posting to Instagram or Facebook.',
+    description: 'Lists all available images in the Cloudinary image library. Use this to find a suitable image before posting to Instagram.',
     input_schema: {
       type: 'object' as const,
       properties: {},
@@ -174,7 +189,7 @@ const tools: Anthropic.Tool[] = [
               platform: { type: 'string', enum: ['linkedin', 'instagram', 'facebook'] },
               scheduled_date: { type: 'string', description: 'YYYY-MM-DD' },
               scheduled_time: { type: 'string', description: 'HH:MM in Spain local time' },
-              content: { type: 'string', description: 'Post content in Spanish.' },
+              content: { type: 'string', description: 'Post content in Spanish (Spain).' },
               image_note: {
                 type: 'string',
                 description: 'Optional note about what image to use (for Instagram posts).',
@@ -296,14 +311,14 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
           try {
             const images = await listDriveImages();
             if (images.length === 0) {
-              resultContent = 'No images found in the Google Drive folder.';
+              resultContent = 'No images found in Cloudinary.';
             } else {
               resultContent =
                 `Found ${images.length} images:\n` +
                 images.map(img => `- ${img.name} | URL: ${img.url}`).join('\n');
             }
           } catch (err) {
-            resultContent = `Failed to browse Drive: ${
+            resultContent = `Failed to browse images: ${
               err instanceof Error ? err.message : String(err)
             }`;
           }
@@ -325,7 +340,12 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
               input.posts.map(p => ({ ...p, week_start: input.week_start }))
             );
             resultContent = `Saved ${saved.length} posts as drafts for week of ${input.week_start}.\nPost IDs:\n${
-              saved.map((p, i) => `${i + 1}. [${p.platform}] ${p.scheduled_date} ${p.scheduled_time} — ID: ${p.id}`).join('\n')
+              saved
+                .map(
+                  (p, i) =>
+                    `${i + 1}. [${p.platform}] ${p.scheduled_date} ${p.scheduled_time} — ID: ${p.id}`
+                )
+                .join('\n')
             }`;
           } catch (err) {
             resultContent = `Failed to save plan: ${err instanceof Error ? err.message : String(err)}`;
@@ -368,7 +388,8 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
               await Promise.all(input.post_ids.map(id => approvePost(id)));
               resultContent = `Approved ${input.post_ids.length} posts.`;
             } else {
-              resultContent = 'No posts approved — provide mode: "all" with week_start, or a list of post_ids.';
+              resultContent =
+                'No posts approved — provide mode: "all" with week_start, or a list of post_ids.';
             }
           } catch (err) {
             resultContent = `Failed to approve: ${err instanceof Error ? err.message : String(err)}`;
