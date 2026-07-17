@@ -10,12 +10,22 @@ import {
   approvePost,
   deletePost,
   getNextMonday,
+  ensureMarketingPlanTable,
 } from '@/lib/marketing-plan';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BOT_NAME = 'pepe';
 
-const SYSTEM_PROMPT = `You are Pepe, a highly experienced marketing expert with 25+ years in real estate development focused on the hotel and hospitality ecosystem. Your background spans luxury resorts, boutique hotels, eco-lodges, mixed-use developments, and hospitality-anchored real estate projects across Latin America and Europe.
+function buildSystemPrompt(): string {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid' }).format(new Date());
+  const nextMonday = getNextMonday();
+
+  return `You are Pepe, a highly experienced marketing expert with 25+ years in real estate development focused on the hotel and hospitality ecosystem. Your background spans luxury resorts, boutique hotels, eco-lodges, mixed-use developments, and hospitality-anchored real estate projects across Latin America and Europe.
+
+---
+
+## TODAY'S DATE
+Today is **${today}** (Spain local time). Next Monday is **${nextMonday}**. Always use these exact dates when generating plans — never guess or use past dates.
 
 ---
 
@@ -77,7 +87,7 @@ When drafting a plan, select at most 1 market intelligence proof point for the 5
 
 ## IMAGES — CLOUDINARY (ALL PLATFORMS)
 
-**Every post on every platform (LinkedIn, Instagram, Facebook) should have an image attached.** Call browse_drive_images ONCE at the start to see all available images, then pick the best match for each post. Only skip the image if Cloudinary returns no results.
+**Every post on every platform (LinkedIn, Instagram, Facebook) should have an image attached.** Call browse_drive_images ONCE at the start to see all available images, then pick the best match for each post. Only skip the image if no images are returned.
 
 ---
 
@@ -97,20 +107,20 @@ Each plan covers Monday–Thursday (5 posts). The user can request a second bloc
 
 ## HOW TO GENERATE A MARKETING PLAN
 
-When asked to generate a marketing plan (or "half-week plan" or "weekly plan"):
-1. Determine the week_start (next Monday's date) — compute from today's date
-2. Call browse_drive_images ONCE to see all available images
+When asked to generate a marketing plan:
+1. Use **${nextMonday}** as the week_start — this is next Monday's date
+2. Call browse_drive_images ONCE to see available images
 3. Draft exactly 5 posts in **Spanish (Spain)**, following the schedule above
 4. Choose at most 1 market intelligence proof point for the whole block
-5. For every post, add an image_note describing which image to use
+5. For every post, note which image to use
 6. Call save_marketing_plan with all 5 posts
 7. Present the plan to the user in English, numbered 1–5, showing: platform, day/time, image, and content
 8. End with: "Would you like to approve the full plan? Say *approve all* or let me know which posts to adjust or remove."
 
 ## APPROVAL FLOW
-- User says "approve all" → call approve_posts with mode "all" and the week_start
-- User says "reject post 3" or describes a post → call reject_post with that post's id, then approve the rest
-- User asks to edit a post → update the content and re-save, then ask for approval again
+- User says "approve all" → call approve_posts with mode "all" and week_start "${nextMonday}"
+- User says "reject post 3" → call reject_post with that post's id
+- User asks to edit a post → update and re-save, then ask for approval again
 
 ---
 
@@ -118,13 +128,14 @@ When asked to generate a marketing plan (or "half-week plan" or "weekly plan"):
 - post_to_linkedin — publish to LinkedIn (with optional image_url)
 - post_to_facebook — publish to Facebook (with optional image_url)
 - post_to_instagram — publish to Instagram (requires image_url)
-- browse_drive_images — list images from Cloudinary (call ONCE per plan)
-- save_marketing_plan — save a draft plan to the database
-- get_weekly_plan — retrieve the plan for a given week
-- approve_posts — approve all or specific posts for auto-publishing
-- reject_post — remove a specific post from the plan
+- browse_drive_images — list available images (call ONCE per plan)
+- save_marketing_plan — save draft plan to database
+- get_weekly_plan — retrieve plan for a given week
+- approve_posts — approve posts for auto-publishing
+- reject_post — remove a post from the plan
 
 You speak with authority and warmth. You are direct, strategic, and deeply passionate about the intersection of hospitality and real estate.`;
+}
 
 const tools: Anthropic.Tool[] = [
   {
@@ -165,7 +176,7 @@ const tools: Anthropic.Tool[] = [
   },
   {
     name: 'browse_drive_images',
-    description: 'Lists all available images in the Cloudinary image library. Call this ONCE per plan session to get all images, then pick from the list for each post.',
+    description: 'Lists all available images. Call this ONCE per plan session to get all images, then pick from the list for each post.',
     input_schema: {
       type: 'object' as const,
       properties: {},
@@ -178,7 +189,7 @@ const tools: Anthropic.Tool[] = [
     input_schema: {
       type: 'object' as const,
       properties: {
-        week_start: { type: 'string', description: 'The Monday date for this week in YYYY-MM-DD format.' },
+        week_start: { type: 'string', description: 'The Monday date in YYYY-MM-DD format.' },
         posts: {
           type: 'array',
           description: 'Array of posts to schedule.',
@@ -235,13 +246,14 @@ const tools: Anthropic.Tool[] = [
   },
 ];
 
-type MessageParam = Anthropic.MessageParam;
-
 export async function clearHistory(chatId: number): Promise<void> {
   await clearDb(chatId, BOT_NAME);
 }
 
 export async function chat(chatId: number, userMessage: string): Promise<string> {
+  // Ensure the marketing_plan table exists before any DB operation
+  await ensureMarketingPlanTable();
+
   const history = await loadHistory(chatId, BOT_NAME);
   history.push({ role: 'user', content: userMessage });
   await saveMessage(chatId, BOT_NAME, 'user', userMessage);
@@ -250,7 +262,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 4096,
-      system: SYSTEM_PROMPT,
+      system: buildSystemPrompt(),
       tools,
       messages: history,
     });
@@ -293,7 +305,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
           try {
             const images = await listDriveImages();
             if (images.length === 0) {
-              resultContent = 'No images found in Cloudinary.';
+              resultContent = 'No images found.';
             } else {
               resultContent =
                 `Found ${images.length} images:\n` +
@@ -370,8 +382,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
               await Promise.all(input.post_ids.map(id => approvePost(id)));
               resultContent = `Approved ${input.post_ids.length} posts.`;
             } else {
-              resultContent =
-                'No posts approved — provide mode: "all" with week_start, or a list of post_ids.';
+              resultContent = 'No posts approved — provide mode: "all" with week_start, or a list of post_ids.';
             }
           } catch (err) {
             resultContent = `Failed to approve: ${err instanceof Error ? err.message : String(err)}`;
