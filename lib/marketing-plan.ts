@@ -20,36 +20,11 @@ export interface MarketingPost {
 export async function saveDraftPlan(
   posts: Omit<MarketingPost, 'id' | 'status'>[]
 ): Promise<MarketingPost[]> {
-  // Use raw SQL to bypass schema cache issues with newly created tables
-  const values = posts.map((p, i) => {
-    const base = i * 7;
-    return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7})`;
-  }).join(', ');
-
-  const params = posts.flatMap(p => [
-    p.week_start,
-    p.platform,
-    p.scheduled_date,
-    p.scheduled_time,
-    p.content,
-    p.image_note ?? null,
-    'draft',
-  ]);
-
-  const { data, error } = await supabase.rpc('insert_marketing_posts', {
-    posts_json: posts.map(p => ({ ...p, status: 'draft' })),
-  });
-
-  if (error) {
-    // Fallback: try direct insert (works once schema cache refreshes)
-    const { data: inserted, error: insertError } = await supabase
-      .from('marketing_plan')
-      .insert(posts.map(p => ({ ...p, status: 'draft' })))
-      .select();
-    if (insertError) throw new Error(insertError.message);
-    return inserted ?? [];
-  }
-
+  const { data, error } = await supabase
+    .from('marketing_plan')
+    .insert(posts.map(p => ({ ...p, status: 'draft' })))
+    .select();
+  if (error) throw new Error(error.message);
   return data ?? [];
 }
 
