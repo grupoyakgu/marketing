@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { waitUntil } from '@vercel/functions';
 import { TelegramClient } from '@/lib/telegram';
 import { postToLinkedIn } from '@/lib/linkedin-poster';
 import { enqueueLinkedInPost } from '@/lib/linkedin-queue';
-import { clearHistory } from '@/lib/marketing-agent';
+import { clearHistory, chat } from '@/lib/marketing-agent';
 
-export const maxDuration = 30;
+export const maxDuration = 300;
 
 async function downloadTelegramFile(fileId: string): Promise<{ data: ArrayBuffer; mimeType: string; mediaType: 'IMAGE' | 'VIDEO' } | null> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -24,8 +23,15 @@ async function downloadTelegramFile(fileId: string): Promise<{ data: ArrayBuffer
   return { data, mimeType: isVideo ? 'video/mp4' : 'image/jpeg', mediaType: isVideo ? 'VIDEO' : 'IMAGE' };
 }
 
-function getBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL ?? 'https://marketing-grupo-yakgu.vercel.app';
+function splitMessage(text: string, maxLen: number): string[] {
+  if (text.length <= maxLen) return [text];
+  const chunks: string[] = [];
+  let i = 0;
+  while (i < text.length) {
+    chunks.push(text.slice(i, i + maxLen));
+    i += maxLen;
+  }
+  return chunks;
 }
 
 export async function POST(req: NextRequest) {
@@ -87,15 +93,13 @@ export async function POST(req: NextRequest) {
 
       if (mediaType === 'VIDEO') {
         await telegram.sendMessage(chatId, '⏳ Queuing video... I\'ll notify you when it\'s posted.');
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://marketing-grupo-yakgu.vercel.app';
         const jobId = await enqueueLinkedInPost(chatId, content, fileId, 'VIDEO');
-        const baseUrl = getBaseUrl();
-        waitUntil(
-          fetch(`${baseUrl}/api/linkedin/process`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ jobId }),
-          }).catch(err => console.error('[telegram] linkedin/process error:', err))
-        );
+        fetch(`${baseUrl}/api/linkedin/process`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jobId }),
+        }).catch(() => {});
         return NextResponse.json({ ok: true });
       }
 
@@ -113,20 +117,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // Free-text → send ack immediately, run agent in background
+    // Free-text → run agent directly (maxDuration=300 gives us 5 minutes)
     if (text) {
       const resolvedChatId = chatId;
-      const resolvedText = text;
-      await telegram.sendMessage(resolvedChatId, '⏳ On it! This may take a minute...');
-
-      waitUntil(
-        fetch(`${getBaseUrl()}/api/agent-background`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chatId: resolvedChatId, text: resolvedText }),
-        }).catch(err => console.error('[telegram] agent-background error:', err))
-      );
-
+      try {
+        const reply = await chat(resolvedChatId, text);
+        const chunks = splitMessage(reply, 4000);
+        for (const chunk of chunks) {
+          await telegram.sendMessage(resolvedChatId, chunk);
+        }
+      } catch (err) {
+        console.error('[telegram] agent error:', err);
+        await telegram.sendMessage(resolvedChatId, '❌ Something went wrong. Please try again.');
+      }
       return NextResponse.json({ ok: true });
     }
 
