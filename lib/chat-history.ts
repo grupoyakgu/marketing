@@ -17,7 +17,11 @@ export async function loadHistory(chatId: number, botName: string): Promise<Mess
     .order('created_at', { ascending: true })
     .limit(20);
 
-  if (error || !data) return [];
+  if (error) {
+    console.error('[chat-history] loadHistory failed:', error.message);
+    return [];
+  }
+  if (!data) return [];
 
   return data.map(row => ({
     role: row.role as 'user' | 'assistant',
@@ -26,12 +30,13 @@ export async function loadHistory(chatId: number, botName: string): Promise<Mess
 }
 
 export async function saveMessage(chatId: number, botName: string, role: 'user' | 'assistant', content: string): Promise<void> {
-  await supabase.from('chat_history').insert({
+  const { error } = await supabase.from('chat_history').insert({
     chat_id: chatId,
     bot: botName,
     role,
     content,
   });
+  if (error) console.error('[chat-history] saveMessage failed:', error.message);
 }
 
 export async function clearHistory(chatId: number, botName: string): Promise<void> {
