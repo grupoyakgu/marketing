@@ -10,7 +10,6 @@ import {
   approvePost,
   deletePost,
   getNextMonday,
-  ensureMarketingPlanTable,
 } from '@/lib/marketing-plan';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -85,7 +84,7 @@ When drafting a plan, select at most 1 market intelligence proof point for the 5
 
 ---
 
-## IMAGES — CLOUDINARY (ALL PLATFORMS)
+## IMAGES — ALL PLATFORMS
 
 **Every post on every platform (LinkedIn, Instagram, Facebook) should have an image attached.** Call browse_drive_images ONCE at the start to see all available images, then pick the best match for each post. Only skip the image if no images are returned.
 
@@ -251,9 +250,6 @@ export async function clearHistory(chatId: number): Promise<void> {
 }
 
 export async function chat(chatId: number, userMessage: string): Promise<string> {
-  // Ensure the marketing_plan table exists before any DB operation
-  await ensureMarketingPlanTable();
-
   const history = await loadHistory(chatId, BOT_NAME);
   history.push({ role: 'user', content: userMessage });
   await saveMessage(chatId, BOT_NAME, 'user', userMessage);
