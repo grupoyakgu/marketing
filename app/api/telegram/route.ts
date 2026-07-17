@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import { TelegramClient } from '@/lib/telegram';
 import { postToLinkedIn } from '@/lib/linkedin-poster';
 import { enqueueLinkedInPost } from '@/lib/linkedin-queue';
@@ -23,22 +24,8 @@ async function downloadTelegramFile(fileId: string): Promise<{ data: ArrayBuffer
   return { data, mimeType: isVideo ? 'video/mp4' : 'image/jpeg', mediaType: isVideo ? 'VIDEO' : 'IMAGE' };
 }
 
-function getBaseUrl(req: NextRequest): string {
-  return process.env.NEXT_PUBLIC_APP_URL ?? `https://${req.headers.get('host')}`;
-}
-
-async function dispatchToBackground(chatId: number, text: string, req: NextRequest): Promise<void> {
-  const baseUrl = getBaseUrl(req);
-  // Pass secret in body to avoid non-ASCII header issues
-  fetch(`${baseUrl}/api/agent-background`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chatId,
-      text,
-      secret: process.env.INTERNAL_SECRET ?? '',
-    }),
-  }).catch(err => console.error('[telegram] background dispatch error:', err));
+function getBaseUrl(): string {
+  return process.env.NEXT_PUBLIC_APP_URL ?? 'https://marketing-grupo-yakgu.vercel.app';
 }
 
 export async function POST(req: NextRequest) {
@@ -59,7 +46,7 @@ export async function POST(req: NextRequest) {
 
     if (text === '/start' || text === '/help') {
       await telegram.sendMessage(chatId,
-        `👋 MARKETING AGENT\n\nJust talk to me about your LinkedIn marketing strategy — I'll help you plan content, campaigns, and messaging.\n\nCommands:\n/post linkedin <message> — post text to LinkedIn\n/reset — clear conversation\n/help — show this menu\n\nTo post with media:\nSend a photo or video with caption:\n/post linkedin <your message>`
+        `👋 MARKETING AGENT\n\nJust talk to me about your marketing strategy — I'll help you plan content, campaigns, and messaging.\n\nCommands:\n/post linkedin <message> — post text to LinkedIn\n/reset — clear conversation\n/help — show this menu`
       );
       return NextResponse.json({ ok: true });
     }
@@ -101,12 +88,14 @@ export async function POST(req: NextRequest) {
       if (mediaType === 'VIDEO') {
         await telegram.sendMessage(chatId, '⏳ Queuing video... I\'ll notify you when it\'s posted.');
         const jobId = await enqueueLinkedInPost(chatId, content, fileId, 'VIDEO');
-        const baseUrl = getBaseUrl(req);
-        fetch(`${baseUrl}/api/linkedin/process`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jobId, secret: process.env.INTERNAL_SECRET ?? '' }),
-        }).catch(() => {});
+        const baseUrl = getBaseUrl();
+        waitUntil(
+          fetch(`${baseUrl}/api/linkedin/process`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jobId }),
+          }).catch(err => console.error('[telegram] linkedin/process error:', err))
+        );
         return NextResponse.json({ ok: true });
       }
 
@@ -124,9 +113,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // Free-text → send ack immediately, run agent in background
     if (text) {
-      await telegram.sendMessage(chatId, '⏳ On it! This may take a minute...');
-      dispatchToBackground(chatId, text, req);
+      const resolvedChatId = chatId;
+      const resolvedText = text;
+      await telegram.sendMessage(resolvedChatId, '⏳ On it! This may take a minute...');
+
+      waitUntil(
+        fetch(`${getBaseUrl()}/api/agent-background`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chatId: resolvedChatId, text: resolvedText }),
+        }).catch(err => console.error('[telegram] agent-background error:', err))
+      );
+
       return NextResponse.json({ ok: true });
     }
 
