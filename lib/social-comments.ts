@@ -70,16 +70,29 @@ export async function getLinkedInComments(postUrn: string): Promise<SocialCommen
     `${LINKEDIN_API}/socialActions/${encodeURIComponent(postUrn)}/comments?count=20`,
     { headers: { Authorization: `Bearer ${token}`, 'X-Restli-Protocol-Version': '2.0.0' } }
   );
-  if (!res.ok) return [];
+  if (!res.ok) {
+    console.error(`LinkedIn getComments failed for ${postUrn}: ${res.status} ${await res.text()}`);
+    return [];
+  }
   const json = await res.json();
-  return (json.elements ?? []).map((e: Record<string, unknown>) => ({
-    platform: 'linkedin' as const,
-    commentId: (e['$URN'] as string) ?? '',
-    postId: postUrn,
-    authorName: (e.actor as string) ?? 'LinkedIn user',
-    text: ((e.message as Record<string, string>)?.text) ?? '',
-    createdAt: new Date((e.created as Record<string, number>)?.time ?? Date.now()).toISOString(),
-  }));
+  return (json.elements ?? [])
+    .map((e: Record<string, unknown>) => {
+      // The compound comment URN ("$URN") is what LinkedIn's reply API needs as
+      // `parentComment`; fall back to building it from the raw numeric `id` when
+      // the API omits `$URN`, and never fabricate an id — a fake/empty commentId
+      // would collide across comments in the reply-tracking table and silently
+      // block replies to every future comment once one fake id is marked replied.
+      const commentId = (e['$URN'] as string) || (e.id ? `urn:li:comment:(${postUrn},${e.id})` : '');
+      return {
+        platform: 'linkedin' as const,
+        commentId,
+        postId: postUrn,
+        authorName: (e.actor as string) ?? 'LinkedIn user',
+        text: ((e.message as Record<string, string>)?.text) ?? '',
+        createdAt: new Date((e.created as Record<string, number>)?.time ?? Date.now()).toISOString(),
+      };
+    })
+    .filter((c: SocialComment) => c.commentId);
 }
 
 export async function getFacebookComments(postId: string): Promise<SocialComment[]> {
@@ -137,6 +150,7 @@ export async function postLinkedInComment(postUrn: string, text: string): Promis
       body: JSON.stringify({ actor: authorUrn, message: { text } }),
     }
   );
+  if (!res.ok) console.error(`LinkedIn postComment failed for ${postUrn}: ${res.status} ${await res.text()}`);
   return res.ok;
 }
 
@@ -185,6 +199,7 @@ export async function replyToLinkedInComment(
       body: JSON.stringify({ actor: authorUrn, message: { text }, parentComment: commentUrn }),
     }
   );
+  if (!res.ok) console.error(`LinkedIn replyToComment failed for ${postUrn}/${commentUrn}: ${res.status} ${await res.text()}`);
   return res.ok;
 }
 

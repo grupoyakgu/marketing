@@ -54,7 +54,9 @@ export async function GET(req: Request) {
       if (post.platform === 'linkedin') comments = await getLinkedInComments(post.platform_post_id);
       else if (post.platform === 'facebook') comments = await getFacebookComments(post.platform_post_id);
       else if (post.platform === 'instagram') comments = await getInstagramComments(post.platform_post_id);
-    } catch {}
+    } catch (err) {
+      console.error(`Failed to fetch ${post.platform} comments for ${post.platform_post_id}:`, err);
+    }
     for (const c of comments) {
       if (c.text && !(await hasReplied(c.commentId))) newComments.push(c);
     }
