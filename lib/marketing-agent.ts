@@ -310,6 +310,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
 
     if (response.stop_reason === 'tool_use') {
       history.push({ role: 'assistant', content: response.content });
+      await saveMessage(chatId, BOT_NAME, 'assistant', response.content);
       const toolResults: Anthropic.ToolResultBlockParam[] = [];
 
       for (const block of response.content) {
@@ -476,6 +477,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
       }
 
       history.push({ role: 'user', content: toolResults });
+      await saveMessage(chatId, BOT_NAME, 'user', toolResults);
       continue;
     }
 
