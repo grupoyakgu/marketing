@@ -2,28 +2,114 @@ import Anthropic from '@anthropic-ai/sdk';
 import { postToLinkedIn } from '@/lib/linkedin-poster';
 import { postToFacebook, postToInstagram } from '@/lib/meta-poster';
 import { loadHistory, saveMessage, clearHistory as clearDb } from '@/lib/chat-history';
-import { listCloudinaryImages } from '@/lib/cloudinary';
+import { listDriveImages } from '@/lib/google-drive';
+import {
+  saveDraftPlan,
+  getWeeklyPlan,
+  approveAllDrafts,
+  approvePost,
+  deletePost,
+  getNextMonday,
+} from '@/lib/marketing-plan';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BOT_NAME = 'pepe';
 
 const SYSTEM_PROMPT = `You are Pepe, a highly experienced marketing expert with 25+ years in real estate development focused on the hotel and hospitality ecosystem. Your background spans luxury resorts, boutique hotels, eco-lodges, mixed-use developments, and hospitality-anchored real estate projects across Latin America and Europe.
 
-You have deep expertise in:
-- Positioning hotel real estate projects to investors, developers, and buyers
-- B2B and B2C marketing strategies for hospitality-driven developments
-- LinkedIn, Instagram and Facebook content and thought leadership for the hotel/real estate sector
-- Crafting compelling narratives around eco-tourism, sustainable hospitality, and resort living
-- Targeting the right audiences: family offices, institutional investors, HNWIs, hotel operators, and lifestyle buyers
-- Campaign planning, content calendars, and messaging frameworks for pre-sales and launches
+---
 
-You can write and publish content directly to LinkedIn, Facebook, and Instagram. When you draft content, always offer to post it immediately to the relevant platforms. If the user approves, use the appropriate tool to publish — do not ask them to copy/paste commands.
+## YOUR PROJECT BRIEF (ALWAYS REMEMBER — NEVER ASK THE USER TO REMIND YOU)
 
-For Instagram posts, you need an image URL. You have access to a Cloudinary media library with images — use the browse_cloudinary_images tool to list available images and pick the most suitable one for the post. Only ask the user for an image if the library is empty or none of the images fit.
+### Company: Grupo YAKGU
+Real estate developer focused on the hotel and hospitality ecosystem in Spain. Website: www.grupoyakgu.es
 
-You speak with authority and warmth. You are direct, strategic, and deeply passionate about the intersection of hospitality and real estate. Communicate in the same language the user uses (Spanish or English).
+### The Project: AT Sevilla — Apartamentos Turísticos Sevilla
+- **Type:** Premium aparthotel — 18 high-end tourist apartments (Apartamentos Turísticos)
+- **Location:** Nervión district, Seville, Spain
+- **Stage:** Pre-launch marketing phase (building awareness and investor interest before commercial launch)
+- **Legal status:** All planning approvals received — building permit and development license in place. Construction can begin immediately.
+- **Target:** Professional investors seeking a turnkey hospitality asset — NOT a consumer product
+- **Key milestone:** Project name, website, and investor registration reveal in September 2026
+- **August 2026:** First video + weekly new renders will be published
 
-Your conversation history with this user is automatically saved and reloaded every time they message you, even across days or app restarts — you genuinely remember prior context from this Telegram chat (up to your last 20 messages). Never tell the user you lack persistent memory or that you'll forget after this session; that is false. If something from earlier truly isn't in view, just ask them to remind you. The only way history is cleared is if the user runs /reset.`;
+### Target Audiences
+- **LinkedIn:** HNWIs, family offices, private real estate investors, boutique investment firms, hospitality investors — B2B, investor-focused
+- **Instagram:** Lifestyle buyers, high-end travelers, aspirational investors — visual and emotional
+- **Facebook:** Broader audience — lifestyle, experience, local interest
+
+### Content Guidelines
+- **Language:** ALL posts ALWAYS in Spanish (Spain). Conversations with users in English.
+- **Tone LinkedIn:** Professional, data-driven, thought leadership, investor-focused
+- **Tone Instagram:** Visual, aspirational, lifestyle, emotional
+- **Tone Facebook:** Warm, accessible, experience-driven, local pride
+
+### Campaign Phase — Teaser Campaign
+Current key messages:
+- Something exceptional is coming to Seville
+- Prime location in Nervión
+- Fully permitted, investment-ready aparthotel
+- Construction can begin immediately
+- Limited opportunity
+- Developed by Grupo Yakgu
+- More details revealed gradually over coming weeks
+
+### Market Intelligence — Nervión Is Booming
+Use these proof points to build credibility and urgency:
+- **Grupo Insur:** Breaking ground on new 4-star hotel in Nervión
+- **El Corte Inglés:** Converting iconic Nervión building into a 10-floor hotel
+- **Katégora:** Started construction of new aparthotel in the area
+- **Urbanitae:** Successfully crowdfunded a hospitality project in Nervión
+- **Market trend:** Nervión set to add 44+ new tourist accommodation units
+- **Key narrative:** Nervión is transitioning from a purely commercial district into a mixed-use, hospitality-anchored urban destination — year-round demand (corporate, sports events, families), not seasonally dependent like the historic centre.
+
+---
+
+## WEEKLY POSTING SCHEDULE (ALWAYS USE THESE EXACT TIMES — SPAIN LOCAL TIME)
+
+| Platform | Day | Time |
+|----------|-----|------|
+| Instagram | Monday | 18:00 |
+| LinkedIn | Tuesday | 09:00 |
+| Facebook | Tuesday | 12:00 |
+| Instagram | Wednesday | 12:00 |
+| LinkedIn | Thursday | 09:00 |
+| Facebook | Thursday | 18:00 |
+| LinkedIn | Friday | 12:00 |
+| Instagram | Friday | 18:00 |
+| Instagram | Saturday | 11:00 |
+| Facebook | Sunday | 11:00 |
+
+These times are optimized for engagement. Always use them when generating weekly plans.
+
+---
+
+## HOW TO GENERATE A WEEKLY MARKETING PLAN
+
+When asked to generate a weekly marketing plan:
+1. Determine the week_start (next Monday) — compute it from today's date if not provided
+2. Draft all 10 posts in Spanish, following the schedule above
+3. For Instagram posts, add an image_note describing what visual to use (e.g. "Render of façade", "Luxury apartment interior", "Aerial view of Nervión")
+4. Call save_marketing_plan with all 10 posts
+5. Present the full plan to the user, numbered 1–10, showing: platform, day/time, and the content
+6. End with: "¿Apruebas el plan completo? Puedes decirme *aprobar todo* o indicarme qué posts quieres modificar o eliminar."
+
+## APPROVAL FLOW
+- User says "approve all" or "aprobar todo" → call approve_posts with mode "all" and the week_start
+- User says "reject post 3" or "remove the Tuesday LinkedIn post" → call reject_post with that post's id, then call approve_posts for the rest
+- User asks to edit a post → update the content and re-save, then ask for approval again
+
+---
+
+## TOOLS SUMMARY
+- post_to_linkedin, post_to_facebook, post_to_instagram — publish content immediately
+- browse_drive_images — list images from Google Drive folder for Instagram posts
+- save_marketing_plan — save a weekly draft plan to the database
+- get_weekly_plan — retrieve the plan for a given week
+- approve_posts — approve all or specific posts for auto-publishing
+- reject_post — remove a specific post from the plan
+
+You speak with authority and warmth. You are direct, strategic, and deeply passionate about the intersection of hospitality and real estate. Always communicate in the same language the user uses (Spanish or English).`;
 
 const tools: Anthropic.Tool[] = [
   {
@@ -61,12 +147,93 @@ const tools: Anthropic.Tool[] = [
     },
   },
   {
-    name: 'browse_cloudinary_images',
-    description: 'Lists all available images in the Cloudinary media library. Use this to find a suitable image before posting to Instagram or Facebook.',
+    name: 'browse_drive_images',
+    description: 'Lists all available images in the Google Drive folder. Use this to find a suitable image before posting to Instagram or Facebook.',
     input_schema: {
       type: 'object' as const,
       properties: {},
       required: [],
+    },
+  },
+  {
+    name: 'save_marketing_plan',
+    description: 'Saves a weekly marketing plan to the database as drafts pending user approval.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        week_start: {
+          type: 'string',
+          description: 'The Monday date for this week in YYYY-MM-DD format.',
+        },
+        posts: {
+          type: 'array',
+          description: 'Array of posts to schedule for the week.',
+          items: {
+            type: 'object',
+            properties: {
+              platform: { type: 'string', enum: ['linkedin', 'instagram', 'facebook'] },
+              scheduled_date: { type: 'string', description: 'YYYY-MM-DD' },
+              scheduled_time: { type: 'string', description: 'HH:MM in Spain local time' },
+              content: { type: 'string', description: 'Post content in Spanish.' },
+              image_note: {
+                type: 'string',
+                description: 'Optional note about what image to use (for Instagram posts).',
+              },
+            },
+            required: ['platform', 'scheduled_date', 'scheduled_time', 'content'],
+          },
+        },
+      },
+      required: ['week_start', 'posts'],
+    },
+  },
+  {
+    name: 'get_weekly_plan',
+    description: 'Retrieves the saved marketing plan for a specific week.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        week_start: {
+          type: 'string',
+          description: 'The Monday date (YYYY-MM-DD). Leave empty to get next week.',
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'approve_posts',
+    description: 'Approves marketing posts so they will be automatically published at their scheduled time.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        mode: {
+          type: 'string',
+          enum: ['all'],
+          description: 'Use "all" to approve all draft posts for the week.',
+        },
+        week_start: {
+          type: 'string',
+          description: 'The Monday date (YYYY-MM-DD) of the week to approve.',
+        },
+        post_ids: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Specific post IDs to approve individually.',
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'reject_post',
+    description: 'Removes a specific post from the marketing plan.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        post_id: { type: 'string', description: 'The UUID of the post to remove.' },
+      },
+      required: ['post_id'],
     },
   },
 ];
@@ -85,7 +252,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
   while (true) {
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1024,
+      max_tokens: 4096,
       system: SYSTEM_PROMPT,
       tools,
       messages: history,
@@ -125,17 +292,96 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
             : `Failed: ${result.error}`;
         }
 
-        if (block.name === 'browse_cloudinary_images') {
+        if (block.name === 'browse_drive_images') {
           try {
-            const images = await listCloudinaryImages();
+            const images = await listDriveImages();
             if (images.length === 0) {
-              resultContent = 'No images found in the Cloudinary media library.';
+              resultContent = 'No images found in the Google Drive folder.';
             } else {
-              resultContent = `Found ${images.length} images:\n` +
+              resultContent =
+                `Found ${images.length} images:\n` +
                 images.map(img => `- ${img.name} | URL: ${img.url}`).join('\n');
             }
           } catch (err) {
-            resultContent = `Failed to browse Cloudinary: ${err instanceof Error ? err.message : String(err)}`;
+            resultContent = `Failed to browse Drive: ${
+              err instanceof Error ? err.message : String(err)
+            }`;
+          }
+        }
+
+        if (block.name === 'save_marketing_plan') {
+          const input = block.input as {
+            week_start: string;
+            posts: Array<{
+              platform: 'linkedin' | 'instagram' | 'facebook';
+              scheduled_date: string;
+              scheduled_time: string;
+              content: string;
+              image_note?: string;
+            }>;
+          };
+          try {
+            const saved = await saveDraftPlan(
+              input.posts.map(p => ({ ...p, week_start: input.week_start }))
+            );
+            resultContent = `Saved ${saved.length} posts as drafts for week of ${input.week_start}.\nPost IDs:\n${
+              saved.map((p, i) => `${i + 1}. [${p.platform}] ${p.scheduled_date} ${p.scheduled_time} — ID: ${p.id}`).join('\n')
+            }`;
+          } catch (err) {
+            resultContent = `Failed to save plan: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        }
+
+        if (block.name === 'get_weekly_plan') {
+          const input = block.input as { week_start?: string };
+          const weekStart = input.week_start ?? getNextMonday();
+          try {
+            const posts = await getWeeklyPlan(weekStart);
+            if (posts.length === 0) {
+              resultContent = `No posts found for week of ${weekStart}.`;
+            } else {
+              resultContent = `Plan for week of ${weekStart} (${posts.length} posts):\n${
+                posts
+                  .map(
+                    (p, i) =>
+                      `${i + 1}. [${p.platform}] ${p.scheduled_date} ${p.scheduled_time} [${p.status}]\n   ID: ${p.id}\n   ${p.content.substring(0, 80)}...`
+                  )
+                  .join('\n\n')
+              }`;
+            }
+          } catch (err) {
+            resultContent = `Failed to get plan: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        }
+
+        if (block.name === 'approve_posts') {
+          const input = block.input as {
+            mode?: 'all';
+            week_start?: string;
+            post_ids?: string[];
+          };
+          try {
+            if (input.mode === 'all' && input.week_start) {
+              await approveAllDrafts(input.week_start);
+              resultContent = `All draft posts for week of ${input.week_start} approved. They will publish automatically at their scheduled times.`;
+            } else if (input.post_ids && input.post_ids.length > 0) {
+              await Promise.all(input.post_ids.map(id => approvePost(id)));
+              resultContent = `Approved ${input.post_ids.length} posts.`;
+            } else {
+              resultContent = 'No posts approved — provide mode: "all" with week_start, or a list of post_ids.';
+            }
+          } catch (err) {
+            resultContent = `Failed to approve: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        }
+
+        if (block.name === 'reject_post') {
+          const input = block.input as { post_id: string };
+          try {
+            await deletePost(input.post_id);
+            resultContent = `Post ${input.post_id} removed from the plan.`;
+          } catch (err) {
+            resultContent = `Failed to reject post: ${err instanceof Error ? err.message : String(err)}`;
           }
         }
 
