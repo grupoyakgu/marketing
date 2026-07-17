@@ -27,23 +27,25 @@ export async function GET(req: Request) {
   const posts = await getPostsDueNow();
   if (posts.length === 0) return NextResponse.json({ posted: 0 });
 
+  // Fetch one image from Cloudinary to use across posts this hour
+  let defaultImageUrl = '';
+  try {
+    const images = await listDriveImages();
+    if (images.length > 0) defaultImageUrl = images[0].url;
+  } catch {}
+
   const results: string[] = [];
 
   for (const post of posts) {
     try {
       let result: { success: boolean; url?: string; error?: string } | undefined;
+      const imageUrl = defaultImageUrl || undefined;
 
       if (post.platform === 'linkedin') {
-        result = await postToLinkedIn(post.content);
+        result = await postToLinkedIn(post.content, imageUrl);
       } else if (post.platform === 'facebook') {
-        result = await postToFacebook(post.content);
+        result = await postToFacebook(post.content, imageUrl);
       } else if (post.platform === 'instagram') {
-        let imageUrl = '';
-        try {
-          const images = await listDriveImages();
-          if (images.length > 0) imageUrl = images[0].url;
-        } catch {}
-
         if (!imageUrl) {
           await markPostStatus(post.id!, 'failed');
           results.push(`❌ Instagram: no image available`);

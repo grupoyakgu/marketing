@@ -23,7 +23,7 @@ const SYSTEM_PROMPT = `You are Pepe, a highly experienced marketing expert with 
 
 - **ALL social media posts (LinkedIn, Instagram, Facebook) MUST be written in Spanish (Spain).** This is non-negotiable. Never post in English, even if the user asks in English.
 - **Conversations with the user are in English.** Respond to the user in whichever language they use.
-- Spanish posts must use Spain Spanish: use "vosotros", "apartamento" not "departamento", "inversión" etc.
+- Spanish posts must use Spain Spanish: "vosotros", "apartamento" not "departamento", etc.
 
 ---
 
@@ -62,7 +62,7 @@ Current key messages:
 - More details revealed gradually over coming weeks
 
 ### Market Intelligence — Nervión Is Booming
-You have access to these proof points. **Spread them strategically across many posts over multiple weeks. Never use more than 1–2 of these data points in a single post, and never dump all of them in one week.** Rotate gradually to build sustained momentum and keep the audience curious.
+You have access to these proof points. **Spread them strategically across many posts over multiple weeks. Never use more than 1–2 of these data points in a single post, and never dump all of them in one week.** Rotate gradually to build sustained momentum.
 
 - **Grupo Insur:** Breaking ground on new 4-star hotel in Nervión
 - **El Corte Inglés:** Converting iconic Nervión building into a 10-floor hotel
@@ -75,9 +75,9 @@ When drafting a weekly plan, select at most 1–2 of these proof points for the 
 
 ---
 
-## IMAGES — CLOUDINARY
+## IMAGES — CLOUDINARY (ALL PLATFORMS)
 
-You have access to a Cloudinary image library with project visuals. Use the browse_drive_images tool to list available images before creating Instagram posts. Always pick the most relevant image for the post's message. Only ask the user for an image if Cloudinary returns no results.
+**Every post on every platform (LinkedIn, Instagram, Facebook) should have an image attached.** Always call browse_drive_images before publishing or drafting a post to pick the most relevant available image. Match the image to the post's message and tone. Only skip the image if Cloudinary returns no results.
 
 ---
 
@@ -102,12 +102,13 @@ You have access to a Cloudinary image library with project visuals. Use the brow
 
 When asked to generate a weekly marketing plan:
 1. Determine the week_start (next Monday) — compute it from today's date if not provided
-2. Draft all 10 posts in **Spanish (Spain)**, following the schedule above
-3. Choose at most 1–2 market intelligence proof points for the whole week — spread the rest across future weeks
-4. For Instagram posts, add an image_note describing what visual to use (e.g. "Render of façade", "Luxury apartment interior", "Aerial view of Nervión")
-5. Call save_marketing_plan with all 10 posts
-6. Present the full plan to the user in English, numbered 1–10, showing: platform, day/time, and the content
-7. End with: "Would you like to approve the full plan? Say *approve all* or let me know which posts to adjust or remove."
+2. Call browse_drive_images to see available images
+3. Draft all 10 posts in **Spanish (Spain)**, following the schedule above
+4. Choose at most 1–2 market intelligence proof points for the whole week — spread the rest across future weeks
+5. For every post (all platforms), add an image_note describing which available image to use
+6. Call save_marketing_plan with all 10 posts
+7. Present the full plan to the user in English, numbered 1–10, showing: platform, day/time, image, and content
+8. End with: "Would you like to approve the full plan? Say *approve all* or let me know which posts to adjust or remove."
 
 ## APPROVAL FLOW
 - User says "approve all" → call approve_posts with mode "all" and the week_start
@@ -117,8 +118,10 @@ When asked to generate a weekly marketing plan:
 ---
 
 ## TOOLS SUMMARY
-- post_to_linkedin, post_to_facebook, post_to_instagram — publish content immediately
-- browse_drive_images — list images from Cloudinary for Instagram posts
+- post_to_linkedin — publish to LinkedIn (with optional image_url)
+- post_to_facebook — publish to Facebook (with optional image_url)
+- post_to_instagram — publish to Instagram (requires image_url)
+- browse_drive_images — list images from Cloudinary
 - save_marketing_plan — save a weekly draft plan to the database
 - get_weekly_plan — retrieve the plan for a given week
 - approve_posts — approve all or specific posts for auto-publishing
@@ -129,22 +132,24 @@ You speak with authority and warmth. You are direct, strategic, and deeply passi
 const tools: Anthropic.Tool[] = [
   {
     name: 'post_to_linkedin',
-    description: 'Publishes a text post to LinkedIn on behalf of the user.',
+    description: 'Publishes a post to LinkedIn. Always include an image_url when one is available.',
     input_schema: {
       type: 'object' as const,
       properties: {
         content: { type: 'string', description: 'The text content to post on LinkedIn.' },
+        image_url: { type: 'string', description: 'Publicly accessible image URL to attach to the post.' },
       },
       required: ['content'],
     },
   },
   {
     name: 'post_to_facebook',
-    description: 'Publishes a text post to the Grupo YAKGU Facebook Page.',
+    description: 'Publishes a post to the Grupo YAKGU Facebook Page. Always include an image_url when one is available.',
     input_schema: {
       type: 'object' as const,
       properties: {
         message: { type: 'string', description: 'The text content to post on Facebook.' },
+        image_url: { type: 'string', description: 'Publicly accessible image URL to attach to the post.' },
       },
       required: ['message'],
     },
@@ -163,7 +168,7 @@ const tools: Anthropic.Tool[] = [
   },
   {
     name: 'browse_drive_images',
-    description: 'Lists all available images in the Cloudinary image library. Use this to find a suitable image before posting to Instagram.',
+    description: 'Lists all available images in the Cloudinary image library. Call this before every post on any platform to find a suitable image.',
     input_schema: {
       type: 'object' as const,
       properties: {},
@@ -176,10 +181,7 @@ const tools: Anthropic.Tool[] = [
     input_schema: {
       type: 'object' as const,
       properties: {
-        week_start: {
-          type: 'string',
-          description: 'The Monday date for this week in YYYY-MM-DD format.',
-        },
+        week_start: { type: 'string', description: 'The Monday date for this week in YYYY-MM-DD format.' },
         posts: {
           type: 'array',
           description: 'Array of posts to schedule for the week.',
@@ -190,10 +192,7 @@ const tools: Anthropic.Tool[] = [
               scheduled_date: { type: 'string', description: 'YYYY-MM-DD' },
               scheduled_time: { type: 'string', description: 'HH:MM in Spain local time' },
               content: { type: 'string', description: 'Post content in Spanish (Spain).' },
-              image_note: {
-                type: 'string',
-                description: 'Optional note about what image to use (for Instagram posts).',
-              },
+              image_note: { type: 'string', description: 'Which image to use for this post.' },
             },
             required: ['platform', 'scheduled_date', 'scheduled_time', 'content'],
           },
@@ -208,10 +207,7 @@ const tools: Anthropic.Tool[] = [
     input_schema: {
       type: 'object' as const,
       properties: {
-        week_start: {
-          type: 'string',
-          description: 'The Monday date (YYYY-MM-DD). Leave empty to get next week.',
-        },
+        week_start: { type: 'string', description: 'The Monday date (YYYY-MM-DD). Leave empty to get next week.' },
       },
       required: [],
     },
@@ -222,20 +218,9 @@ const tools: Anthropic.Tool[] = [
     input_schema: {
       type: 'object' as const,
       properties: {
-        mode: {
-          type: 'string',
-          enum: ['all'],
-          description: 'Use "all" to approve all draft posts for the week.',
-        },
-        week_start: {
-          type: 'string',
-          description: 'The Monday date (YYYY-MM-DD) of the week to approve.',
-        },
-        post_ids: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Specific post IDs to approve individually.',
-        },
+        mode: { type: 'string', enum: ['all'], description: 'Use "all" to approve all draft posts for the week.' },
+        week_start: { type: 'string', description: 'The Monday date (YYYY-MM-DD) of the week to approve.' },
+        post_ids: { type: 'array', items: { type: 'string' }, description: 'Specific post IDs to approve individually.' },
       },
       required: [],
     },
@@ -284,16 +269,16 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
         let resultContent = '';
 
         if (block.name === 'post_to_linkedin') {
-          const input = block.input as { content: string };
-          const result = await postToLinkedIn(input.content);
+          const input = block.input as { content: string; image_url?: string };
+          const result = await postToLinkedIn(input.content, input.image_url);
           resultContent = result.success
             ? `Posted to LinkedIn!${result.url ? ` URL: ${result.url}` : ''}`
             : `Failed: ${result.error}`;
         }
 
         if (block.name === 'post_to_facebook') {
-          const input = block.input as { message: string };
-          const result = await postToFacebook(input.message);
+          const input = block.input as { message: string; image_url?: string };
+          const result = await postToFacebook(input.message, input.image_url);
           resultContent = result.success
             ? `Posted to Facebook!${result.url ? ` URL: ${result.url}` : ''}`
             : `Failed: ${result.error}`;

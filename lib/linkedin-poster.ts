@@ -21,10 +21,15 @@ function buildAuthorUrn(authorId: string): string {
   return `urn:li:member:${authorId}`;
 }
 
-async function registerUpload(token: string, authorUrn: string, mediaType: MediaType): Promise<{ uploadUrl: string; asset: string }> {
-  const recipe = mediaType === 'IMAGE'
-    ? 'urn:li:digitalmediaRecipe:feedshare-image'
-    : 'urn:li:digitalmediaRecipe:feedshare-video';
+async function registerUpload(
+  token: string,
+  authorUrn: string,
+  mediaType: MediaType
+): Promise<{ uploadUrl: string; asset: string }> {
+  const recipe =
+    mediaType === 'IMAGE'
+      ? 'urn:li:digitalmediaRecipe:feedshare-image'
+      : 'urn:li:digitalmediaRecipe:feedshare-video';
 
   const res = await fetch(`${LINKEDIN_API_BASE}/assets?action=registerUpload`, {
     method: 'POST',
@@ -37,15 +42,19 @@ async function registerUpload(token: string, authorUrn: string, mediaType: Media
       registerUploadRequest: {
         owner: authorUrn,
         recipes: [recipe],
-        serviceRelationships: [{ identifier: 'urn:li:userGeneratedContent', relationshipType: 'OWNER' }],
+        serviceRelationships: [
+          { identifier: 'urn:li:userGeneratedContent', relationshipType: 'OWNER' },
+        ],
       },
     }),
   });
 
   if (!res.ok) throw new Error(`LinkedIn registerUpload failed ${res.status}: ${await res.text()}`);
-
   const json = await res.json();
-  const uploadUrl: string = json.value.uploadMechanism['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest'].uploadUrl;
+  const uploadUrl: string =
+    json.value.uploadMechanism[
+      'com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest'
+    ].uploadUrl;
   const asset: string = json.value.asset;
   return { uploadUrl, asset };
 }
@@ -59,7 +68,10 @@ async function uploadMedia(uploadUrl: string, data: ArrayBuffer, mimeType: strin
   if (!res.ok) throw new Error(`LinkedIn media upload failed ${res.status}: ${await res.text()}`);
 }
 
-export async function postToLinkedIn(text: string, media?: MediaUpload): Promise<LinkedInPostResult> {
+export async function postToLinkedIn(
+  text: string,
+  media?: MediaUpload | string
+): Promise<LinkedInPostResult> {
   const token = process.env.LINKEDIN_ACCESS_TOKEN;
   const authorId = process.env.LINKEDIN_AUTHOR_ID;
 
@@ -72,10 +84,23 @@ export async function postToLinkedIn(text: string, media?: MediaUpload): Promise
   let mediaElements: object[] | undefined;
 
   if (media) {
+    let mediaUpload: MediaUpload;
+
+    if (typeof media === 'string') {
+      // Fetch image from URL
+      const imgRes = await fetch(media);
+      if (!imgRes.ok) return { success: false, error: `Failed to fetch image: ${imgRes.status}` };
+      const data = await imgRes.arrayBuffer();
+      const mimeType = imgRes.headers.get('content-type') ?? 'image/jpeg';
+      mediaUpload = { data, mimeType, mediaType: 'IMAGE' };
+    } else {
+      mediaUpload = media;
+    }
+
     try {
-      const { uploadUrl, asset } = await registerUpload(token, authorUrn, media.mediaType);
-      await uploadMedia(uploadUrl, media.data, media.mimeType);
-      shareMediaCategory = media.mediaType;
+      const { uploadUrl, asset } = await registerUpload(token, authorUrn, mediaUpload.mediaType);
+      await uploadMedia(uploadUrl, mediaUpload.data, mediaUpload.mimeType);
+      shareMediaCategory = mediaUpload.mediaType;
       mediaElements = [{ status: 'READY', media: asset }];
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -100,8 +125,13 @@ export async function postToLinkedIn(text: string, media?: MediaUpload): Promise
     }),
   });
 
-  if (!res.ok) return { success: false, error: `LinkedIn API error ${res.status}: ${await res.text()}` };
+  if (!res.ok)
+    return { success: false, error: `LinkedIn API error ${res.status}: ${await res.text()}` };
 
   const postId = res.headers.get('x-restli-id') ?? undefined;
-  return { success: true, postId, url: postId ? `https://www.linkedin.com/feed/update/${postId}/` : undefined };
+  return {
+    success: true,
+    postId,
+    url: postId ? `https://www.linkedin.com/feed/update/${postId}/` : undefined,
+  };
 }
