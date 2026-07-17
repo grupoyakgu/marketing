@@ -15,6 +15,9 @@
 - /lib/linkedin-queue.ts            → Supabase job queue helpers
 - /lib/leads-agent.ts               → Claude-powered lead extraction from HTML
 - /lib/telegram.ts                  → Telegram API wrapper
+- /lib/marketing-agent.ts           → Pepe agent (LinkedIn/Facebook/Instagram posting, Cloudinary image browsing)
+- /lib/cloudinary.ts                → Cloudinary Admin API image listing
+- /lib/meta-poster.ts               → Facebook/Instagram posting
 - /supabase/migrations/             → SQL migrations
 
 ## Environment Variables
@@ -26,6 +29,13 @@
 - SUPABASE_SERVICE_ROLE_KEY
 - NEXT_PUBLIC_APP_URL       # e.g. https://marketing.vercel.app
 - INTERNAL_SECRET           # guards /api/linkedin/process
+- CLOUDINARY_CLOUD_NAME
+- CLOUDINARY_API_KEY
+- CLOUDINARY_API_SECRET
+- CLOUDINARY_FOLDER         # folder containing marketing images
+- INSTAGRAM_PAGE_ACCESS_TOKEN
+- INSTAGRAM_BUSINESS_ACCOUNT_ID
+- FACEBOOK_PAGE_ID
 
 ## Telegram Commands
 - /post linkedin <message>              — text post
