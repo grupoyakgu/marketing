@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getPostsDueNow, markPostStatus, getMostRecentPepeChatId } from '@/lib/marketing-plan';
 import { postToLinkedIn } from '@/lib/linkedin-poster';
 import { postToFacebook, postToInstagram } from '@/lib/meta-poster';
-import { listDriveImages } from '@/lib/google-drive';
+import { listCloudinaryImages } from '@/lib/cloudinary';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -27,10 +27,9 @@ export async function GET(req: Request) {
   const posts = await getPostsDueNow();
   if (posts.length === 0) return NextResponse.json({ posted: 0 });
 
-  // Fetch one image from Cloudinary to use across posts this hour
   let defaultImageUrl = '';
   try {
-    const images = await listDriveImages();
+    const images = await listCloudinaryImages();
     if (images.length > 0) defaultImageUrl = images[0].url;
   } catch {}
 
@@ -38,7 +37,7 @@ export async function GET(req: Request) {
 
   for (const post of posts) {
     try {
-      let result: { success: boolean; url?: string; error?: string } | undefined;
+      let result: { success: boolean; postId?: string; url?: string; error?: string } | undefined;
       const imageUrl = defaultImageUrl || undefined;
 
       if (post.platform === 'linkedin') {
@@ -55,7 +54,7 @@ export async function GET(req: Request) {
       }
 
       if (result?.success) {
-        await markPostStatus(post.id!, 'posted', result.url);
+        await markPostStatus(post.id!, 'posted', result.url, result.postId);
         results.push(`✅ ${post.platform}`);
       } else {
         await markPostStatus(post.id!, 'failed');

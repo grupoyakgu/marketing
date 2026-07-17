@@ -15,6 +15,7 @@ export interface MarketingPost {
   image_note?: string;
   status?: string;
   post_url?: string;
+  platform_post_id?: string;
 }
 
 export async function saveDraftPlan(
@@ -93,13 +94,33 @@ export async function getPostsDueNow(): Promise<MarketingPost[]> {
 export async function markPostStatus(
   postId: string,
   status: 'posted' | 'failed',
-  postUrl?: string
+  postUrl?: string,
+  platformPostId?: string
 ): Promise<void> {
   const { error } = await supabase
     .from('marketing_plan')
-    .update({ status, ...(postUrl ? { post_url: postUrl } : {}) })
+    .update({
+      status,
+      ...(postUrl ? { post_url: postUrl } : {}),
+      ...(platformPostId ? { platform_post_id: platformPostId } : {}),
+    })
     .eq('id', postId);
   if (error) throw new Error(error.message);
+}
+
+export async function getPostedPostsForCommentCheck(): Promise<MarketingPost[]> {
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const cutoff = sevenDaysAgo.toISOString().split('T')[0];
+
+  const { data, error } = await supabase
+    .from('marketing_plan')
+    .select('*')
+    .eq('status', 'posted')
+    .gte('scheduled_date', cutoff)
+    .not('platform_post_id', 'is', null);
+  if (error) throw new Error(error.message);
+  return data ?? [];
 }
 
 export async function getMostRecentPepeChatId(): Promise<number | null> {

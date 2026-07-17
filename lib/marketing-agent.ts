@@ -4,6 +4,12 @@ import { postToFacebook, postToInstagram } from '@/lib/meta-poster';
 import { loadHistory, saveMessage, clearHistory as clearDb } from '@/lib/chat-history';
 import { listCloudinaryImages } from '@/lib/cloudinary';
 import {
+  replyToLinkedInComment,
+  replyToFacebookComment,
+  replyToInstagramComment,
+  markReplied,
+} from '@/lib/social-comments';
+import {
   saveDraftPlan,
   getWeeklyPlan,
   approveAllDrafts,
@@ -31,6 +37,7 @@ Today is **${today}** (Spain local time). Next Monday is **${nextMonday}**. Alwa
 ## LANGUAGE RULES — MANDATORY, NEVER BREAK THESE
 
 - **ALL social media posts (LinkedIn, Instagram, Facebook) MUST be written in Spanish (Spain).** This is non-negotiable. Never post in English, even if the user asks in English.
+- **Comment replies** should match the language of the commenter — reply in Spanish if they wrote in Spanish, English if they wrote in English.
 - **Conversations with the user are in English.** Respond to the user in whichever language they use.
 - Spanish posts must use Spain Spanish: "vosotros", "apartamento" not "departamento", etc.
 
@@ -59,6 +66,7 @@ Real estate developer focused on the hotel and hospitality ecosystem in Spain. W
 - **LinkedIn:** Professional, data-driven, thought leadership, investor-focused
 - **Instagram:** Visual, aspirational, lifestyle, emotional
 - **Facebook:** Warm, accessible, experience-driven, local pride
+- **Comment replies (all platforms):** Warm, personal, on-brand. Thank commenters. Build intrigue. Never reveal details not yet public. Always sign off warmly as Grupo YAKGU.
 
 ### Campaign Phase — Teaser Campaign
 Current key messages:
@@ -132,6 +140,7 @@ When asked to generate a marketing plan:
 - get_weekly_plan — retrieve plan for a given week
 - approve_posts — approve posts for auto-publishing
 - reject_post — remove a post from the plan
+- reply_to_comment — post a reply to a social media comment
 
 You speak with authority and warmth. You are direct, strategic, and deeply passionate about the intersection of hospitality and real estate.`;
 }
@@ -241,6 +250,20 @@ const tools: Anthropic.Tool[] = [
         post_id: { type: 'string', description: 'The UUID of the post to remove.' },
       },
       required: ['post_id'],
+    },
+  },
+  {
+    name: 'reply_to_comment',
+    description: 'Posts a reply to a comment on LinkedIn, Instagram, or Facebook. Call this once per comment to reply.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        platform: { type: 'string', enum: ['linkedin', 'instagram', 'facebook'], description: 'The platform the comment is on.' },
+        comment_id: { type: 'string', description: 'The ID of the comment to reply to.' },
+        post_id: { type: 'string', description: 'The ID of the post the comment is on (required for LinkedIn).' },
+        reply_text: { type: 'string', description: 'The reply text to post. Match the language of the original comment.' },
+      },
+      required: ['platform', 'comment_id', 'reply_text'],
     },
   },
 ];
@@ -392,6 +415,33 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
             resultContent = `Post ${input.post_id} removed from the plan.`;
           } catch (err) {
             resultContent = `Failed to reject post: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        }
+
+        if (block.name === 'reply_to_comment') {
+          const input = block.input as {
+            platform: 'linkedin' | 'instagram' | 'facebook';
+            comment_id: string;
+            post_id?: string;
+            reply_text: string;
+          };
+          try {
+            let ok = false;
+            if (input.platform === 'linkedin' && input.post_id) {
+              ok = await replyToLinkedInComment(input.post_id, input.comment_id, input.reply_text);
+            } else if (input.platform === 'facebook') {
+              ok = await replyToFacebookComment(input.comment_id, input.reply_text);
+            } else if (input.platform === 'instagram') {
+              ok = await replyToInstagramComment(input.comment_id, input.reply_text);
+            }
+            if (ok) {
+              await markReplied(input.comment_id, input.platform);
+              resultContent = `Reply posted on ${input.platform}.`;
+            } else {
+              resultContent = `Failed to post reply on ${input.platform}.`;
+            }
+          } catch (err) {
+            resultContent = `Error replying: ${err instanceof Error ? err.message : String(err)}`;
           }
         }
 
