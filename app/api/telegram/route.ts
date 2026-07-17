@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { TelegramClient } from '@/lib/telegram';
 import { postToLinkedIn } from '@/lib/linkedin-poster';
 import { enqueueLinkedInPost } from '@/lib/linkedin-queue';
-import { chat, clearHistory } from '@/lib/marketing-agent';
+import { clearHistory } from '@/lib/marketing-agent';
 
-export const maxDuration = 60;
+export const maxDuration = 30;
 
 async function downloadTelegramFile(fileId: string): Promise<{ data: ArrayBuffer; mimeType: string; mediaType: 'IMAGE' | 'VIDEO' } | null> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -21,6 +21,22 @@ async function downloadTelegramFile(fileId: string): Promise<{ data: ArrayBuffer
   const data = await fileRes.arrayBuffer();
   const isVideo = filePath.endsWith('.mp4') || filePath.includes('video');
   return { data, mimeType: isVideo ? 'video/mp4' : 'image/jpeg', mediaType: isVideo ? 'VIDEO' : 'IMAGE' };
+}
+
+function getBaseUrl(req: NextRequest): string {
+  return process.env.NEXT_PUBLIC_APP_URL ?? `https://${req.headers.get('host')}`;
+}
+
+async function dispatchToBackground(chatId: number, text: string, req: NextRequest): Promise<void> {
+  const baseUrl = getBaseUrl(req);
+  fetch(`${baseUrl}/api/agent-background`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-internal-secret': process.env.INTERNAL_SECRET ?? '',
+    },
+    body: JSON.stringify({ chatId, text }),
+  }).catch(err => console.error('[telegram] background dispatch error:', err));
 }
 
 export async function POST(req: NextRequest) {
@@ -87,7 +103,7 @@ export async function POST(req: NextRequest) {
       if (mediaType === 'VIDEO') {
         await telegram.sendMessage(chatId, '⏳ Queuing video... I\'ll notify you when it\'s posted.');
         const jobId = await enqueueLinkedInPost(chatId, content, fileId, 'VIDEO');
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? `https://${req.headers.get('host')}`;
+        const baseUrl = getBaseUrl(req);
         fetch(`${baseUrl}/api/linkedin/process`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_SECRET ?? '' },
@@ -110,10 +126,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // Free-text → conversational marketing agent
+    // Free-text → fire to background agent, respond immediately
     if (text) {
-      const reply = await chat(chatId, text);
-      await telegram.sendMessage(chatId, reply);
+      await telegram.sendMessage(chatId, '⏳ On it! This may take a minute...');
+      dispatchToBackground(chatId, text, req);
       return NextResponse.json({ ok: true });
     }
 
