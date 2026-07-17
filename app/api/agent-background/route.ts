@@ -6,17 +6,19 @@ export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
-  const secret = req.headers.get('x-internal-secret');
-  if (secret !== (process.env.INTERNAL_SECRET ?? '')) {
+  const body = await req.json();
+
+  // Simple internal secret check via body
+  const secret = body.secret ?? '';
+  if ((process.env.INTERNAL_SECRET ?? '') && secret !== (process.env.INTERNAL_SECRET ?? '')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { chatId, text } = await req.json();
+  const { chatId, text } = body;
   const telegram = new TelegramClient();
 
   try {
     const reply = await chat(chatId, text);
-    // Split long messages — Telegram has a 4096 char limit
     const chunks = splitMessage(reply, 4000);
     for (const chunk of chunks) {
       await telegram.sendMessage(chatId, chunk);

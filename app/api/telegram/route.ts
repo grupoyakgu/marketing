@@ -29,13 +29,15 @@ function getBaseUrl(req: NextRequest): string {
 
 async function dispatchToBackground(chatId: number, text: string, req: NextRequest): Promise<void> {
   const baseUrl = getBaseUrl(req);
+  // Pass secret in body to avoid non-ASCII header issues
   fetch(`${baseUrl}/api/agent-background`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-internal-secret': process.env.INTERNAL_SECRET ?? '',
-    },
-    body: JSON.stringify({ chatId, text }),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chatId,
+      text,
+      secret: process.env.INTERNAL_SECRET ?? '',
+    }),
   }).catch(err => console.error('[telegram] background dispatch error:', err));
 }
 
@@ -55,7 +57,6 @@ export async function POST(req: NextRequest) {
     const video = message?.video;
     const hasMedia = photo || video;
 
-    // /start or /help
     if (text === '/start' || text === '/help') {
       await telegram.sendMessage(chatId,
         `👋 MARKETING AGENT\n\nJust talk to me about your LinkedIn marketing strategy — I'll help you plan content, campaigns, and messaging.\n\nCommands:\n/post linkedin <message> — post text to LinkedIn\n/reset — clear conversation\n/help — show this menu\n\nTo post with media:\nSend a photo or video with caption:\n/post linkedin <your message>`
@@ -63,14 +64,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // /reset
     if (text === '/reset') {
       clearHistory(chatId);
       await telegram.sendMessage(chatId, '🔄 Conversation reset. What would you like to work on?');
       return NextResponse.json({ ok: true });
     }
 
-    // /post linkedin <text>
     if (text?.startsWith('/post linkedin ')) {
       const content = text.slice('/post linkedin '.length).trim();
       if (!content) {
@@ -86,7 +85,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // Media LinkedIn post
     if (hasMedia && caption?.startsWith('/post linkedin')) {
       const content = caption.replace('/post linkedin', '').trim();
       let fileId: string;
@@ -106,8 +104,8 @@ export async function POST(req: NextRequest) {
         const baseUrl = getBaseUrl(req);
         fetch(`${baseUrl}/api/linkedin/process`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-internal-secret': process.env.INTERNAL_SECRET ?? '' },
-          body: JSON.stringify({ jobId }),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jobId, secret: process.env.INTERNAL_SECRET ?? '' }),
         }).catch(() => {});
         return NextResponse.json({ ok: true });
       }
@@ -126,7 +124,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // Free-text → fire to background agent, respond immediately
     if (text) {
       await telegram.sendMessage(chatId, '⏳ On it! This may take a minute...');
       dispatchToBackground(chatId, text, req);
