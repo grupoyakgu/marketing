@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   CalendarDays,
   Users,
-  RefreshCw,
   Settings,
   ChevronsLeft,
   ChevronsRight,
@@ -40,7 +39,6 @@ export function Sidebar({ isAdmin, buildVersion }: { isAdmin: boolean; buildVers
   const links = [
     { href: '/', label: 'Overview', icon: LayoutDashboard },
     { href: '/planner', label: 'Planner', icon: CalendarDays },
-    { href: '/settings/data', label: 'Data Sync', icon: RefreshCw },
     ...(isAdmin ? [{ href: '/settings/users', label: 'Users', icon: Users }] : []),
     { href: '/settings', label: 'Settings', icon: Settings },
   ];
@@ -63,7 +61,11 @@ export function Sidebar({ isAdmin, buildVersion }: { isAdmin: boolean; buildVers
 
       <nav className="flex flex-col gap-1">
         {links.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href;
+          // Settings owns any page nested under /settings that doesn't have
+          // its own sidebar entry (e.g. Data Sync), so it stays highlighted
+          // there too instead of showing no active item at all.
+          const active =
+            href === '/settings' ? pathname === '/settings' || pathname === '/settings/data' : pathname === href;
           return (
             <Link
               key={href}
