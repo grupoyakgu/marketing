@@ -136,7 +136,7 @@ You have access to these proof points. **Spread them strategically across many p
 ## APPROVAL FLOW
 - "approve all" → call approve_posts with mode "all" and week_start "${nextMonday}"
 - "reject post 3" → call reject_post
-- Edit request → update, re-save, re-ask
+- Edit request → update, re-save, re-ask. Check get_weekly_plan's Image field first — if one is already set (the user may have picked or changed it in the dashboard planner), carry that same image_url into the replacement post instead of picking a new one, unless the user's edit is specifically about the image.
 
 ---
 
@@ -373,7 +373,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
             resultContent = posts.length === 0
               ? `No posts found for week of ${weekStart}.`
               : `Plan for week of ${weekStart} (${posts.length} posts):\n${
-                  posts.map((p, i) => `${i + 1}. [${p.platform}] ${p.scheduled_date} ${p.scheduled_time} [${p.status}]\n   ID: ${p.id}\n   ${p.content.substring(0, 80)}...`).join('\n\n')
+                  posts.map((p, i) => `${i + 1}. [${p.platform}] ${p.scheduled_date} ${p.scheduled_time} [${p.status}]\n   ID: ${p.id}\n   Image: ${p.image_url ?? '(none selected — the user may have picked or changed this in the dashboard planner)'}\n   ${p.content.substring(0, 80)}...`).join('\n\n')
                 }`;
           } catch (err) {
             resultContent = `Failed to get plan: ${err instanceof Error ? err.message : String(err)}`;

@@ -92,6 +92,10 @@ export default function PlannerPage() {
           setSelected(null);
           load();
         }}
+        onPostUpdated={updated => {
+          setPosts(prev => prev?.map(p => (p.id === updated.id ? updated : p)) ?? prev);
+          setSelected(updated);
+        }}
       />
     </div>
   );

@@ -20,10 +20,12 @@ export function PostEditor({
   post,
   onClose,
   onSaved,
+  onPostUpdated,
 }: {
   post: MarketingPost | null;
   onClose: () => void;
   onSaved: () => void;
+  onPostUpdated: (post: MarketingPost) => void;
 }) {
   const [content, setContent] = useState('');
   const [scheduledDate, setScheduledDate] = useState('');
@@ -32,6 +34,7 @@ export function PostEditor({
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [images, setImages] = useState<CloudinaryImage[] | null>(null);
   const [saving, setSaving] = useState(false);
+  const [savingImage, setSavingImage] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const editable = post ? post.status === 'draft' || post.status === 'approved' : false;
@@ -71,6 +74,31 @@ export function PostEditor({
       setError(err instanceof Error ? err.message : 'Failed to save.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  // Picking an image saves immediately, independent of the Save button — otherwise
+  // closing the panel right after picking silently discards the selection, since it
+  // would have only lived in local state until an unrelated field was also edited.
+  async function handleImageSelect(url: string) {
+    const previous = imageUrl;
+    setImageUrl(url);
+    setSavingImage(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/dashboard/plan/${post!.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_url: url }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Failed to save image.');
+      const body = await res.json();
+      onPostUpdated(body.post);
+    } catch (err) {
+      setImageUrl(previous);
+      setError(err instanceof Error ? err.message : 'Failed to save image.');
+    } finally {
+      setSavingImage(false);
     }
   }
 
@@ -189,6 +217,7 @@ export function PostEditor({
               <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-neutral-500">
                 <ImageIcon className="h-3.5 w-3.5" />
                 Image
+                {savingImage && <span className="font-normal text-neutral-400">Saving…</span>}
               </label>
               {images === null ? (
                 <p className="text-xs text-neutral-400">Loading images…</p>
@@ -202,8 +231,9 @@ export function PostEditor({
                       key={img.id}
                       src={img.url}
                       alt={img.name}
-                      onClick={() => setImageUrl(img.url)}
+                      onClick={() => handleImageSelect(img.url)}
                       className={cn(
+                        savingImage && 'pointer-events-none opacity-60',
                         'aspect-square cursor-pointer rounded-lg object-cover ring-2 ring-transparent transition hover:opacity-80',
                         imageUrl === img.url && 'ring-neutral-900 dark:ring-white'
                       )}
