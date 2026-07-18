@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { X, Check, Trash2, ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { PlatformBadge } from '@/components/ui/PlatformBadge';
 import { cn } from '@/lib/cn';
 import type { MarketingPost } from '@/lib/marketing-plan';
 
@@ -99,7 +100,10 @@ export function PostEditor({
       <div className="absolute inset-0 bg-black/20" onClick={onClose} />
       <div className="relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-neutral-200 bg-white p-6 shadow-xl dark:border-neutral-800 dark:bg-neutral-900">
         <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-neutral-900 dark:text-white">Edit post</h2>
+          <div className="flex items-center gap-2">
+            <PlatformBadge platform={post.platform} size="md" />
+            <h2 className="text-lg font-semibold text-neutral-900 dark:text-white">Edit post</h2>
+          </div>
           <button onClick={onClose} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800">
             <X className="h-4 w-4" />
           </button>
@@ -117,9 +121,16 @@ export function PostEditor({
           </div>
         )}
 
-        {imageUrl && (
+        {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={imageUrl} alt="Selected" className="mb-4 h-40 w-full rounded-xl object-cover" />
+        ) : (
+          <div className="mb-4 flex h-40 w-full flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-neutral-200 text-neutral-400 dark:border-neutral-800 dark:text-neutral-600">
+            <ImageIcon className="h-5 w-5" />
+            <span className="text-xs">
+              {editable ? 'No image selected yet' : 'No image on record for this post'}
+            </span>
+          </div>
         )}
 
         <div className="space-y-4">

@@ -107,7 +107,7 @@ You have access to these proof points. **Spread them strategically across many p
 
 ## IMAGES — ALL PLATFORMS
 
-**Every post should have an image.** Call browse_drive_images ONCE at the start to see all available images.
+**Every post should have an image.** Call browse_drive_images ONCE at the start to see all available images. When calling save_marketing_plan, set each post's image_url to the exact URL of the specific image you picked for it — pick a different, relevant image per post rather than reusing the same one. image_note is just a human-readable label for what the image shows; image_url is the real, clickable choice and is what the dashboard shows the user as "the image Pepe selected," so always set it.
 
 ---
 
@@ -127,9 +127,9 @@ You have access to these proof points. **Spread them strategically across many p
 
 1. Use **${nextMonday}** as the week_start
 2. Call browse_drive_images ONCE
-3. Draft 5 posts in Spanish (Spain)
+3. Draft 5 posts in Spanish (Spain), picking a specific image_url for each from the browse_drive_images results
 4. Choose at most 1 market intelligence proof point
-5. Call save_marketing_plan with all 5 posts
+5. Call save_marketing_plan with all 5 posts, each with its image_url set
 6. Present the plan numbered 1–5 in English
 7. End with: "Would you like to approve the full plan? Say *approve all* or let me know which posts to adjust."
 
@@ -209,7 +209,8 @@ const tools: Anthropic.Tool[] = [
               scheduled_date: { type: 'string' },
               scheduled_time: { type: 'string' },
               content: { type: 'string' },
-              image_note: { type: 'string' },
+              image_note: { type: 'string', description: 'Human-readable label for the image, e.g. "Nervión skyline at dusk".' },
+              image_url: { type: 'string', description: 'The exact URL of the chosen image from browse_drive_images.' },
             },
             required: ['platform', 'scheduled_date', 'scheduled_time', 'content'],
           },
@@ -352,7 +353,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
         if (block.name === 'save_marketing_plan') {
           const input = block.input as {
             week_start: string;
-            posts: Array<{ platform: 'linkedin' | 'instagram' | 'facebook'; scheduled_date: string; scheduled_time: string; content: string; image_note?: string }>;
+            posts: Array<{ platform: 'linkedin' | 'instagram' | 'facebook'; scheduled_date: string; scheduled_time: string; content: string; image_note?: string; image_url?: string }>;
           };
           try {
             const saved = await saveDraftPlan(input.posts.map(p => ({ ...p, week_start: input.week_start })));
