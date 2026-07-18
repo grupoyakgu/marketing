@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 
 const GRAPH_API = 'https://graph.facebook.com/v19.0';
 // LinkedIn blocks the legacy unversioned /v2 API for these resources (see
@@ -10,11 +10,6 @@ const GRAPH_API = 'https://graph.facebook.com/v19.0';
 // vars instead of redeploying if this goes stale again).
 const LINKEDIN_REST_API = 'https://api.linkedin.com/rest';
 const LINKEDIN_API_VERSION = process.env.LINKEDIN_API_VERSION ?? '202601';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 export interface PostEngagement {
   platform: 'linkedin' | 'instagram' | 'facebook';

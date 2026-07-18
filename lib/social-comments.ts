@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 
 // The legacy unversioned /v2 socialActions endpoints are blocked for comment
 // read/write even with r_organization_social granted — LinkedIn's error
@@ -21,10 +21,7 @@ export interface SocialComment {
 }
 
 function db() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  return supabase;
 }
 
 // ─── Comment reply tracking ──────────────────────────────────────────────

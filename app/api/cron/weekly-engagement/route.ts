@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 import {
   getFacebookPostEngagement,
   getInstagramPostEngagement,
@@ -28,10 +28,6 @@ async function sendTelegramMessage(chatId: number, text: string) {
 async function getRecentPostIds(): Promise<
   { platform: 'linkedin' | 'instagram' | 'facebook'; platform_post_id: string; content: string }[]
 > {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
