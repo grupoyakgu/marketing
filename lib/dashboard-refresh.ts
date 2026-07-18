@@ -51,5 +51,9 @@ export async function refreshDashboardData(): Promise<DashboardRefreshResult> {
     accountsRefreshed: accountStats.length,
   });
 
+  console.log(
+    `[dashboard-refresh] durationMs=${durationMs} accounts=${JSON.stringify(accountStats)} postsRefreshed=${engagements.length}/${recentPosts.length}`
+  );
+
   return { durationMs, accountsRefreshed: accountStats.length, postsRefreshed: engagements.length };
 }

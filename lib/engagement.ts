@@ -40,7 +40,10 @@ export async function getFacebookPostEngagement(postId: string): Promise<PostEng
   if (!token) return null;
   const fields = 'likes.summary(true),comments.summary(true),shares,insights.metric(post_impressions,post_reach)';
   const res = await fetch(`${GRAPH_API}/${postId}?fields=${fields}&access_token=${token}`);
-  if (!res.ok) return null;
+  if (!res.ok) {
+    console.error(`Facebook getPostEngagement failed for ${postId}: ${res.status} ${await res.text()}`);
+    return null;
+  }
   const d = await res.json();
   const impressions = d.insights?.data?.find((m: Record<string, string>) => m.name === 'post_impressions')?.values?.[0]?.value ?? 0;
   const reach = d.insights?.data?.find((m: Record<string, string>) => m.name === 'post_reach')?.values?.[0]?.value ?? 0;
@@ -60,7 +63,10 @@ export async function getFacebookAccountStats(): Promise<AccountStats | null> {
   const pageId = process.env.FACEBOOK_PAGE_ID;
   if (!token || !pageId) return null;
   const res = await fetch(`${GRAPH_API}/${pageId}?fields=followers_count,fan_count&access_token=${token}`);
-  if (!res.ok) return null;
+  if (!res.ok) {
+    console.error(`Facebook getAccountStats failed for ${pageId}: ${res.status} ${await res.text()}`);
+    return null;
+  }
   const d = await res.json();
   return { platform: 'facebook', followers: d.followers_count ?? d.fan_count ?? 0 };
 }
@@ -75,7 +81,10 @@ export async function getInstagramPostEngagement(mediaId: string): Promise<PostE
   const res = await fetch(
     `${GRAPH_API}/${mediaId}?fields=like_count,comments_count&access_token=${token}`
   );
-  if (!res.ok) return null;
+  if (!res.ok) {
+    console.error(`Instagram getPostEngagement failed for ${mediaId}: ${res.status} ${await res.text()}`);
+    return null;
+  }
   const d = await res.json();
 
   // Insights require a separate call (only available on business accounts)
@@ -108,7 +117,10 @@ export async function getInstagramAccountStats(): Promise<AccountStats | null> {
   const igId = process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID;
   if (!token || !igId) return null;
   const res = await fetch(`${GRAPH_API}/${igId}?fields=followers_count&access_token=${token}`);
-  if (!res.ok) return null;
+  if (!res.ok) {
+    console.error(`Instagram getAccountStats failed for ${igId}: ${res.status} ${await res.text()}`);
+    return null;
+  }
   const d = await res.json();
   return { platform: 'instagram', followers: d.followers_count ?? 0 };
 }
