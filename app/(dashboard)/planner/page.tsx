@@ -24,7 +24,7 @@ export default function PlannerPage() {
   const load = useCallback(async () => {
     setPosts(null);
     try {
-      const res = await fetch(`/api/dashboard/plan?week_start=${weekStart}`);
+      const res = await fetch(`/api/dashboard/plan?week_start=${weekStart}`, { cache: 'no-store' });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? 'Failed to load the plan.');
       setPosts(body.posts ?? []);
