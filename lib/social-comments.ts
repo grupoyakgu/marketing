@@ -107,6 +107,50 @@ export async function getCommentLog(limit = 100): Promise<CommentLogRow[]> {
   }));
 }
 
+// ─── Comment check status ──────────────────────────────────────────────────
+
+export interface CommentCheckStatus {
+  checkedAt: string | null;
+  commentsHandled: number | null;
+  thankYouCount: number | null;
+  shoutoutCount: number | null;
+  skipped: string | null;
+}
+
+export async function getCommentCheckStatus(): Promise<CommentCheckStatus> {
+  const { data } = await db()
+    .from('comment_check_status')
+    .select('checked_at, comments_handled, thank_you_count, shoutout_count, skipped')
+    .eq('id', 'singleton')
+    .maybeSingle();
+  return {
+    checkedAt: data?.checked_at ?? null,
+    commentsHandled: data?.comments_handled ?? null,
+    thankYouCount: data?.thank_you_count ?? null,
+    shoutoutCount: data?.shoutout_count ?? null,
+    skipped: data?.skipped ?? null,
+  };
+}
+
+export async function recordCommentCheckStatus(status: {
+  commentsHandled: number;
+  thankYouCount: number;
+  shoutoutCount: number;
+  skipped?: string;
+}): Promise<void> {
+  const { error } = await db()
+    .from('comment_check_status')
+    .upsert({
+      id: 'singleton',
+      checked_at: new Date().toISOString(),
+      comments_handled: status.commentsHandled,
+      thank_you_count: status.thankYouCount,
+      shoutout_count: status.shoutoutCount,
+      skipped: status.skipped ?? null,
+    });
+  if (error) console.error(`recordCommentCheckStatus upsert failed: ${error.message}`);
+}
+
 // ─── Milestone tracking ──────────────────────────────────────────────────
 
 export async function hasMilestone(

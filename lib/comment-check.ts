@@ -7,6 +7,7 @@ import {
   hasMilestone,
   recordMilestone,
   recordSeenComments,
+  recordCommentCheckStatus,
   type SocialComment,
 } from '@/lib/social-comments';
 import {
@@ -35,16 +36,28 @@ export interface CommentCheckResult {
   skipped?: string;
 }
 
+/** Records the run outcome (for the "last checked" display) and returns it,
+ * so every exit point — including the early skips — leaves a status behind. */
+async function finish(result: CommentCheckResult): Promise<CommentCheckResult> {
+  await recordCommentCheckStatus({
+    commentsHandled: result.comments,
+    thankYouCount: result.thankYou,
+    shoutoutCount: result.shoutouts,
+    skipped: result.skipped,
+  });
+  return result;
+}
+
 /** Fetches comments across all platforms, has Pepe reply to new ones and react to
  * like milestones, and notifies the user on Telegram. Shared by the hourly cron
  * (/api/cron/check-comments) and the manual "Check now" action in Settings —
  * same work, two triggers, same as the dashboard-refresh split. */
 export async function runCommentCheck(): Promise<CommentCheckResult> {
   const chatId = await getMostRecentPepeChatId();
-  if (!chatId) return { comments: 0, thankYou: 0, shoutouts: 0, skipped: 'no chat id' };
+  if (!chatId) return finish({ comments: 0, thankYou: 0, shoutouts: 0, skipped: 'no chat id' });
 
   const posts = await getPostedPostsForCommentCheck();
-  if (posts.length === 0) return { comments: 0, thankYou: 0, shoutouts: 0, skipped: 'no posted posts' };
+  if (posts.length === 0) return finish({ comments: 0, thankYou: 0, shoutouts: 0, skipped: 'no posted posts' });
 
   // ── 1. Collect new unreplied comments ────────────────────────────────────────
   const newComments: SocialComment[] = [];
@@ -135,5 +148,5 @@ export async function runCommentCheck(): Promise<CommentCheckResult> {
     );
   }
 
-  return { comments: newComments.length, thankYou: thankYouTasks.length, shoutouts: shoutoutTasks.length };
+  return finish({ comments: newComments.length, thankYou: thankYouTasks.length, shoutouts: shoutoutTasks.length });
 }

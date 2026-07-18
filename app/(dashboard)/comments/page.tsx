@@ -1,8 +1,9 @@
-import { getCommentLog } from '@/lib/social-comments';
+import Link from 'next/link';
+import { getCommentLog, getCommentCheckStatus } from '@/lib/social-comments';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { PlatformBadge } from '@/components/ui/PlatformBadge';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, Clock3 } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,17 +12,37 @@ function formatDate(iso: string | null): string {
   return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
+function formatCheckedAt(iso: string | null): string {
+  if (!iso) return 'Never checked yet';
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.round(diffMs / 60000);
+  if (mins < 1) return 'Checked just now';
+  if (mins < 60) return `Checked ${mins} minute${mins === 1 ? '' : 's'} ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `Checked ${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.round(hours / 24);
+  return `Checked ${days} day${days === 1 ? '' : 's'} ago`;
+}
+
 export default async function CommentsPage() {
-  const comments = await getCommentLog(100);
+  const [comments, checkStatus] = await Promise.all([getCommentLog(100), getCommentCheckStatus()]);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-neutral-900 dark:text-white">Comments</h1>
-        <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-          Comments Pepe has seen on recent posts, and what — if anything — it replied. Trigger a fresh
-          check from Settings → Comment Check.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-neutral-900 dark:text-white">Comments</h1>
+          <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+            Comments Pepe has seen on recent posts, and what — if anything — it replied.
+          </p>
+        </div>
+        <Link
+          href="/settings"
+          className="flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-800 dark:hover:text-neutral-300"
+        >
+          <Clock3 className="h-3.5 w-3.5" />
+          {formatCheckedAt(checkStatus.checkedAt)}
+        </Link>
       </div>
 
       {comments.length === 0 ? (
