@@ -210,22 +210,22 @@ export interface FollowerGrowth {
 export async function getAccountGrowth(stats: AccountStats[]): Promise<FollowerGrowth[]> {
   const sixDaysAgo = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString();
 
-  const results: FollowerGrowth[] = [];
-  for (const s of stats) {
-    const { data } = await supabase
-      .from('account_stats_history')
-      .select('followers')
-      .eq('platform', s.platform)
-      .lte('captured_at', sixDaysAgo)
-      .order('captured_at', { ascending: false })
-      .limit(1);
+  return Promise.all(
+    stats.map(async s => {
+      const { data } = await supabase
+        .from('account_stats_history')
+        .select('followers')
+        .eq('platform', s.platform)
+        .lte('captured_at', sixDaysAgo)
+        .order('captured_at', { ascending: false })
+        .limit(1);
 
-    const previousFollowers = data?.[0]?.followers ?? null;
-    const delta = previousFollowers !== null ? s.followers - previousFollowers : null;
-    const deltaPct = previousFollowers ? ((delta as number) / previousFollowers) * 100 : null;
-    results.push({ platform: s.platform, followers: s.followers, previousFollowers, delta, deltaPct });
-  }
-  return results;
+      const previousFollowers = data?.[0]?.followers ?? null;
+      const delta = previousFollowers !== null ? s.followers - previousFollowers : null;
+      const deltaPct = previousFollowers ? ((delta as number) / previousFollowers) * 100 : null;
+      return { platform: s.platform, followers: s.followers, previousFollowers, delta, deltaPct };
+    })
+  );
 }
 
 export async function recordAccountStatsSnapshot(stats: AccountStats[]): Promise<void> {

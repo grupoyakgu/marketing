@@ -72,8 +72,10 @@ async function loadOverview() {
       ? refreshStatusR.value
       : { refreshedAt: null, durationMs: null, postsRefreshed: null, accountsRefreshed: null };
 
-  const growth = accountStats.length > 0 ? await getAccountGrowth(accountStats).catch(() => []) : [];
-  const engagements = recentPosts.length > 0 ? await getCachedPostEngagements(recentPosts).catch(() => []) : [];
+  const [growth, engagements] = await Promise.all([
+    accountStats.length > 0 ? getAccountGrowth(accountStats).catch(() => []) : Promise.resolve([]),
+    recentPosts.length > 0 ? getCachedPostEngagements(recentPosts).catch(() => []) : Promise.resolve([]),
+  ]);
 
   const totals = engagements.reduce(
     (acc, e) => ({
