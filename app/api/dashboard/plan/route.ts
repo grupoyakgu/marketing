@@ -9,6 +9,11 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'week_start is required (YYYY-MM-DD).' }, { status: 400 });
   }
   const posts = await getWeeklyPlan(weekStart);
+  console.log(
+    `[dashboard/plan GET] week_start=${weekStart} images=${JSON.stringify(
+      posts.map(p => ({ id: p.id, image_url: p.image_url ?? null }))
+    )}`
+  );
   return NextResponse.json(
     { posts },
     { headers: { 'Cache-Control': 'no-store, must-revalidate' } }
