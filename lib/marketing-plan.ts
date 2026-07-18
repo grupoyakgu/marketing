@@ -157,6 +157,54 @@ export async function getMostRecentPepeChatId(): Promise<number | null> {
   return data?.[0]?.chat_id ?? null;
 }
 
+// ─── Dashboard aggregates ──────────────────────────────────────────────────
+
+export interface PostCounts {
+  total: number;
+  scheduled: number;
+  published: number;
+  failed: number;
+  pending: number;
+}
+
+export async function getPostCounts(): Promise<PostCounts> {
+  const { data, error } = await supabase.from('marketing_plan').select('status');
+  if (error) throw new Error(error.message);
+  const rows = data ?? [];
+  const counts: PostCounts = { total: rows.length, scheduled: 0, published: 0, failed: 0, pending: 0 };
+  for (const r of rows) {
+    if (r.status === 'approved') counts.scheduled++;
+    else if (r.status === 'posted') counts.published++;
+    else if (r.status === 'failed') counts.failed++;
+    else if (r.status === 'draft') counts.pending++;
+  }
+  return counts;
+}
+
+export interface PostsByDate {
+  date: string;
+  count: number;
+}
+
+export async function getPostsPublishedByDate(days = 14): Promise<PostsByDate[]> {
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+  const { data, error } = await supabase
+    .from('marketing_plan')
+    .select('scheduled_date')
+    .eq('status', 'posted')
+    .gte('scheduled_date', since.toISOString().split('T')[0]);
+  if (error) throw new Error(error.message);
+
+  const counts = new Map<string, number>();
+  for (const r of data ?? []) {
+    counts.set(r.scheduled_date, (counts.get(r.scheduled_date) ?? 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .map(([date, count]) => ({ date, count }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
 export function getNextMonday(fromDate?: Date): string {
   const now = fromDate ?? new Date();
   const day = now.getDay();

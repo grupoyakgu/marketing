@@ -227,3 +227,24 @@ export async function recordAccountStatsSnapshot(stats: AccountStats[]): Promise
     .from('account_stats_history')
     .insert(stats.map(s => ({ platform: s.platform, followers: s.followers })));
 }
+
+export interface FollowerHistoryPoint {
+  platform: 'linkedin' | 'instagram' | 'facebook';
+  date: string;
+  followers: number;
+}
+
+export async function getFollowerHistory(days = 30): Promise<FollowerHistoryPoint[]> {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('account_stats_history')
+    .select('platform, followers, captured_at')
+    .gte('captured_at', since)
+    .order('captured_at', { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(r => ({
+    platform: r.platform,
+    date: (r.captured_at as string).split('T')[0],
+    followers: r.followers,
+  }));
+}
