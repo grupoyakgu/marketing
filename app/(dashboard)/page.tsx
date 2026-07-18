@@ -54,16 +54,17 @@ async function loadOverview() {
 
   const growth = accountStats.length > 0 ? await getAccountGrowth(accountStats).catch(() => []) : [];
 
-  const engagements: PostEngagement[] = [];
-  for (const row of recentPosts) {
-    try {
-      let eng: PostEngagement | null = null;
-      if (row.platform === 'facebook') eng = await getFacebookPostEngagement(row.platform_post_id);
-      else if (row.platform === 'instagram') eng = await getInstagramPostEngagement(row.platform_post_id);
-      else if (row.platform === 'linkedin') eng = await getLinkedInPostEngagement(row.platform_post_id);
-      if (eng) engagements.push(eng);
-    } catch {}
-  }
+  const engagementResults = await Promise.allSettled(
+    recentPosts.map(row => {
+      if (row.platform === 'facebook') return getFacebookPostEngagement(row.platform_post_id);
+      if (row.platform === 'instagram') return getInstagramPostEngagement(row.platform_post_id);
+      return getLinkedInPostEngagement(row.platform_post_id);
+    })
+  );
+  const engagements: PostEngagement[] = engagementResults
+    .filter((r): r is PromiseFulfilledResult<PostEngagement | null> => r.status === 'fulfilled')
+    .map(r => r.value)
+    .filter((e): e is PostEngagement => e !== null);
 
   const totals = engagements.reduce(
     (acc, e) => ({
