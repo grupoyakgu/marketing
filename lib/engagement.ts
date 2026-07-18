@@ -243,3 +243,103 @@ export async function getFollowerHistory(days = 30): Promise<FollowerHistoryPoin
     followers: r.followers,
   }));
 }
+
+/** Most recent snapshot per platform from account_stats_history — DB-only, used by the dashboard instead of calling getAllAccountStats() live on every page load. */
+export async function getLatestAccountStats(): Promise<AccountStats[]> {
+  const { data, error } = await supabase
+    .from('account_stats_history')
+    .select('platform, followers, captured_at')
+    .order('captured_at', { ascending: false })
+    .limit(20);
+  if (error) throw new Error(error.message);
+  const seen = new Set<string>();
+  const result: AccountStats[] = [];
+  for (const row of data ?? []) {
+    if (seen.has(row.platform)) continue;
+    seen.add(row.platform);
+    result.push({ platform: row.platform, followers: row.followers });
+  }
+  return result;
+}
+
+// ─── Post engagement cache ─────────────────────────────────────────────────
+
+export async function getCachedPostEngagements(
+  posts: { platform: 'linkedin' | 'instagram' | 'facebook'; platform_post_id: string }[]
+): Promise<PostEngagement[]> {
+  if (posts.length === 0) return [];
+  const platforms = Array.from(new Set(posts.map(p => p.platform)));
+  const ids = Array.from(new Set(posts.map(p => p.platform_post_id)));
+  const { data, error } = await supabase
+    .from('post_engagement_cache')
+    .select('platform, platform_post_id, likes, comments, shares, impressions, reach')
+    .in('platform', platforms)
+    .in('platform_post_id', ids);
+  if (error) throw new Error(error.message);
+  const wanted = new Set(posts.map(p => `${p.platform}:${p.platform_post_id}`));
+  return (data ?? [])
+    .filter(r => wanted.has(`${r.platform}:${r.platform_post_id}`))
+    .map(r => ({
+      platform: r.platform,
+      postId: r.platform_post_id,
+      likes: r.likes,
+      comments: r.comments,
+      shares: r.shares,
+      impressions: r.impressions,
+      reach: r.reach,
+    }));
+}
+
+export async function upsertPostEngagementCache(engagements: PostEngagement[]): Promise<void> {
+  if (engagements.length === 0) return;
+  await supabase.from('post_engagement_cache').upsert(
+    engagements.map(e => ({
+      platform: e.platform,
+      platform_post_id: e.postId,
+      likes: e.likes,
+      comments: e.comments,
+      shares: e.shares,
+      impressions: e.impressions,
+      reach: e.reach,
+      updated_at: new Date().toISOString(),
+    })),
+    { onConflict: 'platform,platform_post_id' }
+  );
+}
+
+// ─── Refresh status ─────────────────────────────────────────────────────────
+
+export interface RefreshStatus {
+  refreshedAt: string | null;
+  durationMs: number | null;
+  postsRefreshed: number | null;
+  accountsRefreshed: number | null;
+}
+
+export async function getRefreshStatus(): Promise<RefreshStatus> {
+  const { data } = await supabase
+    .from('dashboard_refresh_status')
+    .select('refreshed_at, duration_ms, posts_refreshed, accounts_refreshed')
+    .eq('id', 'singleton')
+    .maybeSingle();
+  return {
+    refreshedAt: data?.refreshed_at ?? null,
+    durationMs: data?.duration_ms ?? null,
+    postsRefreshed: data?.posts_refreshed ?? null,
+    accountsRefreshed: data?.accounts_refreshed ?? null,
+  };
+}
+
+export async function recordRefreshStatus(status: {
+  durationMs: number;
+  postsRefreshed: number;
+  accountsRefreshed: number;
+}): Promise<void> {
+  await supabase.from('dashboard_refresh_status').upsert({
+    id: 'singleton',
+    refreshed_at: new Date().toISOString(),
+    duration_ms: status.durationMs,
+    posts_refreshed: status.postsRefreshed,
+    accounts_refreshed: status.accountsRefreshed,
+  });
+}

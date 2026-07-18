@@ -4,13 +4,11 @@ import {
   getPostedPostsForCommentCheck,
 } from '@/lib/marketing-plan';
 import {
-  getAllAccountStats,
+  getLatestAccountStats,
   getAccountGrowth,
   getFollowerHistory,
-  getFacebookPostEngagement,
-  getInstagramPostEngagement,
-  getLinkedInPostEngagement,
-  type PostEngagement,
+  getCachedPostEngagements,
+  getRefreshStatus,
 } from '@/lib/engagement';
 import { KpiCard } from '@/components/ui/KpiCard';
 import { Card } from '@/components/ui/Card';
@@ -30,20 +28,27 @@ import {
   ThumbsUp,
   MessageCircle,
   Share2,
+  RefreshCw,
 } from 'lucide-react';
+import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
 
 async function loadOverview() {
-  // Individual data sources (DB, Facebook, Instagram, LinkedIn) can fail independently —
-  // Promise.allSettled + fallbacks keep the dashboard usable instead of hard-crashing the page.
-  const [postCountsR, postsByDateR, accountStatsR, followerHistoryR, recentPostsR] = await Promise.allSettled([
-    getPostCounts(),
-    getPostsPublishedByDate(14),
-    getAllAccountStats(),
-    getFollowerHistory(30),
-    getPostedPostsForCommentCheck(),
-  ]);
+  // Account stats and post engagement come from cache tables (populated by the
+  // daily refresh cron / the "Refresh now" action in Settings > Data Sync)
+  // instead of calling Facebook/Instagram/LinkedIn live on every page load —
+  // those external calls used to run serially and added several seconds to
+  // every visit, most noticeably right after login.
+  const [postCountsR, postsByDateR, accountStatsR, followerHistoryR, recentPostsR, refreshStatusR] =
+    await Promise.allSettled([
+      getPostCounts(),
+      getPostsPublishedByDate(14),
+      getLatestAccountStats(),
+      getFollowerHistory(30),
+      getPostedPostsForCommentCheck(),
+      getRefreshStatus(),
+    ]);
 
   const postCounts =
     postCountsR.status === 'fulfilled' ? postCountsR.value : { total: 0, scheduled: 0, published: 0, failed: 0, pending: 0 };
@@ -51,20 +56,13 @@ async function loadOverview() {
   const accountStats = accountStatsR.status === 'fulfilled' ? accountStatsR.value : [];
   const followerHistory = followerHistoryR.status === 'fulfilled' ? followerHistoryR.value : [];
   const recentPosts = recentPostsR.status === 'fulfilled' ? recentPostsR.value : [];
+  const refreshStatus =
+    refreshStatusR.status === 'fulfilled'
+      ? refreshStatusR.value
+      : { refreshedAt: null, durationMs: null, postsRefreshed: null, accountsRefreshed: null };
 
   const growth = accountStats.length > 0 ? await getAccountGrowth(accountStats).catch(() => []) : [];
-
-  const engagementResults = await Promise.allSettled(
-    recentPosts.map(row => {
-      if (row.platform === 'facebook') return getFacebookPostEngagement(row.platform_post_id);
-      if (row.platform === 'instagram') return getInstagramPostEngagement(row.platform_post_id);
-      return getLinkedInPostEngagement(row.platform_post_id);
-    })
-  );
-  const engagements: PostEngagement[] = engagementResults
-    .filter((r): r is PromiseFulfilledResult<PostEngagement | null> => r.status === 'fulfilled')
-    .map(r => r.value)
-    .filter((e): e is PostEngagement => e !== null);
+  const engagements = recentPosts.length > 0 ? await getCachedPostEngagements(recentPosts).catch(() => []) : [];
 
   const totals = engagements.reduce(
     (acc, e) => ({
@@ -86,12 +84,34 @@ async function loadOverview() {
     totals,
     totalEngagement: totals.likes + totals.comments + totals.shares,
     totalFollowers: accountStats.reduce((sum, s) => sum + s.followers, 0),
+    refreshStatus,
   };
 }
 
+function formatRefreshedAt(iso: string | null): string {
+  if (!iso) return 'Data not refreshed yet';
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.round(diffMs / 60000);
+  if (mins < 1) return 'Data refreshed just now';
+  if (mins < 60) return `Data refreshed ${mins} minute${mins === 1 ? '' : 's'} ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `Data refreshed ${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.round(hours / 24);
+  return `Data refreshed ${days} day${days === 1 ? '' : 's'} ago`;
+}
+
 export default async function OverviewPage() {
-  const { postCounts, postsByDate, accountStats, followerHistory, growth, totals, totalEngagement, totalFollowers } =
-    await loadOverview();
+  const {
+    postCounts,
+    postsByDate,
+    accountStats,
+    followerHistory,
+    growth,
+    totals,
+    totalEngagement,
+    totalFollowers,
+    refreshStatus,
+  } = await loadOverview();
 
   const followerGrowthPct = growth.length
     ? growth.reduce((sum, g) => sum + (g.deltaPct ?? 0), 0) / growth.filter(g => g.deltaPct !== null).length || null
@@ -99,11 +119,20 @@ export default async function OverviewPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-neutral-900 dark:text-white">Overview</h1>
-        <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-          What Pepe has been up to across LinkedIn, Facebook, and Instagram.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-neutral-900 dark:text-white">Overview</h1>
+          <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+            What Pepe has been up to across LinkedIn, Facebook, and Instagram.
+          </p>
+        </div>
+        <Link
+          href="/settings/data"
+          className="flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-800 dark:hover:text-neutral-300"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          {formatRefreshedAt(refreshStatus.refreshedAt)}
+        </Link>
       </div>
 
       <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
