@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -26,6 +27,7 @@ function formatAbsolute(iso: string): string {
 }
 
 export default function DataSyncPage() {
+  const router = useRouter();
   const [status, setStatus] = useState<RefreshStatus | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +61,10 @@ export default function DataSyncPage() {
         postsRefreshed: body.result.postsRefreshed,
         accountsRefreshed: body.result.accountsRefreshed,
       });
+      // Invalidates the Next.js Router Cache so Overview (and any other
+      // dashboard page) re-fetches instead of serving the RSC payload it
+      // cached client-side before this refresh ran.
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Refresh failed.');
     } finally {

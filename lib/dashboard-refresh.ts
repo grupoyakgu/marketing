@@ -1,3 +1,4 @@
+import { revalidatePath } from 'next/cache';
 import {
   getAllAccountStats,
   recordAccountStatsSnapshot,
@@ -54,6 +55,13 @@ export async function refreshDashboardData(): Promise<DashboardRefreshResult> {
   console.log(
     `[dashboard-refresh] durationMs=${durationMs} accounts=${JSON.stringify(accountStats)} postsRefreshed=${engagements.length}/${recentPosts.length}`
   );
+
+  // Overview is force-dynamic (always reads fresh from the DB on the server),
+  // but the client-side Router Cache can still serve a stale RSC payload for
+  // '/' if it was visited before this refresh ran. revalidatePath marks it
+  // stale so the next visit — from the cron or the manual "Refresh now"
+  // button alike — actually re-fetches instead of reusing that cached payload.
+  revalidatePath('/');
 
   return { durationMs, accountsRefreshed: accountStats.length, postsRefreshed: engagements.length };
 }
