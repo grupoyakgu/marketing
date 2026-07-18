@@ -5,6 +5,9 @@ import {
   getInstagramPostEngagement,
   getLinkedInPostEngagement,
   getAllAccountStats,
+  getAccountGrowth,
+  recordAccountStatsSnapshot,
+  computeEngagementRate,
   type PostEngagement,
 } from '@/lib/engagement';
 import { getMostRecentPepeChatId } from '@/lib/marketing-plan';
@@ -72,6 +75,10 @@ export async function GET(req: Request) {
     getAllAccountStats(),
   ]);
 
+  // Compare against last week's snapshot before recording this week's.
+  const growth = await getAccountGrowth(accountStats);
+  await recordAccountStatsSnapshot(accountStats);
+
   const engagements: PostEngagement[] = [];
   for (const row of postRows) {
     try {
@@ -84,8 +91,13 @@ export async function GET(req: Request) {
   }
 
   // Build raw data message for Pepe to narrate
-  const accountLines = accountStats
-    .map(s => `${s.platform}: ${s.followers.toLocaleString()} followers`)
+  const accountLines = growth
+    .map(g => {
+      const trend = g.delta === null
+        ? '(no prior snapshot yet — growth will show from next week)'
+        : `(${g.delta >= 0 ? '+' : ''}${g.delta} this week, ${g.deltaPct! >= 0 ? '+' : ''}${g.deltaPct!.toFixed(1)}%)`;
+      return `${g.platform}: ${g.followers.toLocaleString()} followers ${trend}`;
+    })
     .join('\n');
 
   const postLines = engagements.length > 0
@@ -94,7 +106,7 @@ export async function GET(req: Request) {
           (e, i) =>
             `Post ${i + 1} [${e.platform}]\n` +
             `  Likes: ${e.likes} | Comments: ${e.comments} | Shares: ${e.shares}\n` +
-            `  Impressions: ${e.impressions} | Reach: ${e.reach}`
+            `  Impressions: ${e.impressions} | Reach: ${e.reach} | Engagement rate: ${computeEngagementRate(e).toFixed(2)}%`
         )
         .join('\n\n')
     : 'No post data available for this week.';
@@ -102,10 +114,11 @@ export async function GET(req: Request) {
   const agentMessage =
     `It's Friday — time for the weekly engagement report. Here is the raw data from all platforms this week. ` +
     `Please write a concise, insightful weekly performance summary for the user. ` +
+    `Call out follower counts and their week-over-week growth per platform, and comment on engagement rates. ` +
     `Highlight what worked well, what could improve, and any strategic recommendation for next week. ` +
     `Keep it under 300 words. Write in English.\n\n` +
-    `ACCOUNT STATS:\n${accountLines}\n\n` +
-    `POST ENGAGEMENT (last 7 days):\n${postLines}`;
+    `ACCOUNT STATS (followers + week-over-week growth):\n${accountLines}\n\n` +
+    `POST ENGAGEMENT (last 7 days, includes engagement rate):\n${postLines}`;
 
   const reply = await chat(chatId, agentMessage);
   await sendTelegramMessage(chatId, reply);

@@ -1,5 +1,12 @@
+import { createClient } from '@supabase/supabase-js';
+
 const GRAPH_API = 'https://graph.facebook.com/v19.0';
 const LINKEDIN_API = 'https://api.linkedin.com/v2';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export interface PostEngagement {
   platform: 'linkedin' | 'instagram' | 'facebook';
@@ -15,6 +22,12 @@ export interface AccountStats {
   platform: 'linkedin' | 'instagram' | 'facebook';
   followers: number;
   following?: number;
+}
+
+export function computeEngagementRate(e: PostEngagement): number {
+  const totalEngagements = e.likes + e.comments + e.shares;
+  const base = e.impressions > 0 ? e.impressions : e.reach;
+  return base > 0 ? (totalEngagements / base) * 100 : 0;
 }
 
 // ─── Facebook ────────────────────────────────────────────────────────────────
@@ -155,4 +168,43 @@ export async function getAllAccountStats(): Promise<AccountStats[]> {
   return results
     .map(r => (r.status === 'fulfilled' ? r.value : null))
     .filter((s): s is AccountStats => s !== null);
+}
+
+// ─── Follower growth history ──────────────────────────────────────────────
+
+export interface FollowerGrowth {
+  platform: 'linkedin' | 'instagram' | 'facebook';
+  followers: number;
+  previousFollowers: number | null;
+  delta: number | null;
+  deltaPct: number | null;
+}
+
+/** Looks up each platform's most recent snapshot from ~a week ago (or earlier) to compute growth. Call before recordAccountStatsSnapshot for the current run. */
+export async function getAccountGrowth(stats: AccountStats[]): Promise<FollowerGrowth[]> {
+  const sixDaysAgo = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString();
+
+  const results: FollowerGrowth[] = [];
+  for (const s of stats) {
+    const { data } = await supabase
+      .from('account_stats_history')
+      .select('followers')
+      .eq('platform', s.platform)
+      .lte('captured_at', sixDaysAgo)
+      .order('captured_at', { ascending: false })
+      .limit(1);
+
+    const previousFollowers = data?.[0]?.followers ?? null;
+    const delta = previousFollowers !== null ? s.followers - previousFollowers : null;
+    const deltaPct = previousFollowers ? ((delta as number) / previousFollowers) * 100 : null;
+    results.push({ platform: s.platform, followers: s.followers, previousFollowers, delta, deltaPct });
+  }
+  return results;
+}
+
+export async function recordAccountStatsSnapshot(stats: AccountStats[]): Promise<void> {
+  if (stats.length === 0) return;
+  await supabase
+    .from('account_stats_history')
+    .insert(stats.map(s => ({ platform: s.platform, followers: s.followers })));
 }
