@@ -230,9 +230,10 @@ export async function getAccountGrowth(stats: AccountStats[]): Promise<FollowerG
 
 export async function recordAccountStatsSnapshot(stats: AccountStats[]): Promise<void> {
   if (stats.length === 0) return;
-  await supabase
+  const { error } = await supabase
     .from('account_stats_history')
     .insert(stats.map(s => ({ platform: s.platform, followers: s.followers })));
+  if (error) console.error(`recordAccountStatsSnapshot insert failed: ${error.message}`);
 }
 
 export interface FollowerHistoryPoint {

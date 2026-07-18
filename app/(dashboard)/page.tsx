@@ -50,6 +50,17 @@ async function loadOverview() {
       getRefreshStatus(),
     ]);
 
+  for (const [label, r] of [
+    ['postCounts', postCountsR],
+    ['postsByDate', postsByDateR],
+    ['accountStats', accountStatsR],
+    ['followerHistory', followerHistoryR],
+    ['recentPosts', recentPostsR],
+    ['refreshStatus', refreshStatusR],
+  ] as const) {
+    if (r.status === 'rejected') console.error(`[Overview] ${label} failed:`, r.reason);
+  }
+
   const postCounts =
     postCountsR.status === 'fulfilled' ? postCountsR.value : { total: 0, scheduled: 0, published: 0, failed: 0, pending: 0 };
   const postsByDate = postsByDateR.status === 'fulfilled' ? postsByDateR.value : [];
