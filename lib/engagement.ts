@@ -1,7 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 
 const GRAPH_API = 'https://graph.facebook.com/v19.0';
-const LINKEDIN_API = 'https://api.linkedin.com/v2';
+// LinkedIn blocks the legacy unversioned /v2 API for these resources (see
+// social-comments.ts) — organization stats need the versioned /rest API with
+// a LinkedIn-Version header. networkSizes is also deprecated outright; its
+// replacement is organizationalEntityFollowerStatistics.
+const LINKEDIN_REST_API = 'https://api.linkedin.com/rest';
+const LINKEDIN_API_VERSION = process.env.LINKEDIN_API_VERSION ?? '202506';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -117,15 +122,19 @@ export async function getLinkedInPostEngagement(postUrn: string): Promise<PostEn
   if (!token) return null;
   const encoded = encodeURIComponent(postUrn);
   const res = await fetch(
-    `${LINKEDIN_API}/socialMetadata/${encoded}`,
+    `${LINKEDIN_REST_API}/socialMetadata/${encoded}`,
     {
       headers: {
         Authorization: `Bearer ${token}`,
         'X-Restli-Protocol-Version': '2.0.0',
+        'LinkedIn-Version': LINKEDIN_API_VERSION,
       },
     }
   );
-  if (!res.ok) return null;
+  if (!res.ok) {
+    console.error(`LinkedIn getPostEngagement failed for ${postUrn}: ${res.status} ${await res.text()}`);
+    return null;
+  }
   const d = await res.json();
   return {
     platform: 'linkedin',
@@ -143,18 +152,25 @@ export async function getLinkedInAccountStats(): Promise<AccountStats | null> {
   const authorId = process.env.LINKEDIN_AUTHOR_ID;
   if (!token || !authorId) return null;
   const orgId = authorId.replace('urn:li:organization:', '').replace('organization:', '');
+  const orgUrn = `urn:li:organization:${orgId}`;
   const res = await fetch(
-    `${LINKEDIN_API}/networkSizes/urn:li:organization:${orgId}?edgeType=CompanyFollowedByMember`,
+    `${LINKEDIN_REST_API}/organizationalEntityFollowerStatistics?q=organizationalEntity&organizationalEntity=${encodeURIComponent(orgUrn)}`,
     {
       headers: {
         Authorization: `Bearer ${token}`,
         'X-Restli-Protocol-Version': '2.0.0',
+        'LinkedIn-Version': LINKEDIN_API_VERSION,
       },
     }
   );
-  if (!res.ok) return null;
+  if (!res.ok) {
+    console.error(`LinkedIn getAccountStats failed for ${orgUrn}: ${res.status} ${await res.text()}`);
+    return null;
+  }
   const d = await res.json();
-  return { platform: 'linkedin', followers: d.firstDegreeSize ?? 0 };
+  const counts = d.elements?.[0]?.followerCounts;
+  const followers = (counts?.organicFollowerCount ?? 0) + (counts?.paidFollowerCount ?? 0);
+  return { platform: 'linkedin', followers };
 }
 
 // ─── Aggregate ────────────────────────────────────────────────────────────────
