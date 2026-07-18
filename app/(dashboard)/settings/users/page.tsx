@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { UserPlus, Trash2, KeyRound } from 'lucide-react';
+import { UserPlus, Trash2, KeyRound, ArrowLeft } from 'lucide-react';
 
 interface UserRow {
   id: string;
@@ -101,6 +102,13 @@ export default function UsersPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div>
+        <Link
+          href="/settings"
+          className="mb-2 inline-flex items-center gap-1.5 text-sm text-neutral-500 transition hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Settings
+        </Link>
         <h1 className="text-2xl font-semibold tracking-tight text-neutral-900 dark:text-white">Users</h1>
         <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
           Manage who can access this dashboard.

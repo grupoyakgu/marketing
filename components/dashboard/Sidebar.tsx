@@ -6,7 +6,6 @@ import { useEffect, useState } from 'react';
 import {
   LayoutDashboard,
   CalendarDays,
-  Users,
   Settings,
   ChevronsLeft,
   ChevronsRight,
@@ -15,7 +14,7 @@ import { cn } from '@/lib/cn';
 
 const COLLAPSE_KEY = 'sidebar-collapsed';
 
-export function Sidebar({ isAdmin, buildVersion }: { isAdmin: boolean; buildVersion: string }) {
+export function Sidebar({ buildVersion }: { buildVersion: string }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
 
@@ -39,7 +38,6 @@ export function Sidebar({ isAdmin, buildVersion }: { isAdmin: boolean; buildVers
   const links = [
     { href: '/', label: 'Overview', icon: LayoutDashboard },
     { href: '/planner', label: 'Planner', icon: CalendarDays },
-    ...(isAdmin ? [{ href: '/settings/users', label: 'Users', icon: Users }] : []),
     { href: '/settings', label: 'Settings', icon: Settings },
   ];
 
@@ -61,11 +59,10 @@ export function Sidebar({ isAdmin, buildVersion }: { isAdmin: boolean; buildVers
 
       <nav className="flex flex-col gap-1">
         {links.map(({ href, label, icon: Icon }) => {
-          // Settings owns any page nested under /settings that doesn't have
-          // its own sidebar entry (e.g. Data Sync), so it stays highlighted
+          // Settings owns every page nested under /settings that doesn't have
+          // its own sidebar entry (Data Sync, Users), so it stays highlighted
           // there too instead of showing no active item at all.
-          const active =
-            href === '/settings' ? pathname === '/settings' || pathname === '/settings/data' : pathname === href;
+          const active = href === '/settings' ? pathname.startsWith('/settings') : pathname === href;
           return (
             <Link
               key={href}
