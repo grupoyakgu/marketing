@@ -5,8 +5,11 @@ const GRAPH_API = 'https://graph.facebook.com/v19.0';
 // social-comments.ts) — organization stats need the versioned /rest API with
 // a LinkedIn-Version header. networkSizes is also deprecated outright; its
 // replacement is organizationalEntityFollowerStatistics.
+// LinkedIn only keeps roughly the last 12 months of versions active, so this
+// default needs bumping periodically (bump LINKEDIN_API_VERSION in Vercel env
+// vars instead of redeploying if this goes stale again).
 const LINKEDIN_REST_API = 'https://api.linkedin.com/rest';
-const LINKEDIN_API_VERSION = process.env.LINKEDIN_API_VERSION ?? '202506';
+const LINKEDIN_API_VERSION = process.env.LINKEDIN_API_VERSION ?? '202601';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,

@@ -4,8 +4,11 @@ import { createClient } from '@supabase/supabase-js';
 // read/write even with r_organization_social granted — LinkedIn's error
 // ("socialActions.GET_ALL.NO_VERSION") indicates this resource now requires
 // the versioned /rest API with a LinkedIn-Version header.
+// LinkedIn only keeps roughly the last 12 months of versions active, so this
+// default needs bumping periodically (bump LINKEDIN_API_VERSION in Vercel env
+// vars instead of redeploying if this goes stale again).
 const LINKEDIN_REST_API = 'https://api.linkedin.com/rest';
-const LINKEDIN_API_VERSION = process.env.LINKEDIN_API_VERSION ?? '202506';
+const LINKEDIN_API_VERSION = process.env.LINKEDIN_API_VERSION ?? '202601';
 const GRAPH_API = 'https://graph.facebook.com/v19.0';
 
 export interface SocialComment {
