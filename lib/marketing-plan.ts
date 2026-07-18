@@ -13,6 +13,7 @@ export interface MarketingPost {
   scheduled_time: string;
   content: string;
   image_note?: string;
+  image_url?: string | null;
   status?: string;
   post_url?: string;
   platform_post_id?: string;
@@ -63,6 +64,25 @@ export async function deletePost(postId: string): Promise<void> {
     .delete()
     .eq('id', postId);
   if (error) throw new Error(error.message);
+}
+
+export interface PostUpdate {
+  content?: string;
+  scheduled_date?: string;
+  scheduled_time?: string;
+  platform?: 'linkedin' | 'instagram' | 'facebook';
+  image_url?: string | null;
+}
+
+export async function updatePost(postId: string, fields: PostUpdate): Promise<MarketingPost> {
+  const { data, error } = await supabase
+    .from('marketing_plan')
+    .update(fields)
+    .eq('id', postId)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
 }
 
 export async function getPostsDueNow(): Promise<MarketingPost[]> {

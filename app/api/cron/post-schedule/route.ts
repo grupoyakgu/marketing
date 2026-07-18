@@ -38,7 +38,7 @@ export async function GET(req: Request) {
   for (const post of posts) {
     try {
       let result: { success: boolean; postId?: string; url?: string; error?: string } | undefined;
-      const imageUrl = defaultImageUrl || undefined;
+      const imageUrl = post.image_url || defaultImageUrl || undefined;
 
       if (post.platform === 'linkedin') {
         result = await postToLinkedIn(post.content, imageUrl);
