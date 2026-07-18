@@ -5,7 +5,14 @@ import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/session';
 // middleware. Existing bot/cron routes (/api/telegram, /api/cron/*, etc.) are
 // never matched, so they're untouched by the new auth layer.
 export const config = {
-  matcher: ['/', '/settings/:path*', '/planner/:path*', '/api/dashboard/:path*', '/api/admin/:path*'],
+  matcher: [
+    '/',
+    '/settings/:path*',
+    '/planner/:path*',
+    '/comments/:path*',
+    '/api/dashboard/:path*',
+    '/api/admin/:path*',
+  ],
 };
 
 export async function middleware(req: NextRequest) {

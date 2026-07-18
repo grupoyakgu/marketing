@@ -11,6 +11,7 @@ import {
   postFacebookComment,
   postInstagramComment,
   markReplied,
+  recordCommentReply,
   type CommentPostResult,
 } from '@/lib/social-comments';
 import {
@@ -420,6 +421,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
               // never mistakes its own reply for a new one requiring a response.
               await markReplied(input.comment_id, input.platform);
               if (result.commentId) await markReplied(result.commentId, input.platform);
+              await recordCommentReply(input.platform, input.comment_id, input.reply_text);
             }
             resultContent = result.success ? `Reply posted on ${input.platform}.` : `Failed to post reply on ${input.platform}.`;
           } catch (err) {

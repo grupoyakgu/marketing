@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import {
   LayoutDashboard,
   CalendarDays,
+  MessageSquare,
   Settings,
   ChevronsLeft,
   ChevronsRight,
@@ -38,6 +39,7 @@ export function Sidebar({ buildVersion }: { buildVersion: string }) {
   const links = [
     { href: '/', label: 'Overview', icon: LayoutDashboard },
     { href: '/planner', label: 'Planner', icon: CalendarDays },
+    { href: '/comments', label: 'Comments', icon: MessageSquare },
     { href: '/settings', label: 'Settings', icon: Settings },
   ];
 

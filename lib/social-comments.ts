@@ -39,6 +39,74 @@ export async function markReplied(commentId: string, platform: string): Promise<
   await db().from('comment_replies').upsert({ comment_id: commentId, platform });
 }
 
+// ─── Comment history (display) ────────────────────────────────────────────
+
+export interface CommentLogRow {
+  id: string;
+  platform: 'linkedin' | 'instagram' | 'facebook';
+  commentId: string;
+  postId: string;
+  authorName: string | null;
+  commentText: string;
+  commentCreatedAt: string | null;
+  replied: boolean;
+  replyText: string | null;
+  repliedAt: string | null;
+  createdAt: string;
+}
+
+/** Records newly-seen unreplied comments for the Comments page. Uses
+ * ignoreDuplicates so it never clobbers a row a later reply already updated —
+ * callers only pass comments that hasReplied() confirmed aren't answered yet. */
+export async function recordSeenComments(comments: SocialComment[]): Promise<void> {
+  if (comments.length === 0) return;
+  const { error } = await db()
+    .from('comment_log')
+    .upsert(
+      comments.map(c => ({
+        platform: c.platform,
+        comment_id: c.commentId,
+        post_id: c.postId,
+        author_name: c.authorName,
+        comment_text: c.text,
+        comment_created_at: c.createdAt,
+      })),
+      { onConflict: 'platform,comment_id', ignoreDuplicates: true }
+    );
+  if (error) console.error(`recordSeenComments insert failed: ${error.message}`);
+}
+
+export async function recordCommentReply(platform: string, commentId: string, replyText: string): Promise<void> {
+  const { error } = await db()
+    .from('comment_log')
+    .update({ replied: true, reply_text: replyText, replied_at: new Date().toISOString() })
+    .eq('platform', platform)
+    .eq('comment_id', commentId);
+  if (error) console.error(`recordCommentReply update failed: ${error.message}`);
+}
+
+export async function getCommentLog(limit = 100): Promise<CommentLogRow[]> {
+  const { data, error } = await db()
+    .from('comment_log')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(r => ({
+    id: r.id,
+    platform: r.platform,
+    commentId: r.comment_id,
+    postId: r.post_id,
+    authorName: r.author_name,
+    commentText: r.comment_text,
+    commentCreatedAt: r.comment_created_at,
+    replied: r.replied,
+    replyText: r.reply_text,
+    repliedAt: r.replied_at,
+    createdAt: r.created_at,
+  }));
+}
+
 // ─── Milestone tracking ──────────────────────────────────────────────────
 
 export async function hasMilestone(

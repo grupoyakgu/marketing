@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
+import { CheckCommentsCard } from '@/components/dashboard/CheckCommentsCard';
 import { getServerSession } from '@/lib/server-session';
 import { RefreshCw, Users, ArrowRight } from 'lucide-react';
 
@@ -52,6 +53,8 @@ export default async function SettingsPage() {
           </Link>
         )}
       </div>
+
+      <CheckCommentsCard />
 
       <Card>
         <h2 className="mb-3 text-sm font-semibold text-neutral-900 dark:text-white">Build</h2>
