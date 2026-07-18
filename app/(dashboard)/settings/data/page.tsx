@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { SettingsBackLink } from '@/components/dashboard/SettingsBackLink';
 import { RefreshCw, Users2, FileStack, Clock3 } from 'lucide-react';
 
 interface RefreshStatus {
@@ -77,6 +78,7 @@ export default function DataSyncPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
+        <SettingsBackLink />
         <h1 className="text-2xl font-semibold tracking-tight text-neutral-900 dark:text-white">Data Sync</h1>
         <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
           Follower counts and post engagement are fetched from LinkedIn, Facebook, and Instagram once a day
