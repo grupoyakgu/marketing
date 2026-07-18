@@ -8,6 +8,7 @@ import {
   recordMilestone,
   recordSeenComments,
   recordCommentCheckStatus,
+  getCommentLog,
   type SocialComment,
 } from '@/lib/social-comments';
 import {
@@ -110,10 +111,27 @@ export async function runCommentCheck(): Promise<CommentCheckResult> {
       )
       .join('\n\n');
 
+    // Give Pepe concrete recent replies to avoid repeating, not just an
+    // instruction to "vary phrasing" in the abstract — chat_history alone
+    // isn't reliable for this since it's capped and shared with unrelated
+    // conversation turns.
+    const recentLog = await getCommentLog(30);
+    const recentReplies = recentLog
+      .filter(r => r.replied && r.replyText)
+      .slice(0, 6)
+      .map(r => r.replyText as string);
+    const avoidBlock =
+      recentReplies.length > 0
+        ? `\n\nReplies you've already sent recently — do NOT reuse this wording, opening line, or structure:\n${recentReplies.map((t, i) => `${i + 1}. "${t}"`).join('\n')}`
+        : '';
+
     const reply = await chat(
       chatId,
       `You have ${newComments.length} new comment(s) on your recent posts. ` +
       `Draft a warm, professional reply for each one in the same language as the comment. ` +
+      `Each reply must be genuinely different from the others — vary the opening line, phrasing, ` +
+      `and structure, and respond to what that specific commenter actually said rather than a ` +
+      `generic template.${avoidBlock}\n\n` +
       `Use the reply_to_comment tool to post each reply immediately.\n\n${commentList}`
     );
     await sendTelegramMessage(chatId, reply);
