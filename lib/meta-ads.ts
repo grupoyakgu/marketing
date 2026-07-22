@@ -1,5 +1,11 @@
 const GRAPH_API = 'https://graph.facebook.com/v19.0';
 
+// Every read below passes cache: 'no-store' explicitly — confirmed by
+// production logs that a campaign's effective_status kept coming back stale
+// (ACTIVE) for 5+ minutes after a successful pause despite this route already
+// being export const dynamic = 'force-dynamic'; that alone didn't stop
+// Next.js's fetch data cache from serving a cached response for these calls.
+
 export type AdPlatform = 'facebook' | 'instagram';
 
 // FACEBOOK_AD_ACCOUNT_ID accepts a comma-separated list, one per account the
@@ -52,7 +58,7 @@ export async function listConfiguredAdAccounts(): Promise<AdAccountOption[]> {
   return Promise.all(
     accountIds.map(async id => {
       const params = new URLSearchParams({ fields: 'name', access_token: token });
-      const res = await fetch(`${GRAPH_API}/${id}?${params}`);
+      const res = await fetch(`${GRAPH_API}/${id}?${params}`, { cache: 'no-store' });
       if (!res.ok) {
         console.error(`Meta Ads listConfiguredAdAccounts failed for ${id}: ${res.status} ${await res.text()}`);
         return { id, name: id.replace('act_', '') };
@@ -87,7 +93,7 @@ async function listRawCampaigns(accountId: string, token: string): Promise<RawEn
     limit: '100',
     access_token: token,
   });
-  const res = await fetch(`${GRAPH_API}/${accountId}/campaigns?${params}`);
+  const res = await fetch(`${GRAPH_API}/${accountId}/campaigns?${params}`, { cache: 'no-store' });
   if (!res.ok) {
     console.error(`Meta Ads listCampaigns failed: ${res.status} ${await res.text()}`);
     return [];
@@ -112,7 +118,7 @@ async function listRawAdSets(accountId: string, token: string): Promise<(RawEnti
     limit: '200',
     access_token: token,
   });
-  const res = await fetch(`${GRAPH_API}/${accountId}/adsets?${params}`);
+  const res = await fetch(`${GRAPH_API}/${accountId}/adsets?${params}`, { cache: 'no-store' });
   if (!res.ok) {
     console.error(`Meta Ads listAdSets failed: ${res.status} ${await res.text()}`);
     return [];
@@ -134,7 +140,7 @@ async function listRawAdSets(accountId: string, token: string): Promise<(RawEnti
 
 async function fetchAccountCurrency(accountId: string, token: string): Promise<string> {
   const params = new URLSearchParams({ fields: 'currency', access_token: token });
-  const res = await fetch(`${GRAPH_API}/${accountId}?${params}`);
+  const res = await fetch(`${GRAPH_API}/${accountId}?${params}`, { cache: 'no-store' });
   if (!res.ok) {
     console.error(`Meta Ads fetchAccountCurrency failed: ${res.status} ${await res.text()}`);
     return 'USD';
@@ -164,7 +170,7 @@ async function fetchInsightsBreakdown(
   if ('datePreset' in window) params.set('date_preset', window.datePreset);
   else params.set('time_range', JSON.stringify({ since: window.since, until: window.until }));
 
-  const res = await fetch(`${GRAPH_API}/${entityId}/insights?${params}`);
+  const res = await fetch(`${GRAPH_API}/${entityId}/insights?${params}`, { cache: 'no-store' });
   if (!res.ok) {
     console.error(`Meta Ads insights failed for ${entityId}: ${res.status} ${await res.text()}`);
     return [];
@@ -317,7 +323,7 @@ export async function getCampaignDailySeries(
   });
   if (platform) params.set('breakdowns', 'publisher_platform');
 
-  const res = await fetch(`${GRAPH_API}/${campaignId}/insights?${params}`);
+  const res = await fetch(`${GRAPH_API}/${campaignId}/insights?${params}`, { cache: 'no-store' });
   if (!res.ok) {
     console.error(`Meta Ads dailySeries failed for ${campaignId}: ${res.status} ${await res.text()}`);
     return [];
@@ -354,7 +360,7 @@ export async function getCampaignDetail(
     fields: 'id,name,objective,effective_status,daily_budget,lifetime_budget,start_time,stop_time',
     access_token: creds.token,
   });
-  const res = await fetch(`${GRAPH_API}/${campaignId}?${params}`);
+  const res = await fetch(`${GRAPH_API}/${campaignId}?${params}`, { cache: 'no-store' });
   if (!res.ok) {
     console.error(`Meta Ads getCampaignDetail failed for ${campaignId}: ${res.status} ${await res.text()}`);
     return null;
