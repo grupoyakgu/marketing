@@ -21,9 +21,20 @@ function getCredentials() {
   return { cloudName, apiKey, apiSecret };
 }
 
+function mapResource(r: { public_id: string; secure_url: string; filename?: string }): CloudinaryImage {
+  return {
+    id: r.public_id,
+    name: r.filename ?? r.public_id.split('/').pop() ?? r.public_id,
+    url: r.secure_url,
+  };
+}
+
 async function fetchResources(cloudName: string, auth: string, prefix?: string): Promise<CloudinaryImage[]> {
   // Use /resources/image with optional prefix — works on all Cloudinary plans
   // (the alternative /resources/search endpoint requires a paid Search API add-on).
+  // NOTE: prefix matches against public_id, which does NOT reflect an asset's
+  // folder on accounts using Cloudinary's Dynamic Folders (folder is separate
+  // metadata there) — see listResourcesByAssetFolder below for that case.
   const params = new URLSearchParams({ type: 'upload', max_results: '50' });
   if (prefix) params.set('prefix', prefix);
 
@@ -38,11 +49,7 @@ async function fetchResources(cloudName: string, auth: string, prefix?: string):
 
   const json = await res.json();
   const resources: { public_id: string; secure_url: string; filename?: string }[] = json.resources ?? [];
-  return resources.map(r => ({
-    id: r.public_id,
-    name: r.filename ?? r.public_id.split('/').pop() ?? r.public_id,
-    url: r.secure_url,
-  }));
+  return resources.map(mapResource);
 }
 
 /** Flat listing under CLOUDINARY_FOLDER — used by Pepe's browse_drive_images
@@ -61,83 +68,66 @@ export async function listCloudinaryImages(): Promise<CloudinaryImage[]> {
   return images;
 }
 
-// Project subfolders shown as separate, non-mixed groups in the dashboard's
-// post-editor image picker — each stays under its own directory so a user can
-// expand a specific project and see only its images. Configurable via
-// CLOUDINARY_GALLERY_FOLDERS (comma-separated) without a redeploy; defaults
-// to the two current projects.
-const DEFAULT_GALLERY_FOLDERS = ['BDS 36', 'Peral 23'];
+// ─── Per-project gallery (Dynamic Folders) ─────────────────────────────────
+//
+// Confirmed via production logs: this Cloudinary account uses Dynamic
+// Folders — every asset's folder lives in its `asset_folder` metadata field
+// (e.g. "marketing/images/Peral 23"), while `public_id` itself has no folder
+// segment at all (e.g. "YK-_AP1_17_vq7yff"). A public_id-prefix search can
+// never match these, regardless of what prefix is used, so the picker uses
+// Cloudinary's dedicated by_asset_folder endpoint instead, and discovers
+// subfolders dynamically under the root so the real structure (whatever
+// projects exist under it) is always reflected instead of a hardcoded list.
 
-function getGalleryFolderPrefixes(): { name: string; prefix: string }[] {
-  const raw = process.env.CLOUDINARY_GALLERY_FOLDERS;
-  const names = raw ? raw.split(',').map(f => f.trim()).filter(Boolean) : DEFAULT_GALLERY_FOLDERS;
-  // Not nested under CLOUDINARY_FOLDER — confirmed via production logs that
-  // CLOUDINARY_FOLDER doesn't match any actual image (they live at Cloudinary
-  // root, no folder prefix), so these are their own top-level folders.
-  return names.map(name => ({ name, prefix: name }));
+const GALLERY_ROOT = process.env.CLOUDINARY_GALLERY_ROOT ?? 'marketing/images';
+
+async function listChildFolders(cloudName: string, auth: string, path: string): Promise<string[]> {
+  const res = await fetch(`${CLOUDINARY_API}/${cloudName}/folders/${path.split('/').map(encodeURIComponent).join('/')}`, {
+    headers: { Authorization: `Basic ${auth}` },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Cloudinary folders API error ${res.status}: ${body}`);
+  }
+  const json = await res.json();
+  const folders: { name: string }[] = json.folders ?? [];
+  return folders.map(f => f.name);
 }
 
-/** Diagnostic only: dumps the account's real root folder list plus a sample
- * of un-prefixed resources (public_id + asset_folder, if present) so we can
- * tell — from actual account data instead of guesswork — whether the
- * configured names are wrong, or whether this account uses Cloudinary's
- * newer "Dynamic Folders" (where an image's folder is separate metadata, not
- * part of public_id, so a public_id-prefix search can never find it). */
-async function debugDumpFolderStructure(cloudName: string, auth: string): Promise<void> {
-  try {
-    const foldersRes = await fetch(`${CLOUDINARY_API}/${cloudName}/folders`, {
-      headers: { Authorization: `Basic ${auth}` },
-    });
-    const foldersJson = foldersRes.ok ? await foldersRes.json() : { error: await foldersRes.text() };
-    console.log(`[cloudinary debug] root folders: ${JSON.stringify(foldersJson)}`);
-  } catch (err) {
-    console.error(`[cloudinary debug] /folders fetch failed: ${err instanceof Error ? err.message : err}`);
+async function listResourcesByAssetFolder(cloudName: string, auth: string, assetFolder: string): Promise<CloudinaryImage[]> {
+  const params = new URLSearchParams({ asset_folder: assetFolder, max_results: '50' });
+  const res = await fetch(`${CLOUDINARY_API}/${cloudName}/resources/by_asset_folder?${params}`, {
+    headers: { Authorization: `Basic ${auth}` },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Cloudinary by_asset_folder API error ${res.status}: ${body}`);
   }
-
-  try {
-    const params = new URLSearchParams({ type: 'upload', max_results: '20' });
-    const res = await fetch(`${CLOUDINARY_API}/${cloudName}/resources/image?${params}`, {
-      headers: { Authorization: `Basic ${auth}` },
-    });
-    const json = res.ok ? await res.json() : { error: await res.text() };
-    const sample = (json.resources ?? []).map((r: Record<string, unknown>) => ({
-      public_id: r.public_id,
-      asset_folder: r.asset_folder,
-      folder: r.folder,
-    }));
-    console.log(`[cloudinary debug] sample resources (no prefix): ${JSON.stringify(sample)}`);
-  } catch (err) {
-    console.error(`[cloudinary debug] unprefixed resources fetch failed: ${err instanceof Error ? err.message : err}`);
-  }
+  const json = await res.json();
+  const resources: { public_id: string; secure_url: string; filename?: string }[] = json.resources ?? [];
+  return resources.map(mapResource);
 }
 
-/** Lists each project folder's images separately (never merged) for the
- * planner's image picker. A folder with no matches just comes back empty —
- * unlike listCloudinaryImages(), there's no root-level fallback here, since
- * that would defeat keeping each project's images under its own directory. */
+/** Lists each project subfolder under CLOUDINARY_GALLERY_ROOT (default
+ * "marketing/images") separately — never merged — for the planner's image
+ * picker. Subfolders are discovered dynamically, so the picker always
+ * reflects whatever projects actually exist under the root. */
 export async function listCloudinaryImagesByFolder(): Promise<CloudinaryFolderImages[]> {
   const { cloudName, apiKey, apiSecret } = getCredentials();
   const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
-  const folders = getGalleryFolderPrefixes();
 
-  const results = await Promise.all(
-    folders.map(async ({ name, prefix }) => {
+  const childNames = await listChildFolders(cloudName, auth, GALLERY_ROOT);
+
+  return Promise.all(
+    childNames.map(async name => {
+      const assetFolder = `${GALLERY_ROOT}/${name}`;
       try {
-        const images = await fetchResources(cloudName, auth, prefix);
-        return { folder: name, prefix, images };
+        const images = await listResourcesByAssetFolder(cloudName, auth, assetFolder);
+        return { folder: name, images };
       } catch (err) {
-        console.error(`listCloudinaryImagesByFolder failed for prefix "${prefix}": ${err instanceof Error ? err.message : err}`);
-        return { folder: name, prefix, images: [] };
+        console.error(`listCloudinaryImagesByFolder failed for "${assetFolder}": ${err instanceof Error ? err.message : err}`);
+        return { folder: name, images: [] };
       }
     })
   );
-  console.log(
-    `[cloudinary] gallery folders queried: ${JSON.stringify(results.map(r => ({ folder: r.folder, prefix: r.prefix, count: r.images.length })))}`
-  );
-
-  if (results.every(r => r.images.length === 0)) {
-    await debugDumpFolderStructure(cloudName, auth);
-  }
-
-  return results.map(({ folder, images }) => ({ folder, images }));
 }
