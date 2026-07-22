@@ -21,6 +21,13 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 }
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
-  await deletePost(params.id);
-  return NextResponse.json({ ok: true });
+  try {
+    await deletePost(params.id);
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Failed to delete post.' },
+      { status: 400 }
+    );
+  }
 }

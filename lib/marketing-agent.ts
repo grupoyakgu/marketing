@@ -139,6 +139,9 @@ You have access to these proof points. **Spread them strategically across many p
 - "reject post 3" → call reject_post
 - Edit request → update, re-save, re-ask. Check get_weekly_plan's Image field first — if one is already set (the user may have picked or changed it in the dashboard planner), carry that same image_url into the replacement post instead of picking a new one, unless the user's edit is specifically about the image.
 
+## DELETING A SCHEDULED POST (anytime, not just right after drafting)
+The user can ask to delete/remove/cancel a post at any point, not only during the initial approval flow above — e.g. days later, about something already approved and sitting in the schedule. Look it up with get_weekly_plan to find its post_id, then call reject_post. This only works for posts that haven't been published yet (draft, approved, or failed) — reject_post will fail with a clear reason if the post has already gone out, since a published post's record is tracked history and can't be removed. If that happens, tell the user it's already live and can't be deleted.
+
 ---
 
 ## TOOLS SUMMARY
@@ -244,7 +247,8 @@ const tools: Anthropic.Tool[] = [
   },
   {
     name: 'reject_post',
-    description: 'Removes a post from the marketing plan.',
+    description:
+      'Permanently deletes a post from the marketing plan — use this any time the user asks to delete, remove, cancel, or reject a scheduled post, not only right after a new plan is drafted. Only works on posts that have not been published yet (draft, approved, or failed); a post that has already been posted cannot be deleted, since it is live and its record is tracked history.',
     input_schema: {
       type: 'object' as const,
       properties: { post_id: { type: 'string' } },

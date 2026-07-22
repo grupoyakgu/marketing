@@ -54,6 +54,17 @@ export async function approvePost(postId: string): Promise<void> {
 }
 
 export async function deletePost(postId: string): Promise<void> {
+  const { data: existing, error: fetchError } = await supabase
+    .from('marketing_plan')
+    .select('status')
+    .eq('id', postId)
+    .maybeSingle();
+  if (fetchError) throw new Error(fetchError.message);
+  if (!existing) throw new Error('Post not found.');
+  if (existing.status === 'posted') {
+    throw new Error('This post has already been published — it can no longer be deleted, only posts that have not been posted yet.');
+  }
+
   const { error } = await supabase
     .from('marketing_plan')
     .delete()
