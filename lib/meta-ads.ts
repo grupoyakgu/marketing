@@ -360,6 +360,7 @@ export async function getCampaignDetail(
     return null;
   }
   const c = await res.json();
+  console.log(`[meta-ads] getCampaignDetail ${campaignId}: raw effective_status=${c.effective_status} name=${c.name}`);
   const campaign: RawEntity = {
     id: c.id,
     name: c.name,
@@ -418,10 +419,10 @@ async function setCampaignStatus(campaignId: string, status: 'ACTIVE' | 'PAUSED'
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ status, access_token: creds.token }),
   });
+  const bodyText = await res.text();
+  console.log(`[meta-ads] setCampaignStatus(${status}) for ${campaignId} on account ${creds.accountId}: ${res.status} ${bodyText}`);
   if (!res.ok) {
-    const body = await res.text();
-    console.error(`Meta Ads setCampaignStatus(${status}) failed for ${campaignId}: ${res.status} ${body}`);
-    const permissionIssue = res.status === 403 || body.includes('ads_management') || body.includes('permission');
+    const permissionIssue = res.status === 403 || bodyText.includes('ads_management') || bodyText.includes('permission');
     return {
       success: false,
       error: permissionIssue
