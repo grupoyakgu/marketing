@@ -323,10 +323,7 @@ export default function AdsPage() {
           since={range.since}
           until={range.until}
           onClose={() => setSelectedId(null)}
-          onPaused={() => {
-            setSelectedId(null);
-            load();
-          }}
+          onStatusChanged={load}
         />
       )}
     </div>

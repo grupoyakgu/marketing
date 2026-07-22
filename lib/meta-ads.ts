@@ -405,29 +405,37 @@ export interface PauseResult {
   error?: string;
 }
 
-/** Pausing requires the ads_management permission on the token — ads_read
- * (everything else in this file) only allows reading. Surfaces that
+/** Pausing/resuming requires the ads_management permission on the token —
+ * ads_read (everything else in this file) only allows reading. Surfaces that
  * distinction clearly since it's an easy gap to hit after only following the
  * ads_read setup steps. */
-export async function pauseCampaign(campaignId: string): Promise<PauseResult> {
+async function setCampaignStatus(campaignId: string, status: 'ACTIVE' | 'PAUSED'): Promise<PauseResult> {
   const creds = getCredentials();
   if (!creds) return { success: false, error: 'Meta Ads is not configured.' };
 
   const res = await fetch(`${GRAPH_API}/${campaignId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ status: 'PAUSED', access_token: creds.token }),
+    body: new URLSearchParams({ status, access_token: creds.token }),
   });
   if (!res.ok) {
     const body = await res.text();
-    console.error(`Meta Ads pauseCampaign failed for ${campaignId}: ${res.status} ${body}`);
+    console.error(`Meta Ads setCampaignStatus(${status}) failed for ${campaignId}: ${res.status} ${body}`);
     const permissionIssue = res.status === 403 || body.includes('ads_management') || body.includes('permission');
     return {
       success: false,
       error: permissionIssue
-        ? 'Missing permission — pausing a campaign needs the ads_management permission on the token (ads_read alone only allows reading).'
-        : `Failed to pause campaign (${res.status}).`,
+        ? 'Missing permission — changing a campaign\'s status needs the ads_management permission on the token (ads_read alone only allows reading).'
+        : `Failed to ${status === 'PAUSED' ? 'pause' : 'resume'} campaign (${res.status}).`,
     };
   }
   return { success: true };
+}
+
+export async function pauseCampaign(campaignId: string): Promise<PauseResult> {
+  return setCampaignStatus(campaignId, 'PAUSED');
+}
+
+export async function resumeCampaign(campaignId: string): Promise<PauseResult> {
+  return setCampaignStatus(campaignId, 'ACTIVE');
 }

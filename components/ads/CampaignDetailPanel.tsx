@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, Pause, Calendar, Wallet } from 'lucide-react';
+import { X, Pause, Play, Calendar, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { PlatformBadge } from '@/components/ui/PlatformBadge';
@@ -46,7 +46,7 @@ export function CampaignDetailPanel({
   since,
   until,
   onClose,
-  onPaused,
+  onStatusChanged,
 }: {
   campaignId: string;
   accountId: string;
@@ -54,38 +54,60 @@ export function CampaignDetailPanel({
   since: string;
   until: string;
   onClose: () => void;
-  onPaused: () => void;
+  onStatusChanged: () => void;
 }) {
   const [detail, setDetail] = useState<CampaignDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pausing, setPausing] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
 
-  useEffect(() => {
-    setDetail(null);
-    setError(null);
+  function loadDetail() {
     const params = new URLSearchParams({ since, until, account: accountId });
     if (platform !== 'all') params.set('platform', platform);
-    fetch(`/api/dashboard/ads/campaigns/${campaignId}?${params}`)
+    return fetch(`/api/dashboard/ads/campaigns/${campaignId}?${params}`)
       .then(res => res.json())
       .then(body => {
         if (body.campaign) setDetail(body.campaign);
         else setError(body.error ?? 'Failed to load campaign.');
       })
       .catch(() => setError('Failed to load campaign.'));
+  }
+
+  useEffect(() => {
+    setDetail(null);
+    setError(null);
+    loadDetail();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaignId, accountId, platform, since, until]);
 
   async function handlePause() {
     if (!window.confirm('Pause this campaign? It will stop delivering immediately.')) return;
-    setPausing(true);
+    setUpdatingStatus(true);
     try {
       const res = await fetch(`/api/dashboard/ads/campaigns/${campaignId}/pause`, { method: 'POST' });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error ?? 'Failed to pause campaign.');
-      onPaused();
+      await loadDetail();
+      onStatusChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to pause campaign.');
     } finally {
-      setPausing(false);
+      setUpdatingStatus(false);
+    }
+  }
+
+  async function handleResume() {
+    if (!window.confirm('Resume this campaign? It will start delivering again immediately.')) return;
+    setUpdatingStatus(true);
+    try {
+      const res = await fetch(`/api/dashboard/ads/campaigns/${campaignId}/resume`, { method: 'POST' });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error ?? 'Failed to resume campaign.');
+      await loadDetail();
+      onStatusChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to resume campaign.');
+    } finally {
+      setUpdatingStatus(false);
     }
   }
 
@@ -167,9 +189,16 @@ export function CampaignDetailPanel({
             </div>
 
             {detail.status === 'ACTIVE' && (
-              <Button variant="danger" onClick={handlePause} disabled={pausing} className="w-full">
+              <Button variant="danger" onClick={handlePause} disabled={updatingStatus} className="w-full">
                 <Pause className="h-4 w-4" />
-                {pausing ? 'Pausing…' : 'Pause campaign'}
+                {updatingStatus ? 'Pausing…' : 'Pause campaign'}
+              </Button>
+            )}
+
+            {detail.status === 'PAUSED' && (
+              <Button variant="primary" onClick={handleResume} disabled={updatingStatus} className="w-full">
+                <Play className="h-4 w-4" />
+                {updatingStatus ? 'Resuming…' : 'Resume campaign'}
               </Button>
             )}
           </div>
