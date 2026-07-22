@@ -12,6 +12,7 @@ function defaultRange(): { since: string; until: string } {
 
 export async function GET(req: Request) {
   if (!isMetaAdsConfigured()) {
+    console.log('[ads/campaigns] configured=false (FACEBOOK_ADS_ACCESS_TOKEN or FACEBOOK_AD_ACCOUNT_ID missing)');
     return NextResponse.json({ configured: false, currency: 'USD', campaigns: [] });
   }
 
@@ -25,12 +26,19 @@ export async function GET(req: Request) {
 
   try {
     const dashboard = await getAdsDashboard({ platform, since, until });
-    if (!dashboard) return NextResponse.json({ configured: false, currency: 'USD', campaigns: [] });
+    if (!dashboard) {
+      console.log('[ads/campaigns] getAdsDashboard returned null despite configured=true');
+      return NextResponse.json({ configured: false, currency: 'USD', campaigns: [] });
+    }
+    console.log(
+      `[ads/campaigns] configured=true platform=${platform ?? 'all'} since=${since} until=${until} campaigns=${dashboard.campaigns.length} currency=${dashboard.currency} names=${JSON.stringify(dashboard.campaigns.map(c => c.name))}`
+    );
     return NextResponse.json(
       { configured: true, ...dashboard },
       { headers: { 'Cache-Control': 'no-store, must-revalidate' } }
     );
   } catch (err) {
+    console.error(`[ads/campaigns] threw: ${err instanceof Error ? err.message : err}`);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Failed to load ads dashboard.' },
       { status: 502 }
