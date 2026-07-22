@@ -36,6 +36,16 @@ export async function getWeeklyPlan(weekStart: string): Promise<MarketingPost[]>
   return data ?? [];
 }
 
+export async function getPostById(postId: string): Promise<MarketingPost | null> {
+  const { data, error } = await supabase
+    .from('marketing_plan')
+    .select('*')
+    .eq('id', postId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
 export async function approveAllDrafts(weekStart: string): Promise<void> {
   const { error } = await supabase
     .from('marketing_plan')

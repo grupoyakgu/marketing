@@ -19,10 +19,13 @@ import {
   getInstagramPostEngagement,
   getLinkedInPostEngagement,
   getAllAccountStats,
+  computeEngagementRate,
+  type PostEngagement,
 } from '@/lib/engagement';
 import {
   saveDraftPlan,
   getWeeklyPlan,
+  getPostById,
   approveAllDrafts,
   approvePost,
   deletePost,
@@ -31,6 +34,7 @@ import {
   trackDirectPost,
   getPostedPostsForCommentCheck,
   type PostUpdate,
+  type MarketingPost,
 } from '@/lib/marketing-plan';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -144,12 +148,16 @@ You have access to these proof points. **Spread them strategically across many p
 ## DELETING OR RESCHEDULING A SCHEDULED POST (anytime, not just right after drafting)
 The user can ask to delete/remove/cancel a post, or move/reschedule its date or time, at any point — not only during the initial approval flow above, e.g. days later, about something already approved and sitting in the schedule. Look it up with get_weekly_plan to find its post_id, then call reject_post to delete it or reschedule_post to change its date/time (pass only the field(s) actually changing). Both only work on posts that haven't been published yet (draft, approved, or failed) — they'll fail with a clear reason if the post has already gone out, since a published post's record is tracked history and can't be changed. If that happens, tell the user it's already live and can't be modified.
 
+## COMPARING TWO POSTS
+If the user asks to compare two posts (e.g. "how did post 3 do vs post 5", "compare Monday's LinkedIn post with last week's"), find each one's internal post_id via get_weekly_plan, then call compare_posts with post_id_a and post_id_b. It returns each post's platform, schedule, caption preview, and full engagement stats (or "not posted yet" if either hasn't gone out). Narrate the comparison yourself — call out which one performed better and on what, don't just repeat the raw numbers back.
+
 ---
 
 ## TOOLS SUMMARY
 - post_to_linkedin, post_to_facebook, post_to_instagram — publish posts
 - browse_drive_images — list Cloudinary images (call ONCE per plan)
 - save_marketing_plan, get_weekly_plan, approve_posts, reject_post, reschedule_post — plan management
+- compare_posts — compare engagement between two posts
 - reply_to_comment — reply to a specific comment
 - post_comment — post a new top-level comment on a post (for thank-yous)
 - get_engagement — fetch likes/comments/reach stats
@@ -308,6 +316,19 @@ const tools: Anthropic.Tool[] = [
         platform: { type: 'string', enum: ['linkedin', 'instagram', 'facebook'] },
       },
       required: [],
+    },
+  },
+  {
+    name: 'compare_posts',
+    description:
+      'Compares engagement between two posts from the marketing plan, side by side (likes, comments, shares, impressions, reach, engagement rate). Use the internal post_id from get_weekly_plan for each — not the platform post ID. Only posts that have actually been posted have engagement data; if either post hasn\'t been published yet, say so instead of comparing.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        post_id_a: { type: 'string' },
+        post_id_b: { type: 'string' },
+      },
+      required: ['post_id_a', 'post_id_b'],
     },
   },
 ];
@@ -507,6 +528,34 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
               const statsLine = accountStats.map(s => `${s.platform}: ${s.followers} followers`).join(' | ');
               const postLines = valid.map(e => `[${e!.platform}] Likes: ${e!.likes} | Comments: ${e!.comments} | Shares: ${e!.shares} | Impressions: ${e!.impressions} | Reach: ${e!.reach}`).join('\n');
               resultContent = `Account stats: ${statsLine}\n\nPost engagement (last 7 days):\n${postLines || 'No data.'}`;
+            }
+          } catch (err) {
+            resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        }
+
+        if (block.name === 'compare_posts') {
+          const input = block.input as { post_id_a: string; post_id_b: string };
+          try {
+            const [postA, postB] = await Promise.all([getPostById(input.post_id_a), getPostById(input.post_id_b)]);
+            if (!postA || !postB) {
+              resultContent = 'One or both post IDs were not found.';
+            } else {
+              const describe = async (post: MarketingPost): Promise<string> => {
+                const label = `[${post.platform}] ${post.scheduled_date} ${post.scheduled_time} — "${post.content.substring(0, 60)}..."`;
+                if (post.status !== 'posted' || !post.platform_post_id) {
+                  return `${label}\n  Not posted yet — no engagement data.`;
+                }
+                let eng: PostEngagement | null = null;
+                if (post.platform === 'facebook') eng = await getFacebookPostEngagement(post.platform_post_id);
+                else if (post.platform === 'instagram') eng = await getInstagramPostEngagement(post.platform_post_id);
+                else if (post.platform === 'linkedin') eng = await getLinkedInPostEngagement(post.platform_post_id);
+                if (!eng) return `${label}\n  No engagement data available.`;
+                const rate = computeEngagementRate(eng);
+                return `${label}\n  Likes: ${eng.likes} | Comments: ${eng.comments} | Shares: ${eng.shares} | Impressions: ${eng.impressions} | Reach: ${eng.reach} | Engagement rate: ${rate.toFixed(2)}%`;
+              };
+              const [descA, descB] = await Promise.all([describe(postA), describe(postB)]);
+              resultContent = `POST A:\n${descA}\n\nPOST B:\n${descB}`;
             }
           } catch (err) {
             resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
