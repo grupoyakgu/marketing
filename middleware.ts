@@ -10,6 +10,7 @@ export const config = {
     '/settings/:path*',
     '/planner/:path*',
     '/comments/:path*',
+    '/ads/:path*',
     '/api/dashboard/:path*',
     '/api/admin/:path*',
   ],
