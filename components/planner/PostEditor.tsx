@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, Check, Trash2, ImageIcon } from 'lucide-react';
+import { X, Check, Trash2, ImageIcon, ChevronRight, ChevronDown, FolderClosed } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { PlatformBadge } from '@/components/ui/PlatformBadge';
@@ -12,6 +12,11 @@ interface CloudinaryImage {
   id: string;
   name: string;
   url: string;
+}
+
+interface CloudinaryFolderImages {
+  folder: string;
+  images: CloudinaryImage[];
 }
 
 const PLATFORMS: Array<'linkedin' | 'instagram' | 'facebook'> = ['linkedin', 'instagram', 'facebook'];
@@ -32,7 +37,8 @@ export function PostEditor({
   const [scheduledTime, setScheduledTime] = useState('');
   const [platform, setPlatform] = useState<'linkedin' | 'instagram' | 'facebook'>('linkedin');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [images, setImages] = useState<CloudinaryImage[] | null>(null);
+  const [folders, setFolders] = useState<CloudinaryFolderImages[] | null>(null);
+  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
   const [savingImage, setSavingImage] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,12 +56,16 @@ export function PostEditor({
   }, [post]);
 
   useEffect(() => {
-    if (!post || !editable || images !== null) return;
+    if (!post || !editable || folders !== null) return;
     fetch('/api/dashboard/images')
       .then(res => res.json())
-      .then(body => setImages(body.images ?? []))
-      .catch(() => setImages([]));
-  }, [post, editable, images]);
+      .then(body => setFolders(body.folders ?? []))
+      .catch(() => setFolders([]));
+  }, [post, editable, folders]);
+
+  function toggleFolder(folder: string) {
+    setExpandedFolders(prev => ({ ...prev, [folder]: !prev[folder] }));
+  }
 
   if (!post) return null;
 
@@ -219,26 +229,55 @@ export function PostEditor({
                 Image
                 {savingImage && <span className="font-normal text-neutral-400">Saving…</span>}
               </label>
-              {images === null ? (
+              {folders === null ? (
                 <p className="text-xs text-neutral-400">Loading images…</p>
-              ) : images.length === 0 ? (
-                <p className="text-xs text-neutral-400">No Cloudinary images found.</p>
+              ) : folders.length === 0 ? (
+                <p className="text-xs text-neutral-400">No Cloudinary folders configured.</p>
               ) : (
-                <div className="grid grid-cols-4 gap-2">
-                  {images.map(img => (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      key={img.id}
-                      src={img.url}
-                      alt={img.name}
-                      onClick={() => handleImageSelect(img.url)}
-                      className={cn(
-                        savingImage && 'pointer-events-none opacity-60',
-                        'aspect-square cursor-pointer rounded-lg object-cover ring-2 ring-transparent transition hover:opacity-80',
-                        imageUrl === img.url && 'ring-neutral-900 dark:ring-white'
-                      )}
-                    />
-                  ))}
+                <div className="space-y-2">
+                  {folders.map(f => {
+                    const isOpen = !!expandedFolders[f.folder];
+                    return (
+                      <div key={f.folder} className="rounded-xl border border-neutral-200 dark:border-neutral-700">
+                        <button
+                          type="button"
+                          onClick={() => toggleFolder(f.folder)}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium text-neutral-700 dark:text-neutral-300"
+                        >
+                          {isOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                          <FolderClosed className="h-3.5 w-3.5 text-neutral-400" />
+                          {f.folder}
+                          <span className="ml-auto text-xs font-normal text-neutral-400">
+                            {f.images.length} image{f.images.length === 1 ? '' : 's'}
+                          </span>
+                        </button>
+                        {isOpen && (
+                          <div className="border-t border-neutral-200 p-2 dark:border-neutral-700">
+                            {f.images.length === 0 ? (
+                              <p className="px-1 py-1 text-xs text-neutral-400">No images in this directory.</p>
+                            ) : (
+                              <div className="grid grid-cols-4 gap-2">
+                                {f.images.map(img => (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    key={img.id}
+                                    src={img.url}
+                                    alt={img.name}
+                                    onClick={() => handleImageSelect(img.url)}
+                                    className={cn(
+                                      savingImage && 'pointer-events-none opacity-60',
+                                      'aspect-square cursor-pointer rounded-lg object-cover ring-2 ring-transparent transition hover:opacity-80',
+                                      imageUrl === img.url && 'ring-neutral-900 dark:ring-white'
+                                    )}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

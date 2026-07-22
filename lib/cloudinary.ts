@@ -6,21 +6,26 @@ export interface CloudinaryImage {
   url: string;
 }
 
-export async function listCloudinaryImages(): Promise<CloudinaryImage[]> {
+export interface CloudinaryFolderImages {
+  folder: string;
+  images: CloudinaryImage[];
+}
+
+function getCredentials() {
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
   const apiKey = process.env.CLOUDINARY_API_KEY;
   const apiSecret = process.env.CLOUDINARY_API_SECRET;
-  const folder = process.env.CLOUDINARY_FOLDER;
-
   if (!cloudName || !apiKey || !apiSecret) {
     throw new Error('Cloudinary not configured (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET required)');
   }
+  return { cloudName, apiKey, apiSecret };
+}
 
-  const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
-
+async function fetchResources(cloudName: string, auth: string, prefix?: string): Promise<CloudinaryImage[]> {
   // Use /resources/image with optional prefix — works on all Cloudinary plans
+  // (the alternative /resources/search endpoint requires a paid Search API add-on).
   const params = new URLSearchParams({ type: 'upload', max_results: '50' });
-  if (folder) params.set('prefix', folder);
+  if (prefix) params.set('prefix', prefix);
 
   const res = await fetch(`${CLOUDINARY_API}/${cloudName}/resources/image?${params}`, {
     headers: { Authorization: `Basic ${auth}` },
@@ -33,26 +38,56 @@ export async function listCloudinaryImages(): Promise<CloudinaryImage[]> {
 
   const json = await res.json();
   const resources: { public_id: string; secure_url: string; filename?: string }[] = json.resources ?? [];
-
-  if (resources.length === 0 && folder) {
-    // Retry without prefix in case images are at root level
-    const res2 = await fetch(`${CLOUDINARY_API}/${cloudName}/resources/image?type=upload&max_results=50`, {
-      headers: { Authorization: `Basic ${auth}` },
-    });
-    if (res2.ok) {
-      const json2 = await res2.json();
-      const all: { public_id: string; secure_url: string; filename?: string }[] = json2.resources ?? [];
-      return all.map(r => ({
-        id: r.public_id,
-        name: r.filename ?? r.public_id.split('/').pop() ?? r.public_id,
-        url: r.secure_url,
-      }));
-    }
-  }
-
   return resources.map(r => ({
     id: r.public_id,
     name: r.filename ?? r.public_id.split('/').pop() ?? r.public_id,
     url: r.secure_url,
   }));
+}
+
+/** Flat listing under CLOUDINARY_FOLDER — used by Pepe's browse_drive_images
+ * tool and the post-schedule cron's fallback image pick. Unrelated to the
+ * dashboard's per-project gallery below. */
+export async function listCloudinaryImages(): Promise<CloudinaryImage[]> {
+  const { cloudName, apiKey, apiSecret } = getCredentials();
+  const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
+  const folder = process.env.CLOUDINARY_FOLDER;
+
+  const images = await fetchResources(cloudName, auth, folder);
+  if (images.length === 0 && folder) {
+    // Retry without prefix in case images are at root level
+    return fetchResources(cloudName, auth);
+  }
+  return images;
+}
+
+// Project subfolders shown as separate, non-mixed groups in the dashboard's
+// post-editor image picker — each stays under its own directory so a user can
+// expand a specific project and see only its images. Configurable via
+// CLOUDINARY_GALLERY_FOLDERS (comma-separated) without a redeploy; defaults
+// to the two current projects.
+const DEFAULT_GALLERY_FOLDERS = ['BDS 36', 'Peral 23'];
+
+function getGalleryFolderPrefixes(): { name: string; prefix: string }[] {
+  const raw = process.env.CLOUDINARY_GALLERY_FOLDERS;
+  const names = raw ? raw.split(',').map(f => f.trim()).filter(Boolean) : DEFAULT_GALLERY_FOLDERS;
+  const root = process.env.CLOUDINARY_FOLDER?.replace(/\/+$/, '');
+  return names.map(name => ({ name, prefix: root ? `${root}/${name}` : name }));
+}
+
+/** Lists each project folder's images separately (never merged) for the
+ * planner's image picker. A folder with no matches just comes back empty —
+ * unlike listCloudinaryImages(), there's no root-level fallback here, since
+ * that would defeat keeping each project's images under its own directory. */
+export async function listCloudinaryImagesByFolder(): Promise<CloudinaryFolderImages[]> {
+  const { cloudName, apiKey, apiSecret } = getCredentials();
+  const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
+  const folders = getGalleryFolderPrefixes();
+
+  return Promise.all(
+    folders.map(async ({ name, prefix }) => ({
+      folder: name,
+      images: await fetchResources(cloudName, auth, prefix),
+    }))
+  );
 }
