@@ -94,18 +94,34 @@ async function listChildFolders(cloudName: string, auth: string, path: string): 
   return folders.map(f => f.name);
 }
 
+// Cloudinary caps each by_asset_folder response at 500 results and returns a
+// next_cursor when there's more — capped here at 10 pages (5,000 images) as a
+// sanity limit, far beyond any real project folder, so a runaway account
+// state can't loop forever.
 async function listResourcesByAssetFolder(cloudName: string, auth: string, assetFolder: string): Promise<CloudinaryImage[]> {
-  const params = new URLSearchParams({ asset_folder: assetFolder, max_results: '50' });
-  const res = await fetch(`${CLOUDINARY_API}/${cloudName}/resources/by_asset_folder?${params}`, {
-    headers: { Authorization: `Basic ${auth}` },
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Cloudinary by_asset_folder API error ${res.status}: ${body}`);
+  const all: CloudinaryImage[] = [];
+  let cursor: string | undefined;
+
+  for (let page = 0; page < 10; page++) {
+    const params = new URLSearchParams({ asset_folder: assetFolder, max_results: '500' });
+    if (cursor) params.set('next_cursor', cursor);
+
+    const res = await fetch(`${CLOUDINARY_API}/${cloudName}/resources/by_asset_folder?${params}`, {
+      headers: { Authorization: `Basic ${auth}` },
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Cloudinary by_asset_folder API error ${res.status}: ${body}`);
+    }
+    const json = await res.json();
+    const resources: { public_id: string; secure_url: string; filename?: string }[] = json.resources ?? [];
+    all.push(...resources.map(mapResource));
+
+    cursor = json.next_cursor;
+    if (!cursor) break;
   }
-  const json = await res.json();
-  const resources: { public_id: string; secure_url: string; filename?: string }[] = json.resources ?? [];
-  return resources.map(mapResource);
+
+  return all;
 }
 
 /** Lists each project subfolder under CLOUDINARY_GALLERY_ROOT (default

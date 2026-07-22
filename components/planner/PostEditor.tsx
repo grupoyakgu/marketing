@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, Check, Trash2, ImageIcon, ChevronRight, ChevronDown, FolderClosed } from 'lucide-react';
+import { X, Check, Trash2, ImageIcon, ChevronRight, ChevronDown, ChevronLeft, FolderClosed } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { PlatformBadge } from '@/components/ui/PlatformBadge';
@@ -20,6 +20,7 @@ interface CloudinaryFolderImages {
 }
 
 const PLATFORMS: Array<'linkedin' | 'instagram' | 'facebook'> = ['linkedin', 'instagram', 'facebook'];
+const IMAGES_PER_PAGE = 20;
 
 export function PostEditor({
   post,
@@ -39,6 +40,7 @@ export function PostEditor({
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [folders, setFolders] = useState<CloudinaryFolderImages[] | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
+  const [folderPage, setFolderPage] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
   const [savingImage, setSavingImage] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +67,10 @@ export function PostEditor({
 
   function toggleFolder(folder: string) {
     setExpandedFolders(prev => ({ ...prev, [folder]: !prev[folder] }));
+  }
+
+  function setPage(folder: string, page: number) {
+    setFolderPage(prev => ({ ...prev, [folder]: page }));
   }
 
   if (!post) return null;
@@ -237,6 +243,9 @@ export function PostEditor({
                 <div className="space-y-2">
                   {folders.map(f => {
                     const isOpen = !!expandedFolders[f.folder];
+                    const totalPages = Math.max(1, Math.ceil(f.images.length / IMAGES_PER_PAGE));
+                    const page = Math.min(folderPage[f.folder] ?? 0, totalPages - 1);
+                    const pageImages = f.images.slice(page * IMAGES_PER_PAGE, page * IMAGES_PER_PAGE + IMAGES_PER_PAGE);
                     return (
                       <div key={f.folder} className="rounded-xl border border-neutral-200 dark:border-neutral-700">
                         <button
@@ -256,22 +265,50 @@ export function PostEditor({
                             {f.images.length === 0 ? (
                               <p className="px-1 py-1 text-xs text-neutral-400">No images in this directory.</p>
                             ) : (
-                              <div className="grid grid-cols-4 gap-2">
-                                {f.images.map(img => (
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  <img
-                                    key={img.id}
-                                    src={img.url}
-                                    alt={img.name}
-                                    onClick={() => handleImageSelect(img.url)}
-                                    className={cn(
-                                      savingImage && 'pointer-events-none opacity-60',
-                                      'aspect-square cursor-pointer rounded-lg object-cover ring-2 ring-transparent transition hover:opacity-80',
-                                      imageUrl === img.url && 'ring-neutral-900 dark:ring-white'
-                                    )}
-                                  />
-                                ))}
-                              </div>
+                              <>
+                                <div className="grid grid-cols-4 gap-2">
+                                  {pageImages.map(img => (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                      key={img.id}
+                                      src={img.url}
+                                      alt={img.name}
+                                      onClick={() => handleImageSelect(img.url)}
+                                      className={cn(
+                                        savingImage && 'pointer-events-none opacity-60',
+                                        'aspect-square cursor-pointer rounded-lg object-cover ring-2 ring-transparent transition hover:opacity-80',
+                                        imageUrl === img.url && 'ring-neutral-900 dark:ring-white'
+                                      )}
+                                    />
+                                  ))}
+                                </div>
+                                {totalPages > 1 && (
+                                  <div className="mt-2 flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400">
+                                    <button
+                                      type="button"
+                                      onClick={() => setPage(f.folder, page - 1)}
+                                      disabled={page === 0}
+                                      className="flex items-center gap-1 rounded-lg px-2 py-1 disabled:opacity-40 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                                    >
+                                      <ChevronLeft className="h-3.5 w-3.5" />
+                                      Prev
+                                    </button>
+                                    <span>
+                                      {page * IMAGES_PER_PAGE + 1}–{Math.min((page + 1) * IMAGES_PER_PAGE, f.images.length)} of{' '}
+                                      {f.images.length}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setPage(f.folder, page + 1)}
+                                      disabled={page >= totalPages - 1}
+                                      className="flex items-center gap-1 rounded-lg px-2 py-1 disabled:opacity-40 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                                    >
+                                      Next
+                                      <ChevronRight className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                )}
+                              </>
                             )}
                           </div>
                         )}
