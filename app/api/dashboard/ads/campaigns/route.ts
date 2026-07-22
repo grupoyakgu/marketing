@@ -20,18 +20,19 @@ export async function GET(req: Request) {
   const platformParam = url.searchParams.get('platform');
   const platform: AdPlatform | undefined =
     platformParam === 'facebook' || platformParam === 'instagram' ? platformParam : undefined;
+  const accountId = url.searchParams.get('account') ?? undefined;
   const fallback = defaultRange();
   const since = url.searchParams.get('since') ?? fallback.since;
   const until = url.searchParams.get('until') ?? fallback.until;
 
   try {
-    const dashboard = await getAdsDashboard({ platform, since, until });
+    const dashboard = await getAdsDashboard({ platform, since, until, accountId });
     if (!dashboard) {
-      console.log('[ads/campaigns] getAdsDashboard returned null despite configured=true');
+      console.log(`[ads/campaigns] getAdsDashboard returned null for account=${accountId ?? 'default'} despite configured=true`);
       return NextResponse.json({ configured: false, currency: 'USD', campaigns: [] });
     }
     console.log(
-      `[ads/campaigns] configured=true platform=${platform ?? 'all'} since=${since} until=${until} campaigns=${dashboard.campaigns.length} currency=${dashboard.currency} names=${JSON.stringify(dashboard.campaigns.map(c => c.name))}`
+      `[ads/campaigns] configured=true account=${accountId ?? 'default'} platform=${platform ?? 'all'} since=${since} until=${until} campaigns=${dashboard.campaigns.length} currency=${dashboard.currency} names=${JSON.stringify(dashboard.campaigns.map(c => c.name))}`
     );
     return NextResponse.json(
       { configured: true, ...dashboard },

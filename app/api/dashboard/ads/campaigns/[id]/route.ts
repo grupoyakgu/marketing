@@ -15,12 +15,13 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   const platformParam = url.searchParams.get('platform');
   const platform: AdPlatform | undefined =
     platformParam === 'facebook' || platformParam === 'instagram' ? platformParam : undefined;
+  const accountId = url.searchParams.get('account') ?? undefined;
   const fallback = defaultRange();
   const since = url.searchParams.get('since') ?? fallback.since;
   const until = url.searchParams.get('until') ?? fallback.until;
 
   try {
-    const detail = await getCampaignDetail(params.id, { platform, since, until });
+    const detail = await getCampaignDetail(params.id, { platform, since, until, accountId });
     if (!detail) return NextResponse.json({ error: 'Campaign not found or Meta Ads not configured.' }, { status: 404 });
     return NextResponse.json(
       { campaign: detail },

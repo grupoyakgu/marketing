@@ -41,6 +41,7 @@ function formatDate(iso: string | null): string {
 
 export function CampaignDetailPanel({
   campaignId,
+  accountId,
   platform,
   since,
   until,
@@ -48,6 +49,7 @@ export function CampaignDetailPanel({
   onPaused,
 }: {
   campaignId: string;
+  accountId: string;
   platform: AdPlatform | 'all';
   since: string;
   until: string;
@@ -61,7 +63,7 @@ export function CampaignDetailPanel({
   useEffect(() => {
     setDetail(null);
     setError(null);
-    const params = new URLSearchParams({ since, until });
+    const params = new URLSearchParams({ since, until, account: accountId });
     if (platform !== 'all') params.set('platform', platform);
     fetch(`/api/dashboard/ads/campaigns/${campaignId}?${params}`)
       .then(res => res.json())
@@ -70,7 +72,7 @@ export function CampaignDetailPanel({
         else setError(body.error ?? 'Failed to load campaign.');
       })
       .catch(() => setError('Failed to load campaign.'));
-  }, [campaignId, platform, since, until]);
+  }, [campaignId, accountId, platform, since, until]);
 
   async function handlePause() {
     if (!window.confirm('Pause this campaign? It will stop delivering immediately.')) return;

@@ -2,20 +2,65 @@ const GRAPH_API = 'https://graph.facebook.com/v19.0';
 
 export type AdPlatform = 'facebook' | 'instagram';
 
+// FACEBOOK_AD_ACCOUNT_ID accepts a comma-separated list, one per account the
+// user wants to switch between in the dashboard (e.g. their Business
+// Manager-owned account plus an Instagram-app-created one) — same pattern as
+// CLOUDINARY_GALLERY_FOLDERS. The first one is the default when the caller
+// doesn't specify which account to use.
+function getConfiguredAccountIds(): string[] {
+  const raw = process.env.FACEBOOK_AD_ACCOUNT_ID;
+  if (!raw) return [];
+  return raw
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(id => (id.startsWith('act_') ? id : `act_${id}`));
+}
+
 // Separate from INSTAGRAM_PAGE_ACCESS_TOKEN (organic posting/reading) since
 // ads data needs Meta's Marketing API and the ads_read permission (and
 // ads_management to pause a campaign) — the user may add these to that same
 // token, or keep a dedicated one; either way this reads whichever is set here.
-function getCredentials(): { token: string; accountId: string } | null {
+// accountId, if passed, must be one of the configured accounts — never trust
+// an arbitrary caller-supplied account id, since the token may have broader
+// access than what's meant to be exposed through this dashboard.
+function getCredentials(accountId?: string): { token: string; accountId: string } | null {
   const token = process.env.FACEBOOK_ADS_ACCESS_TOKEN;
-  const rawAccountId = process.env.FACEBOOK_AD_ACCOUNT_ID;
-  if (!token || !rawAccountId) return null;
-  const accountId = rawAccountId.startsWith('act_') ? rawAccountId : `act_${rawAccountId}`;
-  return { token, accountId };
+  const configured = getConfiguredAccountIds();
+  if (!token || configured.length === 0) return null;
+
+  if (!accountId) return { token, accountId: configured[0] };
+  const normalized = accountId.startsWith('act_') ? accountId : `act_${accountId}`;
+  if (!configured.includes(normalized)) return null;
+  return { token, accountId: normalized };
 }
 
 export function isMetaAdsConfigured(): boolean {
   return getCredentials() !== null;
+}
+
+export interface AdAccountOption {
+  id: string;
+  name: string;
+}
+
+export async function listConfiguredAdAccounts(): Promise<AdAccountOption[]> {
+  const token = process.env.FACEBOOK_ADS_ACCESS_TOKEN;
+  const accountIds = getConfiguredAccountIds();
+  if (!token || accountIds.length === 0) return [];
+
+  return Promise.all(
+    accountIds.map(async id => {
+      const params = new URLSearchParams({ fields: 'name', access_token: token });
+      const res = await fetch(`${GRAPH_API}/${id}?${params}`);
+      if (!res.ok) {
+        console.error(`Meta Ads listConfiguredAdAccounts failed for ${id}: ${res.status} ${await res.text()}`);
+        return { id, name: id.replace('act_', '') };
+      }
+      const json = await res.json();
+      return { id, name: json.name || id.replace('act_', '') };
+    })
+  );
 }
 
 // ─── Low-level fetch helpers ────────────────────────────────────────────────
@@ -199,8 +244,9 @@ export async function getAdsDashboard(opts: {
   platform?: AdPlatform;
   since: string;
   until: string;
+  accountId?: string;
 }): Promise<AdsDashboard | null> {
-  const creds = getCredentials();
+  const creds = getCredentials(opts.accountId);
   if (!creds) return null;
 
   const [currency, campaigns, adSets] = await Promise.all([
@@ -299,9 +345,9 @@ export interface CampaignDetail extends CampaignSummary {
 
 export async function getCampaignDetail(
   campaignId: string,
-  opts: { platform?: AdPlatform; since: string; until: string }
+  opts: { platform?: AdPlatform; since: string; until: string; accountId?: string }
 ): Promise<CampaignDetail | null> {
-  const creds = getCredentials();
+  const creds = getCredentials(opts.accountId);
   if (!creds) return null;
 
   const params = new URLSearchParams({

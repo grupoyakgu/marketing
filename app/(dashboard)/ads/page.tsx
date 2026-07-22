@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Megaphone, Wallet, TrendingUp, Eye, Calendar } from 'lucide-react';
+import { Megaphone, Wallet, TrendingUp, Eye, Calendar, Landmark } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { PlatformBadge } from '@/components/ui/PlatformBadge';
@@ -62,7 +62,16 @@ const PRESETS: { value: Preset; label: string }[] = [
   { value: 'custom', label: 'Custom' },
 ];
 
+const ACCOUNT_STORAGE_KEY = 'ads-selected-account';
+
+interface AdAccountOption {
+  id: string;
+  name: string;
+}
+
 export default function AdsPage() {
+  const [accounts, setAccounts] = useState<AdAccountOption[] | null>(null);
+  const [accountId, setAccountId] = useState<string | null>(null);
   const [platform, setPlatform] = useState<AdPlatform | 'all'>('all');
   const [preset, setPreset] = useState<Preset>('30d');
   const [range, setRange] = useState(() => presetRange('30d'));
@@ -72,9 +81,37 @@ export default function AdsPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  useEffect(() => {
+    fetch('/api/dashboard/ads/accounts')
+      .then(res => res.json())
+      .then(body => {
+        const list: AdAccountOption[] = body.accounts ?? [];
+        setAccounts(list);
+        if (list.length === 0) {
+          setConfigured(false);
+          setCampaigns([]);
+          return;
+        }
+        const saved = localStorage.getItem(ACCOUNT_STORAGE_KEY);
+        const initial = list.find(a => a.id === saved)?.id ?? list[0].id;
+        setAccountId(initial);
+      })
+      .catch(() => {
+        setAccounts([]);
+        setConfigured(false);
+        setCampaigns([]);
+      });
+  }, []);
+
+  function handleAccountChange(id: string) {
+    setAccountId(id);
+    localStorage.setItem(ACCOUNT_STORAGE_KEY, id);
+  }
+
   const load = useCallback(async () => {
+    if (!accountId) return;
     setError(null);
-    const params = new URLSearchParams({ since: range.since, until: range.until });
+    const params = new URLSearchParams({ since: range.since, until: range.until, account: accountId });
     if (platform !== 'all') params.set('platform', platform);
     try {
       const res = await fetch(`/api/dashboard/ads/campaigns?${params}`);
@@ -87,11 +124,11 @@ export default function AdsPage() {
       setError(err instanceof Error ? err.message : 'Failed to load ads dashboard.');
       setCampaigns([]);
     }
-  }, [platform, range]);
+  }, [platform, range, accountId]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (accounts !== null) load();
+  }, [load, accounts]);
 
   function handlePreset(p: Preset) {
     setPreset(p);
@@ -132,6 +169,31 @@ export default function AdsPage() {
       ) : (
         <>
           <Card className="flex flex-wrap items-center gap-4">
+            {accounts && accounts.length > 1 && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                  <Landmark className="mr-1 inline h-3.5 w-3.5" />
+                  Account
+                </span>
+                <div className="flex flex-wrap gap-1 rounded-xl bg-neutral-100 p-1 dark:bg-neutral-800">
+                  {accounts.map(a => (
+                    <button
+                      key={a.id}
+                      onClick={() => handleAccountChange(a.id)}
+                      className={cn(
+                        'rounded-lg px-2.5 py-1 text-xs font-medium transition',
+                        accountId === a.id
+                          ? 'bg-white text-neutral-900 shadow-sm dark:bg-neutral-700 dark:text-white'
+                          : 'text-neutral-500 dark:text-neutral-400'
+                      )}
+                    >
+                      {a.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center gap-2">
               <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Platform</span>
               <div className="flex gap-1 rounded-xl bg-neutral-100 p-1 dark:bg-neutral-800">
@@ -253,9 +315,10 @@ export default function AdsPage() {
         </>
       )}
 
-      {selectedId && (
+      {selectedId && accountId && (
         <CampaignDetailPanel
           campaignId={selectedId}
+          accountId={accountId}
           platform={platform}
           since={range.since}
           until={range.until}
