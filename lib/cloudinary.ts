@@ -71,8 +71,10 @@ const DEFAULT_GALLERY_FOLDERS = ['BDS 36', 'Peral 23'];
 function getGalleryFolderPrefixes(): { name: string; prefix: string }[] {
   const raw = process.env.CLOUDINARY_GALLERY_FOLDERS;
   const names = raw ? raw.split(',').map(f => f.trim()).filter(Boolean) : DEFAULT_GALLERY_FOLDERS;
-  const root = process.env.CLOUDINARY_FOLDER?.replace(/\/+$/, '');
-  return names.map(name => ({ name, prefix: root ? `${root}/${name}` : name }));
+  // Not nested under CLOUDINARY_FOLDER — confirmed via production logs that
+  // CLOUDINARY_FOLDER doesn't match any actual image (they live at Cloudinary
+  // root, no folder prefix), so these are their own top-level folders.
+  return names.map(name => ({ name, prefix: name }));
 }
 
 /** Lists each project folder's images separately (never merged) for the
