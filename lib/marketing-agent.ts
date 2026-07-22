@@ -26,9 +26,11 @@ import {
   approveAllDrafts,
   approvePost,
   deletePost,
+  updatePost,
   getNextMonday,
   trackDirectPost,
   getPostedPostsForCommentCheck,
+  type PostUpdate,
 } from '@/lib/marketing-plan';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -139,15 +141,15 @@ You have access to these proof points. **Spread them strategically across many p
 - "reject post 3" → call reject_post
 - Edit request → update, re-save, re-ask. Check get_weekly_plan's Image field first — if one is already set (the user may have picked or changed it in the dashboard planner), carry that same image_url into the replacement post instead of picking a new one, unless the user's edit is specifically about the image.
 
-## DELETING A SCHEDULED POST (anytime, not just right after drafting)
-The user can ask to delete/remove/cancel a post at any point, not only during the initial approval flow above — e.g. days later, about something already approved and sitting in the schedule. Look it up with get_weekly_plan to find its post_id, then call reject_post. This only works for posts that haven't been published yet (draft, approved, or failed) — reject_post will fail with a clear reason if the post has already gone out, since a published post's record is tracked history and can't be removed. If that happens, tell the user it's already live and can't be deleted.
+## DELETING OR RESCHEDULING A SCHEDULED POST (anytime, not just right after drafting)
+The user can ask to delete/remove/cancel a post, or move/reschedule its date or time, at any point — not only during the initial approval flow above, e.g. days later, about something already approved and sitting in the schedule. Look it up with get_weekly_plan to find its post_id, then call reject_post to delete it or reschedule_post to change its date/time (pass only the field(s) actually changing). Both only work on posts that haven't been published yet (draft, approved, or failed) — they'll fail with a clear reason if the post has already gone out, since a published post's record is tracked history and can't be changed. If that happens, tell the user it's already live and can't be modified.
 
 ---
 
 ## TOOLS SUMMARY
 - post_to_linkedin, post_to_facebook, post_to_instagram — publish posts
 - browse_drive_images — list Cloudinary images (call ONCE per plan)
-- save_marketing_plan, get_weekly_plan, approve_posts, reject_post — plan management
+- save_marketing_plan, get_weekly_plan, approve_posts, reject_post, reschedule_post — plan management
 - reply_to_comment — reply to a specific comment
 - post_comment — post a new top-level comment on a post (for thank-yous)
 - get_engagement — fetch likes/comments/reach stats
@@ -252,6 +254,20 @@ const tools: Anthropic.Tool[] = [
     input_schema: {
       type: 'object' as const,
       properties: { post_id: { type: 'string' } },
+      required: ['post_id'],
+    },
+  },
+  {
+    name: 'reschedule_post',
+    description:
+      'Changes the scheduled date and/or time of an existing post in the marketing plan — use this any time the user asks to move, reschedule, or change the timing of a post. Provide scheduled_date and/or scheduled_time (only the ones being changed). Only works on posts that have not been published yet (draft, approved, or failed); a post that has already been posted cannot be rescheduled.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        post_id: { type: 'string' },
+        scheduled_date: { type: 'string', description: 'New date, YYYY-MM-DD.' },
+        scheduled_time: { type: 'string', description: 'New time, 24-hour HH:MM, Spain local time.' },
+      },
       required: ['post_id'],
     },
   },
@@ -407,6 +423,23 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
           try {
             await deletePost(input.post_id);
             resultContent = `Post ${input.post_id} removed.`;
+          } catch (err) {
+            resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        }
+
+        if (block.name === 'reschedule_post') {
+          const input = block.input as { post_id: string; scheduled_date?: string; scheduled_time?: string };
+          try {
+            const fields: PostUpdate = {};
+            if (input.scheduled_date) fields.scheduled_date = input.scheduled_date;
+            if (input.scheduled_time) fields.scheduled_time = input.scheduled_time;
+            if (Object.keys(fields).length === 0) {
+              resultContent = 'Provide at least a new scheduled_date or scheduled_time.';
+            } else {
+              const post = await updatePost(input.post_id, fields);
+              resultContent = `Post ${post.id} rescheduled to ${post.scheduled_date} ${post.scheduled_time}.`;
+            }
           } catch (err) {
             resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
           }

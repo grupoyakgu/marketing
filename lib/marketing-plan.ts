@@ -81,6 +81,17 @@ export interface PostUpdate {
 }
 
 export async function updatePost(postId: string, fields: PostUpdate): Promise<MarketingPost> {
+  const { data: existing, error: fetchError } = await supabase
+    .from('marketing_plan')
+    .select('status')
+    .eq('id', postId)
+    .maybeSingle();
+  if (fetchError) throw new Error(fetchError.message);
+  if (!existing) throw new Error('Post not found.');
+  if (existing.status === 'posted') {
+    throw new Error('This post has already been published — it can no longer be edited or rescheduled, only posts that have not been posted yet.');
+  }
+
   const { data, error } = await supabase
     .from('marketing_plan')
     .update(fields)

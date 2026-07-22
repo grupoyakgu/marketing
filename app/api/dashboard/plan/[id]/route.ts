@@ -12,12 +12,19 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
   if (typeof body.image_url === 'string' || body.image_url === null) fields.image_url = body.image_url;
 
-  const post = await updatePost(params.id, fields);
-  console.log(`[dashboard/plan PATCH] id=${params.id} fields=${JSON.stringify(fields)} savedImageUrl=${post.image_url ?? 'null'}`);
-  return NextResponse.json(
-    { post },
-    { headers: { 'Cache-Control': 'no-store, must-revalidate' } }
-  );
+  try {
+    const post = await updatePost(params.id, fields);
+    console.log(`[dashboard/plan PATCH] id=${params.id} fields=${JSON.stringify(fields)} savedImageUrl=${post.image_url ?? 'null'}`);
+    return NextResponse.json(
+      { post },
+      { headers: { 'Cache-Control': 'no-store, must-revalidate' } }
+    );
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Failed to update post.' },
+      { status: 400 }
+    );
+  }
 }
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
