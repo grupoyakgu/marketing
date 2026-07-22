@@ -77,6 +77,40 @@ function getGalleryFolderPrefixes(): { name: string; prefix: string }[] {
   return names.map(name => ({ name, prefix: name }));
 }
 
+/** Diagnostic only: dumps the account's real root folder list plus a sample
+ * of un-prefixed resources (public_id + asset_folder, if present) so we can
+ * tell — from actual account data instead of guesswork — whether the
+ * configured names are wrong, or whether this account uses Cloudinary's
+ * newer "Dynamic Folders" (where an image's folder is separate metadata, not
+ * part of public_id, so a public_id-prefix search can never find it). */
+async function debugDumpFolderStructure(cloudName: string, auth: string): Promise<void> {
+  try {
+    const foldersRes = await fetch(`${CLOUDINARY_API}/${cloudName}/folders`, {
+      headers: { Authorization: `Basic ${auth}` },
+    });
+    const foldersJson = foldersRes.ok ? await foldersRes.json() : { error: await foldersRes.text() };
+    console.log(`[cloudinary debug] root folders: ${JSON.stringify(foldersJson)}`);
+  } catch (err) {
+    console.error(`[cloudinary debug] /folders fetch failed: ${err instanceof Error ? err.message : err}`);
+  }
+
+  try {
+    const params = new URLSearchParams({ type: 'upload', max_results: '20' });
+    const res = await fetch(`${CLOUDINARY_API}/${cloudName}/resources/image?${params}`, {
+      headers: { Authorization: `Basic ${auth}` },
+    });
+    const json = res.ok ? await res.json() : { error: await res.text() };
+    const sample = (json.resources ?? []).map((r: Record<string, unknown>) => ({
+      public_id: r.public_id,
+      asset_folder: r.asset_folder,
+      folder: r.folder,
+    }));
+    console.log(`[cloudinary debug] sample resources (no prefix): ${JSON.stringify(sample)}`);
+  } catch (err) {
+    console.error(`[cloudinary debug] unprefixed resources fetch failed: ${err instanceof Error ? err.message : err}`);
+  }
+}
+
 /** Lists each project folder's images separately (never merged) for the
  * planner's image picker. A folder with no matches just comes back empty —
  * unlike listCloudinaryImages(), there's no root-level fallback here, since
@@ -100,5 +134,10 @@ export async function listCloudinaryImagesByFolder(): Promise<CloudinaryFolderIm
   console.log(
     `[cloudinary] gallery folders queried: ${JSON.stringify(results.map(r => ({ folder: r.folder, prefix: r.prefix, count: r.images.length })))}`
   );
+
+  if (results.every(r => r.images.length === 0)) {
+    await debugDumpFolderStructure(cloudName, auth);
+  }
+
   return results.map(({ folder, images }) => ({ folder, images }));
 }
