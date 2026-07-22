@@ -323,7 +323,9 @@ export default function AdsPage() {
           since={range.since}
           until={range.until}
           onClose={() => setSelectedId(null)}
-          onStatusChanged={load}
+          onStatusChanged={(id, status) =>
+            setCampaigns(prev => prev?.map(c => (c.id === id ? { ...c, status } : c)) ?? prev)
+          }
         />
       )}
     </div>

@@ -54,7 +54,7 @@ export function CampaignDetailPanel({
   since: string;
   until: string;
   onClose: () => void;
-  onStatusChanged: () => void;
+  onStatusChanged: (campaignId: string, status: 'ACTIVE' | 'PAUSED') => void;
 }) {
   const [detail, setDetail] = useState<CampaignDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +79,11 @@ export function CampaignDetailPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaignId, accountId, platform, since, until]);
 
+  // Meta's own read API can lag a few seconds behind a write it just
+  // accepted — an immediate re-fetch here can still report the old status
+  // even though the pause/resume genuinely took effect. Since a successful
+  // response already tells us the new status for certain, apply it directly
+  // instead of trusting a refetch that may race that propagation delay.
   async function handlePause() {
     if (!window.confirm('Pause this campaign? It will stop delivering immediately.')) return;
     setUpdatingStatus(true);
@@ -86,8 +91,8 @@ export function CampaignDetailPanel({
       const res = await fetch(`/api/dashboard/ads/campaigns/${campaignId}/pause`, { method: 'POST' });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error ?? 'Failed to pause campaign.');
-      await loadDetail();
-      onStatusChanged();
+      setDetail(prev => (prev ? { ...prev, status: 'PAUSED' } : prev));
+      onStatusChanged(campaignId, 'PAUSED');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to pause campaign.');
     } finally {
@@ -102,8 +107,8 @@ export function CampaignDetailPanel({
       const res = await fetch(`/api/dashboard/ads/campaigns/${campaignId}/resume`, { method: 'POST' });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error ?? 'Failed to resume campaign.');
-      await loadDetail();
-      onStatusChanged();
+      setDetail(prev => (prev ? { ...prev, status: 'ACTIVE' } : prev));
+      onStatusChanged(campaignId, 'ACTIVE');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to resume campaign.');
     } finally {
