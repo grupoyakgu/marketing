@@ -84,10 +84,19 @@ export async function listCloudinaryImagesByFolder(): Promise<CloudinaryFolderIm
   const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
   const folders = getGalleryFolderPrefixes();
 
-  return Promise.all(
-    folders.map(async ({ name, prefix }) => ({
-      folder: name,
-      images: await fetchResources(cloudName, auth, prefix),
-    }))
+  const results = await Promise.all(
+    folders.map(async ({ name, prefix }) => {
+      try {
+        const images = await fetchResources(cloudName, auth, prefix);
+        return { folder: name, prefix, images };
+      } catch (err) {
+        console.error(`listCloudinaryImagesByFolder failed for prefix "${prefix}": ${err instanceof Error ? err.message : err}`);
+        return { folder: name, prefix, images: [] };
+      }
+    })
   );
+  console.log(
+    `[cloudinary] gallery folders queried: ${JSON.stringify(results.map(r => ({ folder: r.folder, prefix: r.prefix, count: r.images.length })))}`
+  );
+  return results.map(({ folder, images }) => ({ folder, images }));
 }
