@@ -1,3 +1,5 @@
+import { supabase } from './supabase';
+
 const GRAPH_API = 'https://graph.facebook.com/v19.0';
 
 // Every read below passes cache: 'no-store' explicitly — confirmed by
@@ -50,13 +52,27 @@ export interface AdAccountOption {
   name: string;
 }
 
+async function getCustomLabels(): Promise<Record<string, string>> {
+  const { data, error } = await supabase.from('ad_account_labels').select('account_id, label');
+  if (error) {
+    console.error(`Meta Ads getCustomLabels failed: ${error.message}`);
+    return {};
+  }
+  return Object.fromEntries((data ?? []).map(row => [row.account_id, row.label]));
+}
+
+/** A user-set label always wins over Meta's own account name — the latter is
+ * often unhelpful (a personal ad account just returns its bare account_id). */
 export async function listConfiguredAdAccounts(): Promise<AdAccountOption[]> {
   const token = process.env.FACEBOOK_ADS_ACCESS_TOKEN;
   const accountIds = getConfiguredAccountIds();
   if (!token || accountIds.length === 0) return [];
 
+  const customLabels = await getCustomLabels();
+
   return Promise.all(
     accountIds.map(async id => {
+      if (customLabels[id]) return { id, name: customLabels[id] };
       const params = new URLSearchParams({ fields: 'name', access_token: token });
       const res = await fetch(`${GRAPH_API}/${id}?${params}`, { cache: 'no-store' });
       if (!res.ok) {
@@ -67,6 +83,18 @@ export async function listConfiguredAdAccounts(): Promise<AdAccountOption[]> {
       return { id, name: json.name || id.replace('act_', '') };
     })
   );
+}
+
+export async function setAdAccountLabel(accountId: string, label: string): Promise<void> {
+  const normalized = accountId.startsWith('act_') ? accountId : `act_${accountId}`;
+  if (!getConfiguredAccountIds().includes(normalized)) throw new Error('Unknown ad account.');
+  const trimmed = label.trim();
+  if (!trimmed) throw new Error('Label cannot be empty.');
+
+  const { error } = await supabase
+    .from('ad_account_labels')
+    .upsert({ account_id: normalized, label: trimmed, updated_at: new Date().toISOString() });
+  if (error) throw new Error(error.message);
 }
 
 // ─── Low-level fetch helpers ────────────────────────────────────────────────

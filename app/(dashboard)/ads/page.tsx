@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Megaphone, Wallet, TrendingUp, Eye, Calendar, Landmark } from 'lucide-react';
+import { Megaphone, Wallet, TrendingUp, Eye, Calendar, Landmark, Pencil } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { PlatformBadge } from '@/components/ui/PlatformBadge';
@@ -108,6 +108,25 @@ export default function AdsPage() {
     localStorage.setItem(ACCOUNT_STORAGE_KEY, id);
   }
 
+  async function handleRenameAccount(account: AdAccountOption) {
+    const next = window.prompt('Rename this ad account', account.name);
+    if (next === null) return;
+    const trimmed = next.trim();
+    if (!trimmed || trimmed === account.name) return;
+    try {
+      const res = await fetch('/api/dashboard/ads/accounts', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId: account.id, label: trimmed }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error ?? 'Failed to rename account.');
+      setAccounts(prev => prev?.map(a => (a.id === account.id ? { ...a, name: trimmed } : a)) ?? prev);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to rename account.');
+    }
+  }
+
   const load = useCallback(async () => {
     if (!accountId) return;
     setError(null);
@@ -177,18 +196,24 @@ export default function AdsPage() {
                 </span>
                 <div className="flex flex-wrap gap-1 rounded-xl bg-neutral-100 p-1 dark:bg-neutral-800">
                   {accounts.map(a => (
-                    <button
+                    <div
                       key={a.id}
-                      onClick={() => handleAccountChange(a.id)}
                       className={cn(
-                        'rounded-lg px-2.5 py-1 text-xs font-medium transition',
+                        'group flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition',
                         accountId === a.id
                           ? 'bg-white text-neutral-900 shadow-sm dark:bg-neutral-700 dark:text-white'
                           : 'text-neutral-500 dark:text-neutral-400'
                       )}
                     >
-                      {a.name}
-                    </button>
+                      <button onClick={() => handleAccountChange(a.id)}>{a.name}</button>
+                      <button
+                        onClick={() => handleRenameAccount(a)}
+                        className="opacity-0 transition group-hover:opacity-100"
+                        title="Rename account"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                    </div>
                   ))}
                 </div>
               </div>
