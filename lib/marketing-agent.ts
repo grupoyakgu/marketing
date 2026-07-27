@@ -374,6 +374,16 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
         if (block.type !== 'tool_use') continue;
         let resultContent = '';
 
+        // Outer safety net: every tool_use block MUST get a matching
+        // tool_result, or Claude's API rejects every later message in this
+        // chat with "tool_use ids were found without tool_result blocks" —
+        // permanently, since the broken history gets resent every time. This
+        // has actually happened (a batch of hashtag lookups left several
+        // dangling). Individual handlers below have their own try/catch for
+        // a cleaner error message, but this outer one guarantees a result is
+        // always produced even for a handler that doesn't (or a bug in one
+        // that does).
+        try {
         if (block.name === 'post_to_linkedin') {
           const input = block.input as { content: string; image_url?: string };
           const result = await postToLinkedIn(input.content, input.image_url);
@@ -591,6 +601,9 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
           } catch (err) {
             resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
           }
+        }
+        } catch (err) {
+          resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
         }
 
         toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: resultContent });
