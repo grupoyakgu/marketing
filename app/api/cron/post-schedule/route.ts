@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getPostsDueNow, markPostStatus, getMostRecentPepeChatId } from '@/lib/marketing-plan';
-import { postToLinkedIn } from '@/lib/linkedin-poster';
-import { postToFacebook, postToInstagram } from '@/lib/meta-poster';
-import { listCloudinaryImages } from '@/lib/cloudinary';
+import { getPostsDueNow, getMostRecentPepeChatId } from '@/lib/marketing-plan';
+import { publishPost } from '@/lib/publish-post';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -27,43 +25,11 @@ export async function GET(req: Request) {
   const posts = await getPostsDueNow();
   if (posts.length === 0) return NextResponse.json({ posted: 0 });
 
-  let defaultImageUrl = '';
-  try {
-    const images = await listCloudinaryImages();
-    if (images.length > 0) defaultImageUrl = images[0].url;
-  } catch {}
-
   const results: string[] = [];
 
   for (const post of posts) {
-    try {
-      let result: { success: boolean; postId?: string; url?: string; error?: string } | undefined;
-      const imageUrl = post.image_url || defaultImageUrl || undefined;
-
-      if (post.platform === 'linkedin') {
-        result = await postToLinkedIn(post.content, imageUrl);
-      } else if (post.platform === 'facebook') {
-        result = await postToFacebook(post.content, imageUrl);
-      } else if (post.platform === 'instagram') {
-        if (!imageUrl) {
-          await markPostStatus(post.id!, 'failed');
-          results.push(`❌ Instagram: no image available`);
-          continue;
-        }
-        result = await postToInstagram(post.content, imageUrl);
-      }
-
-      if (result?.success) {
-        await markPostStatus(post.id!, 'posted', result.url, result.postId);
-        results.push(`✅ ${post.platform}`);
-      } else {
-        await markPostStatus(post.id!, 'failed');
-        results.push(`❌ ${post.platform}: ${result?.error}`);
-      }
-    } catch (err) {
-      await markPostStatus(post.id!, 'failed');
-      results.push(`❌ ${post.platform}: ${err instanceof Error ? err.message : String(err)}`);
-    }
+    const result = await publishPost(post.id!);
+    results.push(result.success ? `✅ ${post.platform}` : `❌ ${post.platform}: ${result.error}`);
   }
 
   const chatId = await getMostRecentPepeChatId();

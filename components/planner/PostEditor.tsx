@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, Check, Trash2, ImageIcon, ChevronRight, ChevronDown, ChevronLeft, FolderClosed } from 'lucide-react';
+import { X, Check, Trash2, ImageIcon, ChevronRight, ChevronDown, ChevronLeft, FolderClosed, RotateCw } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { PlatformBadge } from '@/components/ui/PlatformBadge';
@@ -139,6 +139,21 @@ export function PostEditor({
     }
   }
 
+  async function handleRetry() {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/dashboard/plan/${post!.id}/publish`, { method: 'POST' });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error ?? 'Failed to publish.');
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to publish.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/20" onClick={onClose} />
@@ -163,6 +178,13 @@ export function PostEditor({
               </a>
             )}
           </div>
+        )}
+
+        {post.status === 'failed' && (
+          <Button onClick={handleRetry} disabled={saving} className="mb-4 w-full">
+            <RotateCw className="h-4 w-4" />
+            {saving ? 'Retrying…' : 'Retry — publish now'}
+          </Button>
         )}
 
         {imageUrl ? (

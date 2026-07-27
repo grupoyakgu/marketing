@@ -37,6 +37,7 @@ import {
   type MarketingPost,
 } from '@/lib/marketing-plan';
 import { searchHashtag } from '@/lib/instagram-hashtags';
+import { publishPost } from '@/lib/publish-post';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BOT_NAME = 'pepe';
@@ -157,7 +158,7 @@ If the user asks to compare two posts (e.g. "how did post 3 do vs post 5", "comp
 ## TOOLS SUMMARY
 - post_to_linkedin, post_to_facebook, post_to_instagram — publish posts
 - browse_drive_images — list Cloudinary images (call ONCE per plan)
-- save_marketing_plan, get_weekly_plan, approve_posts, reject_post, reschedule_post — plan management
+- save_marketing_plan, get_weekly_plan, approve_posts, reject_post, reschedule_post, retry_post — plan management
 - compare_posts — compare engagement between two posts
 - reply_to_comment — reply to a specific comment
 - post_comment — post a new top-level comment on a post (for thank-yous)
@@ -278,6 +279,16 @@ const tools: Anthropic.Tool[] = [
         scheduled_date: { type: 'string', description: 'New date, YYYY-MM-DD.' },
         scheduled_time: { type: 'string', description: 'New time, 24-hour HH:MM, Spain local time.' },
       },
+      required: ['post_id'],
+    },
+  },
+  {
+    name: 'retry_post',
+    description:
+      'Publishes an existing marketing plan post right now, using whatever content, image, and platform are already saved on it — use this when a scheduled post failed to publish and the user wants it retried or posted immediately, without redrafting it. Refuses if the post has already been posted.',
+    input_schema: {
+      type: 'object' as const,
+      properties: { post_id: { type: 'string' } },
       required: ['post_id'],
     },
   },
@@ -485,6 +496,16 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
               const post = await updatePost(input.post_id, fields);
               resultContent = `Post ${post.id} rescheduled to ${post.scheduled_date} ${post.scheduled_time}.`;
             }
+          } catch (err) {
+            resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        }
+
+        if (block.name === 'retry_post') {
+          const input = block.input as { post_id: string };
+          try {
+            const result = await publishPost(input.post_id);
+            resultContent = result.success ? `Post ${input.post_id} published successfully.` : `Failed: ${result.error}`;
           } catch (err) {
             resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
           }
