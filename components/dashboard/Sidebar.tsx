@@ -8,6 +8,7 @@ import {
   CalendarDays,
   MessageSquare,
   Megaphone,
+  Hash,
   Settings,
   ChevronsLeft,
   ChevronsRight,
@@ -42,6 +43,7 @@ export function Sidebar({ buildVersion }: { buildVersion: string }) {
     { href: '/planner', label: 'Planner', icon: CalendarDays },
     { href: '/comments', label: 'Comments', icon: MessageSquare },
     { href: '/ads', label: 'Ads', icon: Megaphone },
+    { href: '/hashtags', label: 'Hashtags', icon: Hash },
     { href: '/settings', label: 'Settings', icon: Settings },
   ];
 

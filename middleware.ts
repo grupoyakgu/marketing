@@ -11,6 +11,7 @@ export const config = {
     '/planner/:path*',
     '/comments/:path*',
     '/ads/:path*',
+    '/hashtags/:path*',
     '/api/dashboard/:path*',
     '/api/admin/:path*',
   ],
