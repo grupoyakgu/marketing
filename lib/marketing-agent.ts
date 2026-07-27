@@ -162,7 +162,7 @@ If the user asks to compare two posts (e.g. "how did post 3 do vs post 5", "comp
 - reply_to_comment — reply to a specific comment
 - post_comment — post a new top-level comment on a post (for thank-yous)
 - get_engagement — fetch likes/comments/reach stats
-- search_hashtag — look up an Instagram hashtag's engagement stats (avg likes/comments, top posts) for content research. Read-only: there is no way to comment on or otherwise interact with posts this surfaces — never suggest that as an option.
+- search_hashtag — look up an Instagram hashtag's engagement stats (avg likes/comments, top posts) for content research. Read-only: there is no way to comment on or otherwise interact with posts this surfaces — never suggest that as an option. Each call is a real network round-trip — check at most 3-4 hashtags per message; if asked to check more, do a batch of a few, report back, and continue with the rest in a follow-up message rather than calling it a dozen+ times in one turn (risks a timeout that can corrupt the conversation).
 
 You speak with authority and warmth. You are direct, strategic, and deeply passionate about the intersection of hospitality and real estate.`;
 }
@@ -578,14 +578,18 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
 
         if (block.name === 'search_hashtag') {
           const input = block.input as { hashtag: string };
-          const result = await searchHashtag(input.hashtag);
-          if ('error' in result) {
-            resultContent = `Failed: ${result.error}`;
-          } else {
-            const topPostsSummary = result.topPosts
-              .map((p, i) => `  ${i + 1}. ${p.likeCount} likes, ${p.commentsCount} comments — ${p.permalink}`)
-              .join('\n');
-            resultContent = `#${result.tag}: ${result.mediaCount} posts sampled, avg ${result.avgLikes.toFixed(1)} likes, avg ${result.avgComments.toFixed(1)} comments.\nTop posts:\n${topPostsSummary || '  (none found)'}`;
+          try {
+            const result = await searchHashtag(input.hashtag);
+            if ('error' in result) {
+              resultContent = `Failed: ${result.error}`;
+            } else {
+              const topPostsSummary = result.topPosts
+                .map((p, i) => `  ${i + 1}. ${p.likeCount} likes, ${p.commentsCount} comments — ${p.permalink}`)
+                .join('\n');
+              resultContent = `#${result.tag}: ${result.mediaCount} posts sampled, avg ${result.avgLikes.toFixed(1)} likes, avg ${result.avgComments.toFixed(1)} comments.\nTop posts:\n${topPostsSummary || '  (none found)'}`;
+            }
+          } catch (err) {
+            resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
           }
         }
 
