@@ -4,6 +4,7 @@ import { postToLinkedIn } from '@/lib/linkedin-poster';
 import { enqueueLinkedInPost } from '@/lib/linkedin-queue';
 import { clearHistory, chat } from '@/lib/marketing-agent';
 import { trackDirectPost } from '@/lib/marketing-plan';
+import { claimTelegramUpdate } from '@/lib/telegram-dedup';
 
 export const maxDuration = 300;
 
@@ -41,6 +42,18 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
+
+    // Telegram retries a webhook delivery if it doesn't get a fast response —
+    // a slow turn (e.g. a hung tool call) can take long enough that the same
+    // update arrives twice, running two concurrent invocations that race on
+    // the same chat_history rows for a chat and corrupt the tool_use/
+    // tool_result pairing Claude's API requires. A duplicate update_id is a
+    // no-op instead of a second full run.
+    const updateId: number | undefined = body?.update_id;
+    if (updateId !== undefined && !(await claimTelegramUpdate(updateId))) {
+      return NextResponse.json({ ok: true });
+    }
+
     const message = body?.message;
     chatId = message?.chat?.id;
     if (!chatId) return NextResponse.json({ ok: true });
