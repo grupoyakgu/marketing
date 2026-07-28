@@ -121,16 +121,33 @@ export async function searchHashtag(rawTag: string): Promise<HashtagStats | { er
   return stats;
 }
 
-// INSTAGRAM_TRACKED_HASHTAGS accepts a comma-separated list, mirroring the
-// same convention as FACEBOOK_AD_ACCOUNT_ID / CLOUDINARY_GALLERY_FOLDERS.
-export function getConfiguredHashtags(): string[] {
-  const raw = process.env.INSTAGRAM_TRACKED_HASHTAGS;
-  if (!raw) return [];
-  return raw.split(',').map(normalizeTag).filter(Boolean);
+/** DB-backed rather than an env var, so Pepe can add hashtags it finds worth
+ * tracking at runtime — a redeploy would be needed for either to touch an
+ * env var, but Pepe has no way to trigger one. */
+export async function getTrackedHashtagList(): Promise<string[]> {
+  const { data, error } = await supabase.from('tracked_hashtags').select('tag').order('added_at');
+  if (error) {
+    console.error(`getTrackedHashtagList failed: ${error.message}`);
+    return [];
+  }
+  return (data ?? []).map(row => row.tag as string);
+}
+
+/** Adds a hashtag to the tracked list and immediately fetches its stats, so
+ * it shows up in the dashboard with real numbers on the next load rather
+ * than an empty "no data yet" row until some later scheduled refresh. */
+export async function addTrackedHashtag(rawTag: string): Promise<HashtagStats | { error: string }> {
+  const tag = normalizeTag(rawTag);
+  if (!tag) return { error: 'A hashtag is required.' };
+
+  const { error } = await supabase.from('tracked_hashtags').upsert({ tag });
+  if (error) return { error: error.message };
+
+  return searchHashtag(tag);
 }
 
 export async function refreshTrackedHashtags(): Promise<{ refreshed: string[]; failed: string[] }> {
-  const tags = getConfiguredHashtags();
+  const tags = await getTrackedHashtagList();
   const refreshed: string[] = [];
   const failed: string[] = [];
   // Sequential on purpose — a handful of tracked hashtags at most, and this
@@ -145,7 +162,7 @@ export async function refreshTrackedHashtags(): Promise<{ refreshed: string[]; f
 }
 
 export async function getTrackedHashtagStats(): Promise<HashtagStats[]> {
-  const tags = getConfiguredHashtags();
+  const tags = await getTrackedHashtagList();
   if (tags.length === 0) return [];
 
   const { data, error } = await supabase.from('hashtag_stats').select('*').in('tag', tags);

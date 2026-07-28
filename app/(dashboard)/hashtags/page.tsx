@@ -1,6 +1,7 @@
-import { getTrackedHashtagStats, getConfiguredHashtags } from '@/lib/instagram-hashtags';
+import { getTrackedHashtagStats, getTrackedHashtagList } from '@/lib/instagram-hashtags';
 import { Card } from '@/components/ui/Card';
 import { RefreshHashtagsCard } from '@/components/dashboard/RefreshHashtagsCard';
+import { AddHashtagCard } from '@/components/dashboard/AddHashtagCard';
 import { Hash } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -10,10 +11,8 @@ function formatDate(iso: string): string {
 }
 
 export default async function HashtagsPage() {
-  const [stats, configuredCount] = await Promise.all([
-    getTrackedHashtagStats(),
-    Promise.resolve(getConfiguredHashtags().length),
-  ]);
+  const [stats, trackedList] = await Promise.all([getTrackedHashtagStats(), getTrackedHashtagList()]);
+  const configuredCount = trackedList.length;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -29,15 +28,12 @@ export default async function HashtagsPage() {
       </div>
 
       <RefreshHashtagsCard />
+      <AddHashtagCard />
 
       {configuredCount === 0 ? (
         <Card>
           <p className="text-sm text-neutral-500 dark:text-neutral-400">
-            No hashtags configured yet — set{' '}
-            <code className="rounded bg-neutral-100 px-1 py-0.5 dark:bg-neutral-800">
-              INSTAGRAM_TRACKED_HASHTAGS
-            </code>{' '}
-            (comma-separated, no # needed) to start tracking.
+            No hashtags tracked yet — add one above, or ask Pepe to add one it finds worth tracking.
           </p>
         </Card>
       ) : stats.length === 0 ? (

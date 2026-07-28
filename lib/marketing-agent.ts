@@ -36,7 +36,7 @@ import {
   type PostUpdate,
   type MarketingPost,
 } from '@/lib/marketing-plan';
-import { searchHashtag } from '@/lib/instagram-hashtags';
+import { searchHashtag, getTrackedHashtagStats, addTrackedHashtag } from '@/lib/instagram-hashtags';
 import { publishPost } from '@/lib/publish-post';
 import { createVideo, listAvatars, listVoices } from '@/lib/heygen';
 import { createVideoJob } from '@/lib/video-jobs';
@@ -167,6 +167,8 @@ If the user asks to compare two posts (e.g. "how did post 3 do vs post 5", "comp
 - get_engagement — fetch likes/comments/reach stats
 - search_hashtag — look up an Instagram hashtag's engagement stats (avg likes/comments, top posts) for content research. Read-only: there is no way to comment on or otherwise interact with posts this surfaces — never suggest that as an option. Each call is a real network round-trip — check at most 3-4 hashtags per message; if asked to check more, do a batch of a few, report back, and continue with the rest in a follow-up message rather than calling it a dozen+ times in one turn (risks a timeout that can corrupt the conversation).
 - create_video, list_video_avatars — generate an AI avatar video (HeyGen) and auto-post it once ready; only when explicitly asked, never proactively as part of routine planning
+- get_tracked_hashtags — see the user's tracked hashtag list with cached stats (same as the /hashtags dashboard)
+- add_tracked_hashtag — add a hashtag you've found worth tracking to that list, so the user sees it in the dashboard too
 
 You speak with authority and warmth. You are direct, strategic, and deeply passionate about the intersection of hospitality and real estate.`;
 }
@@ -376,6 +378,22 @@ const tools: Anthropic.Tool[] = [
       type: 'object' as const,
       properties: {
         hashtag: { type: 'string', description: 'Hashtag without the # symbol, e.g. "inmobiliariasevilla".' },
+      },
+      required: ['hashtag'],
+    },
+  },
+  {
+    name: 'get_tracked_hashtags',
+    description: 'Returns the user\'s tracked hashtag list with each one\'s cached stats (posts sampled, avg likes/comments) — the same list and data shown on the /hashtags dashboard page.',
+    input_schema: { type: 'object' as const, properties: {}, required: [] },
+  },
+  {
+    name: 'add_tracked_hashtag',
+    description: 'Adds a hashtag to the tracked list shown on the /hashtags dashboard page, fetching its stats immediately. Use this once you have explored and found a hashtag genuinely worth tracking going forward — not for every hashtag checked via search_hashtag, only ones worth adding permanently.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        hashtag: { type: 'string', description: 'Hashtag without the # symbol.' },
       },
       required: ['hashtag'],
     },
@@ -680,6 +698,29 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
                 .join('\n');
               resultContent = `#${result.tag}: ${result.mediaCount} posts sampled, avg ${result.avgLikes.toFixed(1)} likes, avg ${result.avgComments.toFixed(1)} comments.\nTop posts:\n${topPostsSummary || '  (none found)'}`;
             }
+          } catch (err) {
+            resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        }
+
+        if (block.name === 'get_tracked_hashtags') {
+          try {
+            const tracked = await getTrackedHashtagStats();
+            resultContent = tracked.length === 0
+              ? 'No hashtags tracked yet.'
+              : tracked.map(h => `#${h.tag}: ${h.mediaCount} posts sampled, avg ${h.avgLikes.toFixed(1)} likes, avg ${h.avgComments.toFixed(1)} comments (updated ${h.fetchedAt})`).join('\n');
+          } catch (err) {
+            resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        }
+
+        if (block.name === 'add_tracked_hashtag') {
+          const input = block.input as { hashtag: string };
+          try {
+            const result = await addTrackedHashtag(input.hashtag);
+            resultContent = 'error' in result
+              ? `Failed: ${result.error}`
+              : `Added #${result.tag} to the tracked list — it now shows on the /hashtags dashboard (${result.mediaCount} posts sampled, avg ${result.avgLikes.toFixed(1)} likes).`;
           } catch (err) {
             resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
           }
