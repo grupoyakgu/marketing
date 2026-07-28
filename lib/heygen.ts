@@ -1,7 +1,23 @@
 const HEYGEN_API = 'https://api.heygen.com';
+const HEYGEN_TIMEOUT_MS = 15_000;
 
 function getApiKey(): string | null {
   return process.env.HEYGEN_API_KEY || null;
+}
+
+/** Plain fetch() has no timeout of its own — a stalled HeyGen connection would
+ * hang until the caller's outer tool-dispatch guard (45s) kills it, with no
+ * real error to show for it. AbortSignal.timeout() here fails fast with a
+ * clear message instead. */
+async function fetchHeyGen(path: string, init: RequestInit = {}): Promise<Response> {
+  try {
+    return await fetch(`${HEYGEN_API}${path}`, { ...init, signal: AbortSignal.timeout(HEYGEN_TIMEOUT_MS) });
+  } catch (err) {
+    if (err instanceof Error && err.name === 'TimeoutError') {
+      throw new Error(`HeyGen request to ${path} timed out after ${HEYGEN_TIMEOUT_MS}ms.`);
+    }
+    throw err;
+  }
 }
 
 export interface HeyGenAvatar {
@@ -19,7 +35,7 @@ export interface HeyGenVoice {
 export async function listAvatars(): Promise<HeyGenAvatar[]> {
   const apiKey = getApiKey();
   if (!apiKey) return [];
-  const res = await fetch(`${HEYGEN_API}/v2/avatars`, { headers: { 'X-Api-Key': apiKey }, cache: 'no-store' });
+  const res = await fetchHeyGen('/v2/avatars', { headers: { 'X-Api-Key': apiKey }, cache: 'no-store' });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     console.error(`HeyGen listAvatars failed: ${res.status} ${JSON.stringify(json)}`);
@@ -36,7 +52,7 @@ export async function listAvatars(): Promise<HeyGenAvatar[]> {
 export async function listVoices(): Promise<HeyGenVoice[]> {
   const apiKey = getApiKey();
   if (!apiKey) return [];
-  const res = await fetch(`${HEYGEN_API}/v2/voices`, { headers: { 'X-Api-Key': apiKey }, cache: 'no-store' });
+  const res = await fetchHeyGen('/v2/voices', { headers: { 'X-Api-Key': apiKey }, cache: 'no-store' });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     console.error(`HeyGen listVoices failed: ${res.status} ${JSON.stringify(json)}`);
@@ -73,7 +89,7 @@ export async function createVideo(
     return { error: 'No avatar/voice configured — set HEYGEN_DEFAULT_AVATAR_ID and HEYGEN_DEFAULT_VOICE_ID, or pass them explicitly.' };
   }
 
-  const res = await fetch(`${HEYGEN_API}/v2/video/generate`, {
+  const res = await fetchHeyGen('/v2/video/generate', {
     method: 'POST',
     headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -106,7 +122,7 @@ export async function getVideoStatus(videoId: string): Promise<HeyGenStatus> {
   const apiKey = getApiKey();
   if (!apiKey) return { status: 'failed', error: 'HeyGen is not configured.' };
 
-  const res = await fetch(`${HEYGEN_API}/v1/video_status.get?video_id=${videoId}`, {
+  const res = await fetchHeyGen(`/v1/video_status.get?video_id=${videoId}`, {
     headers: { 'X-Api-Key': apiKey },
     cache: 'no-store',
   });
