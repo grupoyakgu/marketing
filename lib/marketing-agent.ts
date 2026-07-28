@@ -44,6 +44,27 @@ import { createVideoJob } from '@/lib/video-jobs';
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BOT_NAME = 'pepe';
 
+// A hung external call (Meta, HeyGen, Cloudinary, Supabase — none of which have
+// their own timeouts) previously blocked a tool_use block until Vercel's hard
+// maxDuration killed the function mid-await, which skips every JS catch block
+// (nothing runs during a SIGKILL) and leaves that tool_use without a
+// tool_result. That permanently corrupts the conversation, since Claude's API
+// then rejects every future message referencing this history. Racing each
+// tool dispatch against this timeout guarantees SOME result — even a timeout
+// error — is always produced well before that hard limit, regardless of what
+// hangs inside.
+const TOOL_TIMEOUT_MS = 45_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Tool "${label}" timed out after ${ms}ms`)), ms);
+    promise.then(
+      value => { clearTimeout(timer); resolve(value); },
+      err => { clearTimeout(timer); reject(err); }
+    );
+  });
+}
+
 function buildSystemPrompt(): string {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid' }).format(new Date());
   const nextMonday = getNextMonday();
@@ -410,13 +431,18 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
   await saveMessage(chatId, BOT_NAME, 'user', userMessage);
 
   while (true) {
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
-      system: buildSystemPrompt(),
-      tools,
-      messages: history,
-    });
+    const turnStartedAt = Date.now();
+    const response = await client.messages.create(
+      {
+        model: 'claude-sonnet-4-6',
+        max_tokens: 4096,
+        system: buildSystemPrompt(),
+        tools,
+        messages: history,
+      },
+      { timeout: 60_000 }
+    );
+    console.log(`[marketing-agent] anthropic turn (${Date.now() - turnStartedAt}ms), stop_reason: ${response.stop_reason}`);
 
     if (response.stop_reason === 'tool_use') {
       history.push({ role: 'assistant', content: response.content });
@@ -432,11 +458,18 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
         // chat with "tool_use ids were found without tool_result blocks" —
         // permanently, since the broken history gets resent every time. This
         // has actually happened (a batch of hashtag lookups left several
-        // dangling). Individual handlers below have their own try/catch for
-        // a cleaner error message, but this outer one guarantees a result is
-        // always produced even for a handler that doesn't (or a bug in one
-        // that does).
+        // dangling, and — since no external fetch() in this codebase carries
+        // its own timeout — a single hung call blocking past Vercel's hard
+        // maxDuration, which SIGKILLs the function mid-await and skips this
+        // catch entirely). Individual handlers below have their own try/catch
+        // for a cleaner error message; the withTimeout race below guarantees
+        // a result is always produced well before that hard limit even if a
+        // handler hangs; this outer catch guarantees one even for a bug in a
+        // handler that doesn't.
+        const toolStartedAt = Date.now();
+        console.log(`[marketing-agent] tool start: ${block.name}`, JSON.stringify(block.input).slice(0, 500));
         try {
+          await withTimeout((async () => {
         if (block.name === 'post_to_linkedin') {
           const input = block.input as { content: string; image_url?: string };
           const result = await postToLinkedIn(input.content, input.image_url);
@@ -725,9 +758,12 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
             resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
           }
         }
+          })(), TOOL_TIMEOUT_MS, block.name);
         } catch (err) {
           resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
+          console.error(`[marketing-agent] tool error: ${block.name} after ${Date.now() - toolStartedAt}ms:`, err);
         }
+        console.log(`[marketing-agent] tool done: ${block.name} (${Date.now() - toolStartedAt}ms)`);
 
         toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: resultContent });
       }
