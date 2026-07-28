@@ -52,6 +52,28 @@ async function fetchResources(cloudName: string, auth: string, prefix?: string):
   return resources.map(mapResource);
 }
 
+/** Uploads a remote video (e.g. a HeyGen result) into Cloudinary by URL —
+ * Cloudinary fetches it server-side rather than us downloading and
+ * re-uploading the bytes ourselves. Authenticates the same way the admin
+ * listing calls above do (HTTP Basic with api_key:api_secret), which the
+ * Upload API accepts as an alternative to a computed signature. */
+export async function uploadVideoFromUrl(sourceUrl: string): Promise<{ url: string } | { error: string }> {
+  const { cloudName, apiKey, apiSecret } = getCredentials();
+  const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
+
+  const res = await fetch(`${CLOUDINARY_API}/${cloudName}/video/upload`, {
+    method: 'POST',
+    headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ file: sourceUrl, resource_type: 'video' }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    console.error(`Cloudinary uploadVideoFromUrl failed: ${res.status} ${JSON.stringify(json)}`);
+    return { error: json.error?.message ?? `Cloudinary upload failed (${res.status}).` };
+  }
+  return { url: json.secure_url };
+}
+
 /** Flat listing under CLOUDINARY_FOLDER — used by Pepe's browse_drive_images
  * tool and the post-schedule cron's fallback image pick. Unrelated to the
  * dashboard's per-project gallery below. */

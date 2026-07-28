@@ -38,6 +38,8 @@ import {
 } from '@/lib/marketing-plan';
 import { searchHashtag } from '@/lib/instagram-hashtags';
 import { publishPost } from '@/lib/publish-post';
+import { createVideo, listAvatars, listVoices } from '@/lib/heygen';
+import { createVideoJob } from '@/lib/video-jobs';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BOT_NAME = 'pepe';
@@ -164,6 +166,7 @@ If the user asks to compare two posts (e.g. "how did post 3 do vs post 5", "comp
 - post_comment — post a new top-level comment on a post (for thank-yous)
 - get_engagement — fetch likes/comments/reach stats
 - search_hashtag — look up an Instagram hashtag's engagement stats (avg likes/comments, top posts) for content research. Read-only: there is no way to comment on or otherwise interact with posts this surfaces — never suggest that as an option. Each call is a real network round-trip — check at most 3-4 hashtags per message; if asked to check more, do a batch of a few, report back, and continue with the rest in a follow-up message rather than calling it a dozen+ times in one turn (risks a timeout that can corrupt the conversation).
+- create_video, list_video_avatars — generate an AI avatar video (HeyGen) and auto-post it once ready; only when explicitly asked, never proactively as part of routine planning
 
 You speak with authority and warmth. You are direct, strategic, and deeply passionate about the intersection of hospitality and real estate.`;
 }
@@ -345,6 +348,27 @@ const tools: Anthropic.Tool[] = [
     },
   },
   {
+    name: 'create_video',
+    description:
+      'Generates an AI avatar video from a text script via HeyGen, then automatically uploads it to Cloudinary and posts it to Instagram or Facebook once ready. Generation and posting run in the background and can take several minutes — this call only starts the process and returns immediately; the user gets a Telegram message here when it actually finishes (posted or failed), so tell them it is running rather than that it is done. Uses a fixed default avatar/voice unless avatar_id/voice_id are given — use list_video_avatars first if the user wants to pick a specific one.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        script: { type: 'string', description: 'What the avatar should say in the video.' },
+        platform: { type: 'string', enum: ['instagram', 'facebook'] },
+        caption: { type: 'string', description: 'Caption for the resulting post.' },
+        avatar_id: { type: 'string', description: 'Optional — overrides the default HeyGen avatar.' },
+        voice_id: { type: 'string', description: 'Optional — overrides the default HeyGen voice.' },
+      },
+      required: ['script', 'platform', 'caption'],
+    },
+  },
+  {
+    name: 'list_video_avatars',
+    description: 'Lists available HeyGen avatars and voices — use when the user wants to pick one for create_video instead of using the default.',
+    input_schema: { type: 'object' as const, properties: {}, required: [] },
+  },
+  {
     name: 'search_hashtag',
     description:
       'Looks up an Instagram hashtag and returns engagement stats from its current top-performing public posts (posts sampled, average likes, average comments, top post previews) — for content and trend research only. There is no way to comment on, follow, or otherwise interact with any post this returns; use it purely to inform what to post next, never to suggest engaging with the posts found.',
@@ -506,6 +530,43 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
           try {
             const result = await publishPost(input.post_id);
             resultContent = result.success ? `Post ${input.post_id} published successfully.` : `Failed: ${result.error}`;
+          } catch (err) {
+            resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        }
+
+        if (block.name === 'create_video') {
+          const input = block.input as {
+            script: string;
+            platform: 'instagram' | 'facebook';
+            caption: string;
+            avatar_id?: string;
+            voice_id?: string;
+          };
+          try {
+            const created = await createVideo(input.script, input.avatar_id, input.voice_id);
+            if (created.error || !created.videoId) {
+              resultContent = `Failed: ${created.error}`;
+            } else {
+              await createVideoJob({
+                chatId,
+                platform: input.platform,
+                caption: input.caption,
+                heygenVideoId: created.videoId,
+              });
+              resultContent = `Video generation started (HeyGen video_id: ${created.videoId}). It'll be uploaded to Cloudinary and posted to ${input.platform} automatically once ready — this can take a few minutes. You'll get a message here when it's done.`;
+            }
+          } catch (err) {
+            resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        }
+
+        if (block.name === 'list_video_avatars') {
+          try {
+            const [avatars, voices] = await Promise.all([listAvatars(), listVoices()]);
+            const avatarList = avatars.slice(0, 20).map(a => `- ${a.name} (id: ${a.avatarId})`).join('\n') || '(none found)';
+            const voiceList = voices.slice(0, 20).map(v => `- ${v.name}${v.language ? ` [${v.language}]` : ''} (id: ${v.voiceId})`).join('\n') || '(none found)';
+            resultContent = `Avatars:\n${avatarList}\n\nVoices:\n${voiceList}`;
           } catch (err) {
             resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
           }

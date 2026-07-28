@@ -85,6 +85,75 @@ export async function postToInstagram(caption: string, imageUrl: string): Promis
   return { success: true, postId: published.id, url: `https://www.instagram.com/p/${published.id}/` };
 }
 
+// Facebook handles video processing internally after accepting the upload —
+// unlike Instagram, there's no container/status_code step to poll; the API
+// call itself is the whole operation.
+export async function postVideoToFacebook(caption: string, videoUrl: string): Promise<MetaPostResult> {
+  const token = await getPageToken();
+  const pageId = process.env.FACEBOOK_PAGE_ID!;
+
+  const res = await fetch(`${GRAPH_API}/${pageId}/videos`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ file_url: videoUrl, description: caption, access_token: token }),
+  });
+  const json = await res.json();
+  if (!res.ok) return { success: false, error: json.error?.message ?? 'Unknown error' };
+  const postId: string = json.id;
+  return { success: true, postId, url: `https://www.facebook.com/${postId}` };
+}
+
+// Instagram video containers can take minutes to process — far longer than
+// images — so unlike postToInstagram's image flow (which polls inline and
+// gives up after ~12s), video posting is split into separate steps a caller
+// can resume across multiple checks (e.g. a cron ticking every few minutes)
+// instead of blocking one request for however long processing takes.
+export async function createInstagramVideoContainer(
+  caption: string,
+  videoUrl: string
+): Promise<{ containerId: string } | { error: string }> {
+  const token = await getPageToken();
+  const igAccountId = process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID!;
+
+  const res = await fetch(`${GRAPH_API}/${igAccountId}/media`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ video_url: videoUrl, caption, media_type: 'REELS', access_token: token }),
+  });
+  const json = await res.json();
+  if (!res.ok) return { error: json.error?.message ?? 'Failed to create video container' };
+  return { containerId: json.id };
+}
+
+export interface ContainerCheckResult {
+  status: 'FINISHED' | 'IN_PROGRESS' | 'ERROR';
+  error?: string;
+}
+
+export async function checkInstagramContainer(containerId: string): Promise<ContainerCheckResult> {
+  const token = await getPageToken();
+  const res = await fetch(`${GRAPH_API}/${containerId}?fields=status_code&access_token=${token}`, { cache: 'no-store' });
+  const json = await res.json();
+  if (!res.ok) return { status: 'ERROR', error: json.error?.message ?? 'Failed to check container status' };
+  if (json.status_code === 'FINISHED') return { status: 'FINISHED' };
+  if (json.status_code === 'ERROR') return { status: 'ERROR', error: 'Instagram failed to process the video.' };
+  return { status: 'IN_PROGRESS' };
+}
+
+export async function publishInstagramContainer(containerId: string): Promise<MetaPostResult> {
+  const token = await getPageToken();
+  const igAccountId = process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID!;
+
+  const res = await fetch(`${GRAPH_API}/${igAccountId}/media_publish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ creation_id: containerId, access_token: token }),
+  });
+  const json = await res.json();
+  if (!res.ok) return { success: false, error: json.error?.message ?? 'Failed to publish video' };
+  return { success: true, postId: json.id, url: `https://www.instagram.com/reel/${json.id}/` };
+}
+
 export async function getInstagramInsights(): Promise<Record<string, unknown> | null> {
   const token = await getPageToken();
   const igAccountId = process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID!;
