@@ -1,12 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Megaphone, Wallet, TrendingUp, Eye, Calendar, Landmark, Pencil } from 'lucide-react';
+import { Megaphone, Wallet, TrendingUp, Eye, Calendar, Landmark, Pencil, Heart, MousePointerClick, Sparkles } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { PlatformBadge } from '@/components/ui/PlatformBadge';
 import { KpiCard } from '@/components/ui/KpiCard';
 import { CampaignDetailPanel } from '@/components/ads/CampaignDetailPanel';
+import { MetricChart, METRIC_OPTIONS, type DailyStat, type ActionTotals, type MetricKey } from '@/components/charts/MetricChart';
 import { cn } from '@/lib/cn';
 import type { AdPlatform } from '@/lib/meta-ads';
 
@@ -23,7 +24,12 @@ interface CampaignRow {
   windowSpend: number;
   windowImpressions: number;
   windowReach: number;
+  windowActions: ActionTotals;
   platformBreakdown: { platform: AdPlatform; spend: number; impressions: number; reach: number }[];
+}
+
+function engagementTotal(a: ActionTotals): number {
+  return a.likes + a.comments + a.shares + a.saves;
 }
 
 type Preset = 'today' | '7d' | '30d' | 'month' | 'custom';
@@ -78,6 +84,9 @@ export default function AdsPage() {
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [currency, setCurrency] = useState('USD');
   const [campaigns, setCampaigns] = useState<CampaignRow[] | null>(null);
+  const [totalActions, setTotalActions] = useState<ActionTotals | null>(null);
+  const [dailySeries, setDailySeries] = useState<DailyStat[] | null>(null);
+  const [metric, setMetric] = useState<MetricKey>('spend');
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -133,12 +142,19 @@ export default function AdsPage() {
     const params = new URLSearchParams({ since: range.since, until: range.until, account: accountId });
     if (platform !== 'all') params.set('platform', platform);
     try {
-      const res = await fetch(`/api/dashboard/ads/campaigns?${params}`);
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? 'Failed to load ads dashboard.');
+      const [dashboardRes, dailyRes] = await Promise.all([
+        fetch(`/api/dashboard/ads/campaigns?${params}`),
+        fetch(`/api/dashboard/ads/daily?${params}`),
+      ]);
+      const body = await dashboardRes.json();
+      if (!dashboardRes.ok) throw new Error(body.error ?? 'Failed to load ads dashboard.');
       setConfigured(body.configured);
       setCurrency(body.currency ?? 'USD');
       setCampaigns(body.campaigns ?? []);
+      setTotalActions(body.totalActions ?? null);
+
+      const dailyBody = await dailyRes.json();
+      setDailySeries(dailyRes.ok ? (dailyBody.series ?? []) : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load ads dashboard.');
       setCampaigns([]);
@@ -283,13 +299,41 @@ export default function AdsPage() {
 
           {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
-          <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+          <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
             <KpiCard label="Spend (range)" value={formatMoney(totals.spend, currency)} icon={Wallet} />
             <KpiCard label="Impressions" value={totals.impressions} icon={Eye} />
             <KpiCard label="Reach" value={totals.reach} icon={TrendingUp} />
+            <KpiCard label="Total likes" value={totalActions?.likes ?? 0} icon={Heart} />
             <KpiCard label="Daily budgets" value={formatMoney(totals.dailyBudget, currency)} icon={Calendar} />
             <KpiCard label="Active campaigns" value={totals.active} icon={Megaphone} />
           </section>
+
+          <Card className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">Stats over time</h3>
+              <div className="flex flex-wrap gap-1 rounded-xl bg-neutral-100 p-1 dark:bg-neutral-800">
+                {METRIC_OPTIONS.map(m => (
+                  <button
+                    key={m.value}
+                    onClick={() => setMetric(m.value)}
+                    className={cn(
+                      'rounded-lg px-2.5 py-1 text-xs font-medium transition',
+                      metric === m.value
+                        ? 'bg-white text-neutral-900 shadow-sm dark:bg-neutral-700 dark:text-white'
+                        : 'text-neutral-500 dark:text-neutral-400'
+                    )}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {dailySeries === null ? (
+              <p className="text-sm text-neutral-400">Loading…</p>
+            ) : (
+              <MetricChart data={dailySeries} metric={metric} currency={currency} />
+            )}
+          </Card>
 
           <div className="space-y-3">
             {campaigns === null ? (
@@ -319,6 +363,17 @@ export default function AdsPage() {
                       <p className="text-xs text-neutral-400">
                         {formatDate(c.startTime)} – {c.endTime ? formatDate(c.endTime) : 'ongoing'}
                       </p>
+                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-500 dark:text-neutral-400">
+                        <span className="inline-flex items-center gap-1">
+                          <Eye className="h-3 w-3" /> {c.windowImpressions.toLocaleString()} impressions
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <MousePointerClick className="h-3 w-3" /> {c.windowActions.linkClicks.toLocaleString()} clicks
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <Sparkles className="h-3 w-3" /> {engagementTotal(c.windowActions).toLocaleString()} engagement
+                        </span>
+                      </div>
                     </div>
                     <div className="shrink-0 text-right">
                       <p className="text-sm font-semibold text-neutral-900 dark:text-white">

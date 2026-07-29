@@ -177,11 +177,86 @@ async function fetchAccountCurrency(accountId: string, token: string): Promise<s
   return json.currency ?? 'USD';
 }
 
+// Meta's `actions` array reports engagement as a flat list of
+// { action_type, value } pairs with no fixed schema — which action_types
+// actually appear depends on the ad's objective, placement, and Meta's own
+// evolving taxonomy. The exact action_type strings for Instagram's "profile
+// activity" metrics (profile visits, business address taps, follows, external
+// link taps) aren't confirmable from here (Meta's docs block automated
+// fetches), so those are matched by best-effort substring rather than an
+// exact key — anything that doesn't match ANY known pattern below still shows
+// up in `other` (raw action_type + value) instead of being silently dropped,
+// so nothing is ever hidden even if a guessed pattern is wrong.
+export interface ActionTotals {
+  likes: number;
+  comments: number;
+  shares: number;
+  saves: number;
+  linkClicks: number;
+  profileVisits: number;
+  follows: number;
+  businessAddressTaps: number;
+  externalLinkTaps: number;
+  other: { actionType: string; value: number }[];
+}
+
+export function emptyActionTotals(): ActionTotals {
+  return {
+    likes: 0,
+    comments: 0,
+    shares: 0,
+    saves: 0,
+    linkClicks: 0,
+    profileVisits: 0,
+    follows: 0,
+    businessAddressTaps: 0,
+    externalLinkTaps: 0,
+    other: [],
+  };
+}
+
+export function addActionTotals(a: ActionTotals, b: ActionTotals): ActionTotals {
+  const other = new Map(a.other.map(o => [o.actionType, o.value]));
+  for (const o of b.other) other.set(o.actionType, (other.get(o.actionType) ?? 0) + o.value);
+  return {
+    likes: a.likes + b.likes,
+    comments: a.comments + b.comments,
+    shares: a.shares + b.shares,
+    saves: a.saves + b.saves,
+    linkClicks: a.linkClicks + b.linkClicks,
+    profileVisits: a.profileVisits + b.profileVisits,
+    follows: a.follows + b.follows,
+    businessAddressTaps: a.businessAddressTaps + b.businessAddressTaps,
+    externalLinkTaps: a.externalLinkTaps + b.externalLinkTaps,
+    other: Array.from(other, ([actionType, value]) => ({ actionType, value })),
+  };
+}
+
+function categorizeActions(actions: { action_type?: string; value?: string }[] | undefined): ActionTotals {
+  const totals = emptyActionTotals();
+  for (const a of actions ?? []) {
+    const type = a.action_type ?? '';
+    const value = Number(a.value ?? 0);
+    if (type === 'like' || type === 'post_reaction') totals.likes += value;
+    else if (type === 'comment') totals.comments += value;
+    else if (type === 'post') totals.shares += value;
+    else if (type === 'post_save' || type === 'onsite_conversion.post_save') totals.saves += value;
+    else if (type === 'link_click') totals.linkClicks += value;
+    else if (type.includes('profile_visit')) totals.profileVisits += value;
+    else if (type.includes('follow')) totals.follows += value;
+    else if (type.includes('address') || type.includes('get_directions')) totals.businessAddressTaps += value;
+    else if (type.includes('website_click') || type.includes('bio_link') || type.includes('external')) totals.externalLinkTaps += value;
+    else totals.other.push({ actionType: type, value });
+  }
+  return totals;
+}
+
 export interface PlatformSpend {
   platform: AdPlatform;
   spend: number;
   impressions: number;
   reach: number;
+  actions: ActionTotals;
 }
 
 async function fetchInsightsBreakdown(
@@ -190,7 +265,7 @@ async function fetchInsightsBreakdown(
   window: { since: string; until: string } | { datePreset: 'maximum' }
 ): Promise<PlatformSpend[]> {
   const params = new URLSearchParams({
-    fields: 'spend,impressions,reach',
+    fields: 'spend,impressions,reach,actions',
     breakdowns: 'publisher_platform',
     limit: '10',
     access_token: token,
@@ -212,12 +287,18 @@ async function fetchInsightsBreakdown(
       spend: Number(r.spend ?? 0),
       impressions: Number(r.impressions ?? 0),
       reach: Number(r.reach ?? 0),
+      actions: categorizeActions(r.actions as { action_type?: string; value?: string }[] | undefined),
     }));
 }
 
 function sumBreakdown(rows: PlatformSpend[], field: 'spend' | 'impressions' | 'reach', platform?: AdPlatform): number {
   const relevant = platform ? rows.filter(r => r.platform === platform) : rows;
   return relevant.reduce((sum, r) => sum + r[field], 0);
+}
+
+function sumActions(rows: PlatformSpend[], platform?: AdPlatform): ActionTotals {
+  const relevant = platform ? rows.filter(r => r.platform === platform) : rows;
+  return relevant.reduce((sum, r) => addActionTotals(sum, r.actions), emptyActionTotals());
 }
 
 // A boost/campaign-budget-optimization campaign carries its own budget and
@@ -266,12 +347,14 @@ export interface CampaignSummary {
   windowSpend: number;
   windowImpressions: number;
   windowReach: number;
+  windowActions: ActionTotals;
   platformBreakdown: PlatformSpend[];
 }
 
 export interface AdsDashboard {
   currency: string;
   campaigns: CampaignSummary[];
+  totalActions: ActionTotals;
 }
 
 export async function getAdsDashboard(opts: {
@@ -310,6 +393,7 @@ export async function getAdsDashboard(opts: {
         windowSpend: sumBreakdown(windowBreakdown, 'spend', opts.platform),
         windowImpressions: sumBreakdown(windowBreakdown, 'impressions', opts.platform),
         windowReach: sumBreakdown(windowBreakdown, 'reach', opts.platform),
+        windowActions: sumActions(windowBreakdown, opts.platform),
         platformBreakdown: windowBreakdown,
       };
       return summary;
@@ -323,7 +407,9 @@ export async function getAdsDashboard(opts: {
     ? summaries.filter(s => s.lifetimeSpend > 0 || s.windowSpend > 0)
     : summaries;
 
-  return { currency, campaigns: filtered };
+  const totalActions = filtered.reduce((sum, c) => addActionTotals(sum, c.windowActions), emptyActionTotals());
+
+  return { currency, campaigns: filtered, totalActions };
 }
 
 export interface DailyStat {
@@ -331,6 +417,39 @@ export interface DailyStat {
   spend: number;
   impressions: number;
   reach: number;
+  actions: ActionTotals;
+}
+
+async function fetchDailySeries(entityId: string, token: string, since: string, until: string, platform?: AdPlatform): Promise<DailyStat[]> {
+  const params = new URLSearchParams({
+    fields: 'spend,impressions,reach,actions',
+    time_range: JSON.stringify({ since, until }),
+    time_increment: '1',
+    limit: '500',
+    access_token: token,
+  });
+  if (platform) params.set('breakdowns', 'publisher_platform');
+
+  const res = await fetch(`${GRAPH_API}/${entityId}/insights?${params}`, { cache: 'no-store' });
+  if (!res.ok) {
+    console.error(`Meta Ads dailySeries failed for ${entityId}: ${res.status} ${await res.text()}`);
+    return [];
+  }
+  const json = await res.json();
+  const rows: Record<string, unknown>[] = json.data ?? [];
+
+  const byDate = new Map<string, DailyStat>();
+  for (const r of rows) {
+    if (platform && r.publisher_platform !== platform) continue;
+    const date = r.date_start as string;
+    const existing = byDate.get(date) ?? { date, spend: 0, impressions: 0, reach: 0, actions: emptyActionTotals() };
+    existing.spend += Number(r.spend ?? 0);
+    existing.impressions += Number(r.impressions ?? 0);
+    existing.reach += Number(r.reach ?? 0);
+    existing.actions = addActionTotals(existing.actions, categorizeActions(r.actions as { action_type?: string; value?: string }[] | undefined));
+    byDate.set(date, existing);
+  }
+  return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
 
 export async function getCampaignDailySeries(
@@ -341,35 +460,21 @@ export async function getCampaignDailySeries(
 ): Promise<DailyStat[]> {
   const creds = getCredentials();
   if (!creds) return [];
+  return fetchDailySeries(campaignId, creds.token, since, until, platform);
+}
 
-  const params = new URLSearchParams({
-    fields: 'spend,impressions,reach',
-    time_range: JSON.stringify({ since, until }),
-    time_increment: '1',
-    limit: '500',
-    access_token: creds.token,
-  });
-  if (platform) params.set('breakdowns', 'publisher_platform');
-
-  const res = await fetch(`${GRAPH_API}/${campaignId}/insights?${params}`, { cache: 'no-store' });
-  if (!res.ok) {
-    console.error(`Meta Ads dailySeries failed for ${campaignId}: ${res.status} ${await res.text()}`);
-    return [];
-  }
-  const json = await res.json();
-  const rows: Record<string, unknown>[] = json.data ?? [];
-
-  const byDate = new Map<string, DailyStat>();
-  for (const r of rows) {
-    if (platform && r.publisher_platform !== platform) continue;
-    const date = r.date_start as string;
-    const existing = byDate.get(date) ?? { date, spend: 0, impressions: 0, reach: 0 };
-    existing.spend += Number(r.spend ?? 0);
-    existing.impressions += Number(r.impressions ?? 0);
-    existing.reach += Number(r.reach ?? 0);
-    byDate.set(date, existing);
-  }
-  return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+/** Account-wide daily series (summed across every campaign automatically by
+ * querying the ad account's own insights endpoint) — powers the main
+ * range-selectable chart on the ads page, without fetching + summing each
+ * campaign's series individually. */
+export async function getAccountDailySeries(
+  since: string,
+  until: string,
+  opts: { platform?: AdPlatform; accountId?: string } = {}
+): Promise<DailyStat[]> {
+  const creds = getCredentials(opts.accountId);
+  if (!creds) return [];
+  return fetchDailySeries(creds.accountId, creds.token, since, until, opts.platform);
 }
 
 export interface CampaignDetail extends CampaignSummary {
@@ -429,6 +534,7 @@ export async function getCampaignDetail(
     windowSpend: sumBreakdown(windowBreakdown, 'spend', opts.platform),
     windowImpressions: sumBreakdown(windowBreakdown, 'impressions', opts.platform),
     windowReach: sumBreakdown(windowBreakdown, 'reach', opts.platform),
+    windowActions: sumActions(windowBreakdown, opts.platform),
     platformBreakdown: windowBreakdown,
     dailySeries,
     currency,

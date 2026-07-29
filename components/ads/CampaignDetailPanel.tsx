@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, Pause, Play, Calendar, Wallet } from 'lucide-react';
+import { X, Pause, Play, Calendar, Wallet, Heart, UserCheck } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { PlatformBadge } from '@/components/ui/PlatformBadge';
-import { AdSpendChart } from '@/components/charts/AdSpendChart';
+import { MetricChart, METRIC_OPTIONS, type DailyStat, type ActionTotals, type MetricKey } from '@/components/charts/MetricChart';
 import type { AdPlatform } from '@/lib/meta-ads';
 
 interface CampaignDetail {
@@ -21,9 +21,19 @@ interface CampaignDetail {
   windowSpend: number;
   windowImpressions: number;
   windowReach: number;
+  windowActions: ActionTotals;
   platformBreakdown: { platform: AdPlatform; spend: number; impressions: number; reach: number }[];
-  dailySeries: { date: string; spend: number; impressions: number; reach: number }[];
+  dailySeries: DailyStat[];
   currency: string;
+}
+
+function formatCost(amount: number, count: number, currency: string): string {
+  if (count <= 0) return '—';
+  try {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(amount / count);
+  } catch {
+    return `${(amount / count).toFixed(2)} ${currency}`;
+  }
 }
 
 function formatMoney(amount: number, currency: string): string {
@@ -59,6 +69,7 @@ export function CampaignDetailPanel({
   const [detail, setDetail] = useState<CampaignDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [metric, setMetric] = useState<MetricKey>('spend');
 
   function loadDetail() {
     const params = new URLSearchParams({ since, until, account: accountId });
@@ -181,7 +192,7 @@ export function CampaignDetailPanel({
                 </p>
               </div>
               <div>
-                <p className="text-xs text-neutral-500 dark:text-neutral-400">Reach</p>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">Views (reach)</p>
                 <p className="text-sm font-semibold text-neutral-900 dark:text-white">
                   {detail.windowReach.toLocaleString()}
                 </p>
@@ -189,8 +200,83 @@ export function CampaignDetailPanel({
             </div>
 
             <div>
-              <h4 className="mb-2 text-sm font-semibold text-neutral-900 dark:text-white">Spend over time</h4>
-              <AdSpendChart data={detail.dailySeries} currency={detail.currency} />
+              <h4 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-neutral-900 dark:text-white">
+                <Heart className="h-3.5 w-3.5" /> Interactions
+              </h4>
+              <div className="grid grid-cols-4 gap-2 text-center">
+                {[
+                  { label: 'Likes', value: detail.windowActions.likes },
+                  { label: 'Saves', value: detail.windowActions.saves },
+                  { label: 'Shares', value: detail.windowActions.shares },
+                  { label: 'Comments', value: detail.windowActions.comments },
+                ].map(s => (
+                  <div key={s.label} className="rounded-lg border border-neutral-200 py-2 dark:border-neutral-700">
+                    <p className="text-sm font-semibold text-neutral-900 dark:text-white">{s.value.toLocaleString()}</p>
+                    <p className="text-[11px] text-neutral-500 dark:text-neutral-400">{s.label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h4 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-neutral-900 dark:text-white">
+                <UserCheck className="h-3.5 w-3.5" /> Profile activity
+              </h4>
+              <div className="grid grid-cols-4 gap-2 text-center">
+                {[
+                  { label: 'Profile visits', value: detail.windowActions.profileVisits },
+                  { label: 'Follows', value: detail.windowActions.follows },
+                  { label: 'Address taps', value: detail.windowActions.businessAddressTaps },
+                  { label: 'Link taps', value: detail.windowActions.externalLinkTaps },
+                ].map(s => (
+                  <div key={s.label} className="rounded-lg border border-neutral-200 py-2 dark:border-neutral-700">
+                    <p className="text-sm font-semibold text-neutral-900 dark:text-white">{s.value.toLocaleString()}</p>
+                    <p className="text-[11px] text-neutral-500 dark:text-neutral-400">{s.label}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+                Cost per profile visit:{' '}
+                <span className="font-medium text-neutral-900 dark:text-white">
+                  {formatCost(detail.windowSpend, detail.windowActions.profileVisits, detail.currency)}
+                </span>
+              </p>
+            </div>
+
+            {detail.windowActions.other.length > 0 && (
+              <div>
+                <h4 className="mb-2 text-sm font-semibold text-neutral-900 dark:text-white">Other activity</h4>
+                <div className="space-y-1 text-xs">
+                  {detail.windowActions.other.map(o => (
+                    <div key={o.actionType} className="flex items-center justify-between text-neutral-500 dark:text-neutral-400">
+                      <span className="truncate">{o.actionType}</span>
+                      <span className="font-medium text-neutral-900 dark:text-white">{o.value.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <h4 className="text-sm font-semibold text-neutral-900 dark:text-white">Stats over time</h4>
+                <div className="flex flex-wrap gap-1 rounded-xl bg-neutral-100 p-1 dark:bg-neutral-800">
+                  {METRIC_OPTIONS.map(m => (
+                    <button
+                      key={m.value}
+                      onClick={() => setMetric(m.value)}
+                      className={`rounded-lg px-2 py-1 text-[11px] font-medium transition ${
+                        metric === m.value
+                          ? 'bg-white text-neutral-900 shadow-sm dark:bg-neutral-700 dark:text-white'
+                          : 'text-neutral-500 dark:text-neutral-400'
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <MetricChart data={detail.dailySeries} metric={metric} currency={detail.currency} />
             </div>
 
             {detail.status === 'ACTIVE' && (
