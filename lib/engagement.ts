@@ -188,6 +188,12 @@ export async function getLinkedInAccountStats(): Promise<AccountStats | null> {
   const d = await res.json();
   const counts = d.elements?.[0]?.followerCounts;
   const followers = (counts?.organicFollowerCount ?? 0) + (counts?.paidFollowerCount ?? 0);
+  // Temporary: the token now authenticates fine but followers keeps coming
+  // back 0, which points at a response-shape mismatch rather than a real
+  // zero-follower account. Logging the raw body so the actual shape LinkedIn
+  // returns can be compared against what's parsed above, instead of guessing
+  // again blind.
+  if (followers === 0) console.log(`LinkedIn getAccountStats raw response for ${orgUrn}: ${JSON.stringify(d)}`);
   return { platform: 'linkedin', followers };
 }
 
