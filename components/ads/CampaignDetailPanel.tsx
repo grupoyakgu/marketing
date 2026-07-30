@@ -27,6 +27,17 @@ interface CampaignDetail {
   currency: string;
 }
 
+// Meta's raw action_type strings are underscore/dot-delimited machine names
+// (e.g. "onsite_conversion.post_save", "landing_page_view") — turn them into
+// readable titles like "Onsite Conversion Post Save" / "Landing Page View".
+function formatActionType(actionType: string): string {
+  return actionType
+    .split(/[._]/)
+    .filter(Boolean)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
 function formatCost(amount: number, count: number, currency: string): string {
   if (count <= 0) return '—';
   try {
@@ -249,7 +260,7 @@ export function CampaignDetailPanel({
                 <div className="space-y-1 text-xs">
                   {detail.windowActions.other.map(o => (
                     <div key={o.actionType} className="flex items-center justify-between text-neutral-500 dark:text-neutral-400">
-                      <span className="truncate">{o.actionType}</span>
+                      <span className="truncate">{formatActionType(o.actionType)}</span>
                       <span className="font-medium text-neutral-900 dark:text-white">{o.value.toLocaleString()}</span>
                     </div>
                   ))}
