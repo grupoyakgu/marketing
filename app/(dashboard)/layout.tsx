@@ -1,7 +1,7 @@
 import { getServerSession } from '@/lib/server-session';
 import { Sidebar } from '@/components/dashboard/Sidebar';
 import { ThemeToggle } from '@/components/dashboard/ThemeToggle';
-import { CommentsNotificationDot } from '@/components/dashboard/CommentsNotificationDot';
+import { UnviewedCommentsButton } from '@/components/dashboard/UnviewedCommentsButton';
 import { UserMenu } from '@/components/dashboard/UserMenu';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -16,10 +16,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <Sidebar buildVersion={buildVersion} />
       <div className="flex flex-1 flex-col">
         <header className="flex h-16 items-center justify-end gap-3 border-b border-neutral-200 bg-white px-6 dark:border-neutral-800 dark:bg-neutral-900">
-          <div className="relative">
-            <ThemeToggle />
-            <CommentsNotificationDot />
-          </div>
+          <UnviewedCommentsButton />
+          <ThemeToggle />
           {session && <UserMenu username={session.username} role={session.role} />}
         </header>
         <main className="flex-1 bg-neutral-50 p-6 dark:bg-neutral-950">{children}</main>
