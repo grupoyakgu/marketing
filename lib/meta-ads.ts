@@ -47,6 +47,24 @@ export function isMetaAdsConfigured(): boolean {
   return getCredentials() !== null;
 }
 
+/** True if any configured ad account currently has an active campaign — used
+ * to widen the comment-check lookback window for organic posts that are also
+ * running as paid boosts, since those can keep drawing new comments well
+ * past the default recency cutoff. Deliberately coarse (any active campaign
+ * on any account, not resolved to a specific post) rather than trying to map
+ * a campaign's ad creative back to the exact post it boosts — every paid
+ * post here is already a boost of a post we posted ourselves and already
+ * track, so widening the window is enough; no need to reconstruct the
+ * ad-to-post mapping from Meta's Ads API at all. */
+export async function hasActivePaidCampaigns(): Promise<boolean> {
+  const token = process.env.FACEBOOK_ADS_ACCESS_TOKEN;
+  const accountIds = getConfiguredAccountIds();
+  if (!token || accountIds.length === 0) return false;
+
+  const results = await Promise.all(accountIds.map(id => listRawCampaigns(id, token)));
+  return results.some(campaigns => campaigns.some(c => c.status === 'ACTIVE'));
+}
+
 export interface AdAccountOption {
   id: string;
   name: string;
