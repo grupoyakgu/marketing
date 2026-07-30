@@ -186,14 +186,18 @@ export async function getLinkedInAccountStats(): Promise<AccountStats | null> {
     return null;
   }
   const d = await res.json();
-  const counts = d.elements?.[0]?.followerCounts;
-  const followers = (counts?.organicFollowerCount ?? 0) + (counts?.paidFollowerCount ?? 0);
-  // Temporary: the token now authenticates fine but followers keeps coming
-  // back 0, which points at a response-shape mismatch rather than a real
-  // zero-follower account. Logging the raw body so the actual shape LinkedIn
-  // returns can be compared against what's parsed above, instead of guessing
-  // again blind.
-  if (followers === 0) console.log(`LinkedIn getAccountStats raw response for ${orgUrn}: ${JSON.stringify(d)}`);
+  // There's no flat followerCounts field on elements[0] — this endpoint only
+  // returns per-facet breakdowns (byAssociationType, bySeniority, byIndustry,
+  // ...). followerCountsByAssociationType is the one guaranteed to be an
+  // exhaustive split of every follower (employee vs. non-employee), unlike
+  // the demographic facets which can omit followers with incomplete profiles,
+  // so it's the only reliable source for a grand total.
+  const byAssociation: { followerCounts?: { organicFollowerCount?: number; paidFollowerCount?: number } }[] =
+    d.elements?.[0]?.followerCountsByAssociationType ?? [];
+  const followers = byAssociation.reduce(
+    (sum, entry) => sum + (entry.followerCounts?.organicFollowerCount ?? 0) + (entry.followerCounts?.paidFollowerCount ?? 0),
+    0
+  );
   return { platform: 'linkedin', followers };
 }
 
