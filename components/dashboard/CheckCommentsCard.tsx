@@ -8,16 +8,12 @@ import { MessageSquare, Clock3 } from 'lucide-react';
 
 interface CheckResult {
   comments: number;
-  thankYou: number;
-  shoutouts: number;
   skipped?: string;
 }
 
 interface CheckStatus {
   checkedAt: string | null;
   commentsHandled: number | null;
-  thankYouCount: number | null;
-  shoutoutCount: number | null;
   skipped: string | null;
 }
 
@@ -25,9 +21,9 @@ function formatAbsolute(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-function summarize(result: { comments: number; thankYou: number; shoutouts: number; skipped?: string | null }): string {
+function summarize(result: { comments: number; skipped?: string | null }): string {
   if (result.skipped) return `Skipped: ${result.skipped}`;
-  return `${result.comments} comment${result.comments === 1 ? '' : 's'} handled, ${result.thankYou} thank-you comment${result.thankYou === 1 ? '' : 's'}, ${result.shoutouts} shoutout post${result.shoutouts === 1 ? '' : 's'} drafted.`;
+  return `${result.comments} comment${result.comments === 1 ? '' : 's'} handled.`;
 }
 
 export function CheckCommentsCard() {
@@ -60,8 +56,6 @@ export function CheckCommentsCard() {
       setStatus({
         checkedAt: new Date().toISOString(),
         commentsHandled: body.result.comments,
-        thankYouCount: body.result.thankYou,
-        shoutoutCount: body.result.shoutouts,
         skipped: body.result.skipped ?? null,
       });
       router.refresh();
@@ -80,8 +74,8 @@ export function CheckCommentsCard() {
       </div>
       <p className="text-xs text-neutral-500 dark:text-neutral-400">
         Runs the same check Pepe does hourly: fetches new comments across LinkedIn, Facebook, and
-        Instagram, replies to them, and reacts to like milestones. Can take a while — it also asks
-        Pepe to draft each reply. See the Comments page for the results.
+        Instagram, and replies to them. Can take a while — it also asks Pepe to draft each reply.
+        See the Comments page for the results.
       </p>
 
       {status && (
