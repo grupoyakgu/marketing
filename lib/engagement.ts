@@ -180,8 +180,11 @@ export async function getLinkedInAccountStats(): Promise<AccountStats | null> {
   // actual 45). None of them is an exhaustive total by design; summing any
   // facet is the wrong approach. networkSizes is LinkedIn's endpoint
   // specifically for an exact total follower count.
+  // edgeType's enum value changed from "CompanyFollowedByMember" (<=v202304)
+  // to "COMPANY_FOLLOWED_BY_MEMBER" (v202305+) — LINKEDIN_API_VERSION here
+  // defaults to 202601, well past that cutover.
   const res = await fetch(
-    `${LINKEDIN_REST_API}/networkSizes/${encodeURIComponent(orgUrn)}?edgeType=CompanyFollowedByMember`,
+    `${LINKEDIN_REST_API}/networkSizes/${encodeURIComponent(orgUrn)}?edgeType=COMPANY_FOLLOWED_BY_MEMBER`,
     {
       headers: {
         Authorization: `Bearer ${token}`,
