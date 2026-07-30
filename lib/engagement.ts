@@ -268,11 +268,17 @@ export async function getFollowerHistory(days = 30): Promise<FollowerHistoryPoin
     .gte('captured_at', since)
     .order('captured_at', { ascending: true });
   if (error) throw new Error(error.message);
-  return (data ?? []).map(r => ({
-    platform: r.platform,
-    date: (r.captured_at as string).split('T')[0],
-    followers: r.followers,
-  }));
+  // Multiple snapshots can land on the same calendar day (e.g. several
+  // manual refreshes), and consumers pick one point per platform per day —
+  // keep only the latest snapshot for each (platform, date) pair rather than
+  // however the first one they happen to encounter, which used to surface a
+  // stale earlier-in-the-day value instead of the most current one.
+  const latestByPlatformDate = new Map<string, FollowerHistoryPoint>();
+  for (const r of data ?? []) {
+    const date = (r.captured_at as string).split('T')[0];
+    latestByPlatformDate.set(`${r.platform}:${date}`, { platform: r.platform, date, followers: r.followers });
+  }
+  return Array.from(latestByPlatformDate.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
 
 /** Most recent snapshot per platform from account_stats_history — DB-only, used by the dashboard instead of calling getAllAccountStats() live on every page load. */
