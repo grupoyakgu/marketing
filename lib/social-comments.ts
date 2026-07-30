@@ -267,9 +267,13 @@ export interface CommentPostResult {
 
 // ─── Post top-level comment (thank-you / shoutout) ────────────────────────────
 
+// Creating/replying to comments needs the Community Management API's
+// partnerApiSocialActions.CREATE permission — production logs showed the
+// posting-scoped token 403ing here even though it can post/reply to nothing
+// else fine (it can only create top-level UGC posts, not comments).
 export async function postLinkedInComment(postUrn: string, text: string): Promise<CommentPostResult> {
-  const token = process.env.LINKEDIN_ACCESS_TOKEN;
-  const authorId = process.env.LINKEDIN_AUTHOR_ID;
+  const token = process.env.LINKEDIN_ACCESS_TOKEN_COMM;
+  const authorId = process.env.LINKEDIN_AUTHOR_ID_COMM;
   if (!token || !authorId) return { success: false };
   const authorUrn = authorId.startsWith('urn:li:') ? authorId : `urn:li:organization:${authorId}`;
   const res = await fetch(
@@ -331,13 +335,15 @@ async function extractLinkedInCreatedId(res: Response): Promise<string | undefin
   }
 }
 
+// Same permission gap as postLinkedInComment above — replying is also a
+// social-actions CREATE, not covered by the posting-only token.
 export async function replyToLinkedInComment(
   postUrn: string,
   commentUrn: string,
   text: string
 ): Promise<CommentPostResult> {
-  const token = process.env.LINKEDIN_ACCESS_TOKEN;
-  const authorId = process.env.LINKEDIN_AUTHOR_ID;
+  const token = process.env.LINKEDIN_ACCESS_TOKEN_COMM;
+  const authorId = process.env.LINKEDIN_AUTHOR_ID_COMM;
   if (!token || !authorId) return { success: false };
   const authorUrn = authorId.startsWith('urn:li:') ? authorId : `urn:li:organization:${authorId}`;
   const res = await fetch(
