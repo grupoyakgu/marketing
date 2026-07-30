@@ -157,9 +157,13 @@ export async function getLinkedInPostEngagement(postUrn: string): Promise<PostEn
   };
 }
 
+// Follower stats need the Community Management API's org-social read scope,
+// which lives on a separate token/author id from the one used for posting
+// (LINKEDIN_ACCESS_TOKEN/LINKEDIN_AUTHOR_ID) — that one only carries posting
+// scopes and can't call this endpoint.
 export async function getLinkedInAccountStats(): Promise<AccountStats | null> {
-  const token = process.env.LINKEDIN_ACCESS_TOKEN;
-  const authorId = process.env.LINKEDIN_AUTHOR_ID;
+  const token = process.env.LINKEDIN_ACCESS_TOKEN_COMM;
+  const authorId = process.env.LINKEDIN_AUTHOR_ID_COMM;
   if (!token || !authorId) return null;
   const orgId = authorId.replace('urn:li:organization:', '').replace('organization:', '');
   const orgUrn = `urn:li:organization:${orgId}`;
