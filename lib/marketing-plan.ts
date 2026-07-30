@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { hasActivePaidCampaigns } from '@/lib/meta-ads';
 
 export interface MarketingPost {
   id?: string;
@@ -169,10 +170,17 @@ export async function trackDirectPost(
 export async function getPostedPostsForCommentCheck(): Promise<
   { platform: 'linkedin' | 'instagram' | 'facebook'; platform_post_id: string }[]
 > {
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-  const cutoffDate = sevenDaysAgo.toISOString().split('T')[0];
-  const cutoffTs = sevenDaysAgo.toISOString();
+  // Posts still running as paid boosts can keep drawing new comments well
+  // past the usual week-old cutoff, so widen the window whenever any paid
+  // campaign is currently active — every paid post here is a boost of a post
+  // we posted ourselves, so it's already covered by these same two tables,
+  // just outside the default lookback.
+  const hasPaidCampaigns = await hasActivePaidCampaigns().catch(() => false);
+  const lookbackDays = hasPaidCampaigns ? 30 : 7;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - lookbackDays);
+  const cutoffDate = cutoff.toISOString().split('T')[0];
+  const cutoffTs = cutoff.toISOString();
 
   const [planned, tracked] = await Promise.all([
     supabase
