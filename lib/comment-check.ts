@@ -40,7 +40,7 @@ async function finish(result: CommentCheckResult): Promise<CommentCheckResult> {
  * no longer reacts to like counts (previously: an automatic thank-you
  * comment and a "shoutout" follow-up post once a post crossed a like
  * threshold), per explicit request to only reply when someone actually
- * comments. Shared by the hourly cron (/api/cron/check-comments) and the
+ * comments. Shared by the daily cron (/api/cron/check-comments) and the
  * manual "Check now" action in Settings — same work, two triggers, same as
  * the dashboard-refresh split. */
 export async function runCommentCheck(): Promise<CommentCheckResult> {
