@@ -127,8 +127,12 @@ export async function getInstagramAccountStats(): Promise<AccountStats | null> {
 
 // ─── LinkedIn ─────────────────────────────────────────────────────────────────
 
+// Reads socialMetadata (impressions/likes/comments/shares) — this needs the
+// Community Management API's read scope, same as getLinkedInAccountStats
+// below. Production logs confirmed the old posting-scoped token gets a 403
+// here (partnerApiSocialMetadata.GET) even though it can post/reply fine.
 export async function getLinkedInPostEngagement(postUrn: string): Promise<PostEngagement | null> {
-  const token = process.env.LINKEDIN_ACCESS_TOKEN;
+  const token = process.env.LINKEDIN_ACCESS_TOKEN_COMM;
   if (!token) return null;
   const encoded = encodeURIComponent(postUrn);
   const res = await fetch(
