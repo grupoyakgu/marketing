@@ -197,12 +197,17 @@ You speak with authority and warmth. You are direct, strategic, and deeply passi
 const tools: Anthropic.Tool[] = [
   {
     name: 'post_to_linkedin',
-    description: 'Publishes a post to LinkedIn.',
+    description:
+      'Publishes a post to LinkedIn. Uses the normal posting app by default — only set via_community_management to true if the user explicitly asks to post/test via the Community Management app/credentials specifically.',
     input_schema: {
       type: 'object' as const,
       properties: {
         content: { type: 'string' },
         image_url: { type: 'string' },
+        via_community_management: {
+          type: 'boolean',
+          description: 'Set true only when the user explicitly asks to post via the Community Management app instead of the normal posting app.',
+        },
       },
       required: ['content'],
     },
@@ -471,10 +476,23 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
         try {
           await withTimeout((async () => {
         if (block.name === 'post_to_linkedin') {
-          const input = block.input as { content: string; image_url?: string };
-          const result = await postToLinkedIn(input.content, input.image_url);
-          if (result.success && result.postId) await trackDirectPost('linkedin', result.postId);
-          resultContent = result.success ? `Posted to LinkedIn!${result.url ? ` URL: ${result.url}` : ''}` : `Failed: ${result.error}`;
+          const input = block.input as { content: string; image_url?: string; via_community_management?: boolean };
+          let credentials: { token: string; authorId: string } | undefined;
+          if (input.via_community_management) {
+            const token = process.env.LINKEDIN_ACCESS_TOKEN_COMM;
+            const authorId = process.env.LINKEDIN_AUTHOR_ID_COMM;
+            if (!token || !authorId) {
+              resultContent = 'Failed: LINKEDIN_ACCESS_TOKEN_COMM or LINKEDIN_AUTHOR_ID_COMM not configured.';
+            }
+            credentials = token && authorId ? { token, authorId } : undefined;
+          }
+          if (!resultContent) {
+            const result = await postToLinkedIn(input.content, input.image_url, credentials);
+            if (result.success && result.postId) await trackDirectPost('linkedin', result.postId);
+            resultContent = result.success
+              ? `Posted to LinkedIn${input.via_community_management ? ' via the Community Management app' : ''}!${result.url ? ` URL: ${result.url}` : ''}`
+              : `Failed: ${result.error}`;
+          }
         }
 
         if (block.name === 'post_to_facebook') {
