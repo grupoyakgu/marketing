@@ -73,7 +73,7 @@ export function CheckCommentsCard() {
         <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">Comment Check</h2>
       </div>
       <p className="text-xs text-neutral-500 dark:text-neutral-400">
-        Runs the same check Pepe does hourly: fetches new comments across LinkedIn, Facebook, and
+        Runs the same check Pepe does daily: fetches new comments across LinkedIn, Facebook, and
         Instagram, and replies to them. Can take a while — it also asks Pepe to draft each reply.
         See the Comments page for the results.
       </p>
