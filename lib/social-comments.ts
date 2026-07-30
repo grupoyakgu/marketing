@@ -151,6 +151,27 @@ export async function recordCommentCheckStatus(status: {
   if (error) console.error(`recordCommentCheckStatus upsert failed: ${error.message}`);
 }
 
+// ─── Comment view status (unread notification dot) ─────────────────────────
+
+export async function markCommentsViewed(): Promise<void> {
+  const { error } = await db()
+    .from('comment_view_status')
+    .upsert({ id: 'singleton', viewed_at: new Date().toISOString() });
+  if (error) console.error(`markCommentsViewed upsert failed: ${error.message}`);
+}
+
+/** True if any comment was recorded (comment-check found it) after the user
+ * last opened the /comments page — drives the header notification dot. */
+export async function hasUnviewedComments(): Promise<boolean> {
+  const [{ data: latest }, { data: viewStatus }] = await Promise.all([
+    db().from('comment_log').select('created_at').order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    db().from('comment_view_status').select('viewed_at').eq('id', 'singleton').maybeSingle(),
+  ]);
+  if (!latest?.created_at) return false;
+  if (!viewStatus?.viewed_at) return true;
+  return new Date(latest.created_at).getTime() > new Date(viewStatus.viewed_at).getTime();
+}
+
 // ─── Milestone tracking ──────────────────────────────────────────────────
 
 export async function hasMilestone(
