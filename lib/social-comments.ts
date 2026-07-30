@@ -180,8 +180,13 @@ export async function recordMilestone(
 
 // ─── Fetch comments ────────────────────────────────────────────────────────
 
+// Reading comments needs the Community Management API's read scope (same
+// gap as getLinkedInPostEngagement in lib/engagement.ts) — production logs
+// showed the posting-scoped token 403ing here (partnerApiSocialActions.GET_ALL)
+// even though it can post/reply fine, so this uses the separate read token
+// while postLinkedInComment/replyToLinkedInComment below keep the write one.
 export async function getLinkedInComments(postUrn: string): Promise<SocialComment[]> {
-  const token = process.env.LINKEDIN_ACCESS_TOKEN;
+  const token = process.env.LINKEDIN_ACCESS_TOKEN_COMM;
   if (!token) return [];
   const res = await fetch(
     `${LINKEDIN_REST_API}/socialActions/${encodeURIComponent(postUrn)}/comments?count=20`,
