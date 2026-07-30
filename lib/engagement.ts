@@ -186,18 +186,22 @@ export async function getLinkedInAccountStats(): Promise<AccountStats | null> {
     return null;
   }
   const d = await res.json();
-  // There's no flat followerCounts field on elements[0] — this endpoint only
-  // returns per-facet breakdowns (byAssociationType, bySeniority, byIndustry,
-  // ...). followerCountsByAssociationType is the one guaranteed to be an
-  // exhaustive split of every follower (employee vs. non-employee), unlike
-  // the demographic facets which can omit followers with incomplete profiles,
-  // so it's the only reliable source for a grand total.
-  const byAssociation: { followerCounts?: { organicFollowerCount?: number; paidFollowerCount?: number } }[] =
-    d.elements?.[0]?.followerCountsByAssociationType ?? [];
-  const followers = byAssociation.reduce(
-    (sum, entry) => sum + (entry.followerCounts?.organicFollowerCount ?? 0) + (entry.followerCounts?.paidFollowerCount ?? 0),
-    0
-  );
+  // There's no flat followerCounts field on elements[0] — only per-facet
+  // breakdowns (byAssociationType, bySeniority, byIndustry, ...), and it
+  // turns out byAssociationType (tried last) only covers identified
+  // "EMPLOYEE" followers rather than every follower, undercounting the real
+  // total. Temporary: log every facet's own summed total side by side so the
+  // most complete one can be identified from real data instead of guessing
+  // facet-by-facet again.
+  const element = d.elements?.[0] ?? {};
+  const facetTotals: Record<string, number> = {};
+  for (const [key, value] of Object.entries(element)) {
+    if (!Array.isArray(value)) continue;
+    facetTotals[key] = value.reduce((sum: number, entry: { followerCounts?: { organicFollowerCount?: number; paidFollowerCount?: number } }) =>
+      sum + (entry.followerCounts?.organicFollowerCount ?? 0) + (entry.followerCounts?.paidFollowerCount ?? 0), 0);
+  }
+  console.log(`LinkedIn getAccountStats facet totals for ${orgUrn}: ${JSON.stringify(facetTotals)}`);
+  const followers = facetTotals['followerCountsByAssociationType'] ?? 0;
   return { platform: 'linkedin', followers };
 }
 
