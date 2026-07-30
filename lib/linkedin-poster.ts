@@ -70,10 +70,11 @@ async function uploadMedia(uploadUrl: string, data: ArrayBuffer, mimeType: strin
 
 export async function postToLinkedIn(
   text: string,
-  media?: MediaUpload | string
+  media?: MediaUpload | string,
+  credentials?: { token: string; authorId: string }
 ): Promise<LinkedInPostResult> {
-  const token = process.env.LINKEDIN_ACCESS_TOKEN;
-  const authorId = process.env.LINKEDIN_AUTHOR_ID;
+  const token = credentials?.token ?? process.env.LINKEDIN_ACCESS_TOKEN;
+  const authorId = credentials?.authorId ?? process.env.LINKEDIN_AUTHOR_ID;
 
   if (!token || !authorId) {
     return { success: false, error: 'LINKEDIN_ACCESS_TOKEN or LINKEDIN_AUTHOR_ID not configured.' };
