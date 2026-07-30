@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getCommentLog, getCommentCheckStatus } from '@/lib/social-comments';
+import { getCommentLog, getCommentCheckStatus, markCommentsViewed } from '@/lib/social-comments';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { PlatformBadge } from '@/components/ui/PlatformBadge';
@@ -26,6 +26,9 @@ function formatCheckedAt(iso: string | null): string {
 
 export default async function CommentsPage() {
   const [comments, checkStatus] = await Promise.all([getCommentLog(100), getCommentCheckStatus()]);
+  // Clears the header's unread notification dot — fire-and-forget so a slow
+  // write never delays rendering the page the user is already looking at.
+  markCommentsViewed().catch(() => {});
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
