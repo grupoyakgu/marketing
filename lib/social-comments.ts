@@ -112,30 +112,24 @@ export async function getCommentLog(limit = 100): Promise<CommentLogRow[]> {
 export interface CommentCheckStatus {
   checkedAt: string | null;
   commentsHandled: number | null;
-  thankYouCount: number | null;
-  shoutoutCount: number | null;
   skipped: string | null;
 }
 
 export async function getCommentCheckStatus(): Promise<CommentCheckStatus> {
   const { data } = await db()
     .from('comment_check_status')
-    .select('checked_at, comments_handled, thank_you_count, shoutout_count, skipped')
+    .select('checked_at, comments_handled, skipped')
     .eq('id', 'singleton')
     .maybeSingle();
   return {
     checkedAt: data?.checked_at ?? null,
     commentsHandled: data?.comments_handled ?? null,
-    thankYouCount: data?.thank_you_count ?? null,
-    shoutoutCount: data?.shoutout_count ?? null,
     skipped: data?.skipped ?? null,
   };
 }
 
 export async function recordCommentCheckStatus(status: {
   commentsHandled: number;
-  thankYouCount: number;
-  shoutoutCount: number;
   skipped?: string;
 }): Promise<void> {
   const { error } = await db()
@@ -144,8 +138,6 @@ export async function recordCommentCheckStatus(status: {
       id: 'singleton',
       checked_at: new Date().toISOString(),
       comments_handled: status.commentsHandled,
-      thank_you_count: status.thankYouCount,
-      shoutout_count: status.shoutoutCount,
       skipped: status.skipped ?? null,
     });
   if (error) console.error(`recordCommentCheckStatus upsert failed: ${error.message}`);
@@ -170,33 +162,6 @@ export async function hasUnviewedComments(): Promise<boolean> {
   if (!latest?.created_at) return false;
   if (!viewStatus?.viewed_at) return true;
   return new Date(latest.created_at).getTime() > new Date(viewStatus.viewed_at).getTime();
-}
-
-// ─── Milestone tracking ──────────────────────────────────────────────────
-
-export async function hasMilestone(
-  platform: string,
-  postId: string,
-  milestone: string
-): Promise<boolean> {
-  const { data } = await db()
-    .from('post_milestones')
-    .select('id')
-    .eq('platform', platform)
-    .eq('platform_post_id', postId)
-    .eq('milestone', milestone)
-    .maybeSingle();
-  return !!data;
-}
-
-export async function recordMilestone(
-  platform: string,
-  postId: string,
-  milestone: string
-): Promise<void> {
-  await db()
-    .from('post_milestones')
-    .upsert({ platform, platform_post_id: postId, milestone });
 }
 
 // ─── Fetch comments ────────────────────────────────────────────────────────
