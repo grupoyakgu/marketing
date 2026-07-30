@@ -171,8 +171,17 @@ export async function getLinkedInAccountStats(): Promise<AccountStats | null> {
   if (!token || !authorId) return null;
   const orgId = authorId.replace('urn:li:organization:', '').replace('organization:', '');
   const orgUrn = `urn:li:organization:${orgId}`;
+
+  // organizationalEntityFollowerStatistics only exposes demographic
+  // breakdowns (byAssociationType/bySeniority/byIndustry/...), and every one
+  // of them undercounts — each has gaps for followers with an unfilled
+  // profile attribute in that dimension, confirmed by comparing all of them
+  // against the real known follower count (all came back 28-35 vs. the
+  // actual 45). None of them is an exhaustive total by design; summing any
+  // facet is the wrong approach. networkSizes is LinkedIn's endpoint
+  // specifically for an exact total follower count.
   const res = await fetch(
-    `${LINKEDIN_REST_API}/organizationalEntityFollowerStatistics?q=organizationalEntity&organizationalEntity=${encodeURIComponent(orgUrn)}`,
+    `${LINKEDIN_REST_API}/networkSizes/${encodeURIComponent(orgUrn)}?edgeType=CompanyFollowedByMember`,
     {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -182,27 +191,11 @@ export async function getLinkedInAccountStats(): Promise<AccountStats | null> {
     }
   );
   if (!res.ok) {
-    console.error(`LinkedIn getAccountStats failed for ${orgUrn}: ${res.status} ${await res.text()}`);
+    console.error(`LinkedIn getAccountStats (networkSizes) failed for ${orgUrn}: ${res.status} ${await res.text()}`);
     return null;
   }
   const d = await res.json();
-  // There's no flat followerCounts field on elements[0] — only per-facet
-  // breakdowns (byAssociationType, bySeniority, byIndustry, ...), and it
-  // turns out byAssociationType (tried last) only covers identified
-  // "EMPLOYEE" followers rather than every follower, undercounting the real
-  // total. Temporary: log every facet's own summed total side by side so the
-  // most complete one can be identified from real data instead of guessing
-  // facet-by-facet again.
-  const element = d.elements?.[0] ?? {};
-  const facetTotals: Record<string, number> = {};
-  for (const [key, value] of Object.entries(element)) {
-    if (!Array.isArray(value)) continue;
-    facetTotals[key] = value.reduce((sum: number, entry: { followerCounts?: { organicFollowerCount?: number; paidFollowerCount?: number } }) =>
-      sum + (entry.followerCounts?.organicFollowerCount ?? 0) + (entry.followerCounts?.paidFollowerCount ?? 0), 0);
-  }
-  console.log(`LinkedIn getAccountStats facet totals for ${orgUrn}: ${JSON.stringify(facetTotals)}`);
-  const followers = facetTotals['followerCountsByAssociationType'] ?? 0;
-  return { platform: 'linkedin', followers };
+  return { platform: 'linkedin', followers: d.firstDegreeSize ?? 0 };
 }
 
 // ─── Aggregate ────────────────────────────────────────────────────────────────
