@@ -268,9 +268,12 @@ export interface CommentPostResult {
 // ─── Post top-level comment (thank-you / shoutout) ────────────────────────────
 
 // Creating/replying to comments needs the Community Management API's
-// partnerApiSocialActions.CREATE permission — production logs showed the
-// posting-scoped token 403ing here even though it can post/reply to nothing
-// else fine (it can only create top-level UGC posts, not comments).
+// partnerApiSocialActions.CREATE permission (the posting-scoped token 403s
+// here — it can only create top-level UGC posts, not comments). Separately,
+// the request body itself was also missing `object` (the URN of the post
+// being commented on) — LinkedIn rejects the request outright with a 422
+// ("/object field is required") without ever posting anything, which is why
+// this kept silently failing even after the token was fixed.
 export async function postLinkedInComment(postUrn: string, text: string): Promise<CommentPostResult> {
   const token = process.env.LINKEDIN_ACCESS_TOKEN_COMM;
   const authorId = process.env.LINKEDIN_AUTHOR_ID_COMM;
@@ -286,7 +289,7 @@ export async function postLinkedInComment(postUrn: string, text: string): Promis
         'X-Restli-Protocol-Version': '2.0.0',
         'LinkedIn-Version': LINKEDIN_API_VERSION,
       },
-      body: JSON.stringify({ actor: authorUrn, message: { text } }),
+      body: JSON.stringify({ actor: authorUrn, object: postUrn, message: { text } }),
     }
   );
   if (!res.ok) {
@@ -335,8 +338,7 @@ async function extractLinkedInCreatedId(res: Response): Promise<string | undefin
   }
 }
 
-// Same permission gap as postLinkedInComment above — replying is also a
-// social-actions CREATE, not covered by the posting-only token.
+// Same permission gap and missing-`object` bug as postLinkedInComment above.
 export async function replyToLinkedInComment(
   postUrn: string,
   commentUrn: string,
@@ -356,7 +358,7 @@ export async function replyToLinkedInComment(
         'X-Restli-Protocol-Version': '2.0.0',
         'LinkedIn-Version': LINKEDIN_API_VERSION,
       },
-      body: JSON.stringify({ actor: authorUrn, message: { text }, parentComment: commentUrn }),
+      body: JSON.stringify({ actor: authorUrn, object: postUrn, message: { text }, parentComment: commentUrn }),
     }
   );
   if (!res.ok) {
