@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { postToLinkedIn } from '@/lib/linkedin-poster';
-import { postToFacebook, postToInstagram } from '@/lib/meta-poster';
+import { postToFacebook, postToInstagram, postInstagramStory, postFacebookStory } from '@/lib/meta-poster';
 import { loadHistory, saveMessage, clearHistory as clearDb } from '@/lib/chat-history';
 import { listCloudinaryImages } from '@/lib/cloudinary';
 import {
@@ -180,6 +180,7 @@ If the user asks to compare two posts (e.g. "how did post 3 do vs post 5", "comp
 
 ## TOOLS SUMMARY
 - post_to_linkedin, post_to_facebook, post_to_instagram — publish posts
+- post_instagram_story, post_facebook_story — publish to Stories (24h, ephemeral, image only, no caption)
 - browse_drive_images — list Cloudinary images (call ONCE per plan)
 - save_marketing_plan, get_weekly_plan, approve_posts, reject_post, reschedule_post, retry_post — plan management
 - compare_posts — compare engagement between two posts
@@ -234,6 +235,30 @@ const tools: Anthropic.Tool[] = [
         image_url: { type: 'string' },
       },
       required: ['caption', 'image_url'],
+    },
+  },
+  {
+    name: 'post_instagram_story',
+    description:
+      'Posts an image to Instagram Stories (24h ephemeral, not the feed). Requires image_url. Stories cannot have a caption via the API — the image is posted as-is.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        image_url: { type: 'string' },
+      },
+      required: ['image_url'],
+    },
+  },
+  {
+    name: 'post_facebook_story',
+    description:
+      'Posts an image to Facebook Page Stories (24h ephemeral, not the feed). Requires image_url. Meta restricts this API heavily for third-party apps, so this may fail with a permissions error even when everything else is configured correctly — tell the user plainly if it fails rather than retrying.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        image_url: { type: 'string' },
+      },
+      required: ['image_url'],
     },
   },
   {
@@ -507,6 +532,18 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
           const result = await postToInstagram(input.caption, input.image_url);
           if (result.success && result.postId) await trackDirectPost('instagram', result.postId);
           resultContent = result.success ? `Posted to Instagram!${result.url ? ` URL: ${result.url}` : ''}` : `Failed: ${result.error}`;
+        }
+
+        if (block.name === 'post_instagram_story') {
+          const input = block.input as { image_url: string };
+          const result = await postInstagramStory(input.image_url);
+          resultContent = result.success ? 'Posted to Instagram Stories!' : `Failed: ${result.error}`;
+        }
+
+        if (block.name === 'post_facebook_story') {
+          const input = block.input as { image_url: string };
+          const result = await postFacebookStory(input.image_url);
+          resultContent = result.success ? 'Posted to Facebook Stories!' : `Failed: ${result.error}`;
         }
 
         if (block.name === 'browse_drive_images') {
