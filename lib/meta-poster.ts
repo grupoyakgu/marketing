@@ -85,6 +85,63 @@ export async function postToInstagram(caption: string, imageUrl: string): Promis
   return { success: true, postId: published.id, url: `https://www.instagram.com/p/${published.id}/` };
 }
 
+// Stories use the same container+publish flow as a feed image post, just
+// with media_type: 'STORIES' — Instagram's Content Publishing API doesn't
+// support a caption for stories at all (unlike a feed post), so there's no
+// text parameter here to pass one.
+export async function postInstagramStory(imageUrl: string): Promise<MetaPostResult> {
+  const token = await getPageToken();
+  const igAccountId = process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID!;
+
+  const containerRes = await fetch(`${GRAPH_API}/${igAccountId}/media`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image_url: imageUrl, media_type: 'STORIES', access_token: token }),
+  });
+  const container = await containerRes.json();
+  if (!containerRes.ok) return { success: false, error: container.error?.message ?? 'Failed to create story container' };
+
+  const readiness = await waitForContainerReady(container.id, token);
+  if (!readiness.ready) return { success: false, error: readiness.error ?? 'Story container was not ready to publish.' };
+
+  const publishRes = await fetch(`${GRAPH_API}/${igAccountId}/media_publish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ creation_id: container.id, access_token: token }),
+  });
+  const published = await publishRes.json();
+  if (!publishRes.ok) return { success: false, error: published.error?.message ?? 'Failed to publish story' };
+
+  return { success: true, postId: published.id };
+}
+
+// Facebook Page Stories require a two-step flow: upload the photo unpublished
+// first, then attach it to a story. Meta restricts photo_stories/video_stories
+// access heavily for third-party apps — this can fail with a permissions
+// error even with everything else configured correctly.
+export async function postFacebookStory(imageUrl: string): Promise<MetaPostResult> {
+  const token = await getPageToken();
+  const pageId = process.env.FACEBOOK_PAGE_ID!;
+
+  const uploadRes = await fetch(`${GRAPH_API}/${pageId}/photos`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: imageUrl, published: false, access_token: token }),
+  });
+  const uploaded = await uploadRes.json();
+  if (!uploadRes.ok) return { success: false, error: uploaded.error?.message ?? 'Failed to upload story photo' };
+
+  const storyRes = await fetch(`${GRAPH_API}/${pageId}/photo_stories`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ photo_id: uploaded.id, access_token: token }),
+  });
+  const story = await storyRes.json();
+  if (!storyRes.ok) return { success: false, error: story.error?.message ?? 'Failed to publish Facebook story' };
+
+  return { success: true, postId: story.post_id ?? story.id };
+}
+
 // Facebook handles video processing internally after accepting the upload —
 // unlike Instagram, there's no container/status_code step to poll; the API
 // call itself is the whole operation.
