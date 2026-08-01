@@ -203,6 +203,15 @@ export async function listCloudinaryImagesByFolder(): Promise<CloudinaryFolderIm
     }
   }
 
+  // TEMP DIAGNOSTIC — a user reports a "food" folder still missing from the
+  // picker even after deriving folder names from asset_folder values. Logging
+  // every distinct asset_folder seen account-wide (not per-resource, so this
+  // stays short) to see the folder's exact real path/casing. Remove once
+  // root-caused.
+  const distinctAssetFolders = Array.from(new Set(allResources.map(r => r.asset_folder).filter(Boolean))).sort();
+  console.error(`[cloudinary debug] distinct asset_folder values account-wide: ${JSON.stringify(distinctAssetFolders)}`);
+  console.error(`[cloudinary debug] childNames from listChildFolders("${GALLERY_ROOT}"): ${JSON.stringify(childNames)}`);
+
   const folderNames = new Set([...childNames, ...byFolder.keys()]);
   const subfolders = Array.from(folderNames).map(name => ({ folder: name, images: byFolder.get(name) ?? [] }));
   return rootImages.length > 0 ? [{ folder: 'General', images: rootImages }, ...subfolders] : subfolders;
