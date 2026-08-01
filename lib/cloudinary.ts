@@ -219,6 +219,13 @@ export async function listCloudinaryImagesByFolder(): Promise<CloudinaryFolderIm
     listChildFolders(cloudName, auth, GALLERY_ROOT),
     listAllImageResources(cloudName, auth),
   ]);
+  // TEMP DIAGNOSTIC — "Food" still isn't showing even after the by_asset_folder
+  // cross-check, because that cross-check only recovers images for folders we
+  // already know about — it can't discover a folder name neither
+  // listChildFolders nor the broad resource listing mentioned. Checking
+  // whether listChildFolders has caught up yet on its own. Remove once
+  // root-caused.
+  console.error(`[cloudinary debug] listChildFolders("${GALLERY_ROOT}") right now: ${JSON.stringify(childNames)}`);
 
   const rootPrefix = `${GALLERY_ROOT}/`;
   const byFolder = new Map<string, CloudinaryImage[]>();
