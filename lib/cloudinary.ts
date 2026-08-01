@@ -170,12 +170,15 @@ async function listAllImageResources(cloudName: string, auth: string): Promise<C
 
 /** Lists each project subfolder under CLOUDINARY_GALLERY_ROOT (default
  * "marketing/images") separately — never merged — for the planner's image
- * picker. Subfolders are discovered dynamically (via listChildFolders, so a
- * folder still shows up even with zero images in it yet), while every
- * image's actual folder membership comes from one broad account-wide
- * listing grouped by asset_folder. Images uploaded directly into the root
- * itself (asset_folder === GALLERY_ROOT, no subfolder) surface as a
- * "General" bucket. */
+ * picker. Folder names come from the union of listChildFolders (Cloudinary's
+ * dedicated folders index, so a folder still shows up even with zero images
+ * in it yet) and whatever asset_folder values actually appear in the broad
+ * account-wide resource listing — the folders index has proven to lag behind
+ * reality (a newly-added folder didn't show up there even though its images
+ * were already listed via asset_folder), so a folder is shown the moment it
+ * has at least one image, without waiting on that index to catch up. Images
+ * uploaded directly into the root itself (asset_folder === GALLERY_ROOT, no
+ * subfolder) surface as a "General" bucket. */
 export async function listCloudinaryImagesByFolder(): Promise<CloudinaryFolderImages[]> {
   const { cloudName, apiKey, apiSecret } = getCredentials();
   const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
@@ -200,6 +203,7 @@ export async function listCloudinaryImagesByFolder(): Promise<CloudinaryFolderIm
     }
   }
 
-  const subfolders = childNames.map(name => ({ folder: name, images: byFolder.get(name) ?? [] }));
+  const folderNames = new Set([...childNames, ...byFolder.keys()]);
+  const subfolders = Array.from(folderNames).map(name => ({ folder: name, images: byFolder.get(name) ?? [] }));
   return rootImages.length > 0 ? [{ folder: 'General', images: rootImages }, ...subfolders] : subfolders;
 }
