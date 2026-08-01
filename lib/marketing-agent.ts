@@ -489,7 +489,13 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
         tools,
         messages: history,
       },
-      { timeout: 60_000 }
+      // Production logs showed repeated "Request timed out" failures
+      // specifically on heavy generations (e.g. drafting a full 5-post
+      // weekly plan) — a single turn occasionally runs past 60s, well
+      // within the /api/telegram route's own 300s budget. Raised so a turn
+      // that's merely slow doesn't get killed client-side before the route
+      // itself would ever time out.
+      { timeout: 120_000 }
     );
     console.log(`[marketing-agent] anthropic turn (${Date.now() - turnStartedAt}ms), stop_reason: ${response.stop_reason}`);
 
