@@ -37,7 +37,7 @@ export function PostEditor({
   const [scheduledDate, setScheduledDate] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
   const [platform, setPlatform] = useState<'linkedin' | 'instagram' | 'facebook'>('linkedin');
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [folders, setFolders] = useState<CloudinaryFolderImages[] | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
   const [folderPage, setFolderPage] = useState<Record<string, number>>({});
@@ -53,7 +53,7 @@ export function PostEditor({
     setScheduledDate(post.scheduled_date);
     setScheduledTime(post.scheduled_time.slice(0, 5));
     setPlatform(post.platform);
-    setImageUrl(post.image_url ?? null);
+    setImageUrls(post.image_urls?.length ? post.image_urls : post.image_url ? [post.image_url] : []);
     setError(null);
   }, [post]);
 
@@ -82,7 +82,7 @@ export function PostEditor({
       const res = await fetch(`/api/dashboard/plan/${post!.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content, scheduled_date: scheduledDate, scheduled_time: scheduledTime, platform, image_url: imageUrl }),
+        body: JSON.stringify({ content, scheduled_date: scheduledDate, scheduled_time: scheduledTime, platform, image_urls: imageUrls }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Failed to save.');
       onSaved();
@@ -93,25 +93,29 @@ export function PostEditor({
     }
   }
 
-  // Picking an image saves immediately, independent of the Save button — otherwise
+  // Toggling an image saves immediately, independent of the Save button — otherwise
   // closing the panel right after picking silently discards the selection, since it
   // would have only lived in local state until an unrelated field was also edited.
-  async function handleImageSelect(url: string) {
-    const previous = imageUrl;
-    setImageUrl(url);
+  // Clicking an already-selected image removes it; clicking any other image adds it —
+  // so a post can carry multiple images (a multi-image/carousel post) instead of only
+  // ever replacing a single selection.
+  async function toggleImage(url: string) {
+    const previous = imageUrls;
+    const next = imageUrls.includes(url) ? imageUrls.filter(u => u !== url) : [...imageUrls, url];
+    setImageUrls(next);
     setSavingImage(true);
     setError(null);
     try {
       const res = await fetch(`/api/dashboard/plan/${post!.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image_url: url }),
+        body: JSON.stringify({ image_urls: next }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Failed to save image.');
       const body = await res.json();
       onPostUpdated(body.post);
     } catch (err) {
-      setImageUrl(previous);
+      setImageUrls(previous);
       setError(err instanceof Error ? err.message : 'Failed to save image.');
     } finally {
       setSavingImage(false);
@@ -187,9 +191,16 @@ export function PostEditor({
           </Button>
         )}
 
-        {imageUrl ? (
+        {imageUrls.length === 1 ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={imageUrl} alt="Selected" className="mb-4 h-40 w-full rounded-xl object-cover" />
+          <img src={imageUrls[0]} alt="Selected" className="mb-4 h-40 w-full rounded-xl object-cover" />
+        ) : imageUrls.length > 1 ? (
+          <div className="mb-4 grid grid-cols-4 gap-1.5">
+            {imageUrls.map(url => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img key={url} src={url} alt="Selected" className="aspect-square rounded-lg object-cover" />
+            ))}
+          </div>
         ) : (
           <div className="mb-4 flex h-40 w-full flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-neutral-200 text-neutral-400 dark:border-neutral-800 dark:text-neutral-600">
             <ImageIcon className="h-5 w-5" />
@@ -254,9 +265,10 @@ export function PostEditor({
             <div>
               <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-neutral-500">
                 <ImageIcon className="h-3.5 w-3.5" />
-                Image
+                Image{imageUrls.length > 1 ? `s (${imageUrls.length} selected)` : ''}
                 {savingImage && <span className="font-normal text-neutral-400">Saving…</span>}
               </label>
+              <p className="mb-1.5 text-xs text-neutral-400">Click an image to select it; click again to remove it. Select more than one for a multi-image/carousel post.</p>
               {folders === null ? (
                 <p className="text-xs text-neutral-400">Loading images…</p>
               ) : folders.length === 0 ? (
@@ -289,20 +301,29 @@ export function PostEditor({
                             ) : (
                               <>
                                 <div className="grid grid-cols-4 gap-2">
-                                  {pageImages.map(img => (
-                                    // eslint-disable-next-line @next/next/no-img-element
-                                    <img
-                                      key={img.id}
-                                      src={img.url}
-                                      alt={img.name}
-                                      onClick={() => handleImageSelect(img.url)}
-                                      className={cn(
-                                        savingImage && 'pointer-events-none opacity-60',
-                                        'aspect-square cursor-pointer rounded-lg object-cover ring-2 ring-transparent transition hover:opacity-80',
-                                        imageUrl === img.url && 'ring-neutral-900 dark:ring-white'
-                                      )}
-                                    />
-                                  ))}
+                                  {pageImages.map(img => {
+                                    const selectedIndex = imageUrls.indexOf(img.url);
+                                    return (
+                                      <div key={img.id} className="relative">
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img
+                                          src={img.url}
+                                          alt={img.name}
+                                          onClick={() => toggleImage(img.url)}
+                                          className={cn(
+                                            savingImage && 'pointer-events-none opacity-60',
+                                            'aspect-square w-full cursor-pointer rounded-lg object-cover ring-2 ring-transparent transition hover:opacity-80',
+                                            selectedIndex !== -1 && 'ring-neutral-900 dark:ring-white'
+                                          )}
+                                        />
+                                        {selectedIndex !== -1 && (
+                                          <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-neutral-900 text-[10px] font-medium text-white dark:bg-white dark:text-neutral-900">
+                                            {selectedIndex + 1}
+                                          </span>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                                 {totalPages > 1 && (
                                   <div className="mt-2 flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400">

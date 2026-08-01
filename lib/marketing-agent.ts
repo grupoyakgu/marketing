@@ -139,7 +139,7 @@ You have access to these proof points. **Spread them strategically across many p
 
 ## IMAGES — ALL PLATFORMS
 
-**Every post should have an image.** Call browse_drive_images ONCE at the start to see all available images. When calling save_marketing_plan, set each post's image_url to the exact URL of the specific image you picked for it — pick a different, relevant image per post rather than reusing the same one. image_note is just a human-readable label for what the image shows; image_url is the real, clickable choice and is what the dashboard shows the user as "the image Pepe selected," so always set it.
+**Every post should have an image.** Call browse_drive_images ONCE at the start to see all available images. When calling save_marketing_plan, set each post's image_urls to the exact URL of the specific image you picked for it, as a single-item array — pick a different, relevant image per post rather than reusing the same one. Only put more than one URL in image_urls if the user specifically asked for a carousel/multi-image post. image_note is just a human-readable label for what the image shows; image_urls is the real, clickable choice and is what the dashboard shows the user as "the image Pepe selected," so always set it.
 
 ---
 
@@ -159,16 +159,16 @@ You have access to these proof points. **Spread them strategically across many p
 
 1. Use **${nextMonday}** as the week_start
 2. Call browse_drive_images ONCE
-3. Draft 5 posts in Spanish (Spain), picking a specific image_url for each from the browse_drive_images results
+3. Draft 5 posts in Spanish (Spain), picking one specific image for each from the browse_drive_images results (image_urls with a single URL) — only use multiple images/a carousel if the user specifically asked for one
 4. Choose at most 1 market intelligence proof point
-5. Call save_marketing_plan with all 5 posts, each with its image_url set
+5. Call save_marketing_plan with all 5 posts, each with its image_urls set
 6. Present the plan numbered 1–5 in English
 7. End with: "Would you like to approve the full plan? Say *approve all* or let me know which posts to adjust."
 
 ## APPROVAL FLOW
 - "approve all" → call approve_posts with mode "all" and week_start "${nextMonday}"
 - "reject post 3" → call reject_post
-- Edit request → update, re-save, re-ask. Check get_weekly_plan's Image field first — if one is already set (the user may have picked or changed it in the dashboard planner), carry that same image_url into the replacement post instead of picking a new one, unless the user's edit is specifically about the image.
+- Edit request → update, re-save, re-ask. Check get_weekly_plan's Image field first — if one is already set (the user may have picked or changed it in the dashboard planner), carry those same image_urls into the replacement post instead of picking a new one, unless the user's edit is specifically about the image.
 
 ## DELETING, RESCHEDULING, OR EDITING A SCHEDULED POST (anytime, not just right after drafting)
 The user can ask to delete/remove/cancel a post, move/reschedule its date or time, or edit its wording (e.g. "remove the hashtags", "shorten that caption", "drop the last sentence"), at any point — not only during the initial approval flow above, e.g. days later, about something already approved and sitting in the schedule. Look it up with get_weekly_plan to find its post_id and current content, then call reject_post to delete it, reschedule_post to change its date/time (pass only the field(s) actually changing), or edit_post to change its text — for edit_post, apply the requested change to the existing content yourself and pass the FULL new caption, not just a diff or instruction. All three only work on posts that haven't been published yet (draft, approved, or failed) — they'll fail with a clear reason if the post has already gone out, since a published post's record is tracked history and can't be changed. If that happens, tell the user it's already live and can't be modified.
@@ -199,12 +199,12 @@ const tools: Anthropic.Tool[] = [
   {
     name: 'post_to_linkedin',
     description:
-      'Publishes a post to LinkedIn. Uses the normal posting app by default — only set via_community_management to true if the user explicitly asks to post/test via the Community Management app/credentials specifically.',
+      'Publishes a post to LinkedIn. Pass one URL in image_urls for a single-image post, or 2+ URLs for a multi-image post — LinkedIn displays multiple images as a gallery on the same post. Uses the normal posting app by default — only set via_community_management to true if the user explicitly asks to post/test via the Community Management app/credentials specifically.',
     input_schema: {
       type: 'object' as const,
       properties: {
         content: { type: 'string' },
-        image_url: { type: 'string' },
+        image_urls: { type: 'array', items: { type: 'string' }, description: 'One URL for a single image, multiple for a multi-image post.' },
         via_community_management: {
           type: 'boolean',
           description: 'Set true only when the user explicitly asks to post via the Community Management app instead of the normal posting app.',
@@ -215,26 +215,28 @@ const tools: Anthropic.Tool[] = [
   },
   {
     name: 'post_to_facebook',
-    description: 'Publishes a post to the Grupo YAKGU Facebook Page.',
+    description:
+      'Publishes a post to the Grupo YAKGU Facebook Page. Pass one URL in image_urls for a single-photo post, or 2+ URLs for a multi-photo post (all photos attached to the same post).',
     input_schema: {
       type: 'object' as const,
       properties: {
         message: { type: 'string' },
-        image_url: { type: 'string' },
+        image_urls: { type: 'array', items: { type: 'string' }, description: 'One URL for a single photo, multiple for a multi-photo post.' },
       },
       required: ['message'],
     },
   },
   {
     name: 'post_to_instagram',
-    description: 'Publishes an image post to Instagram. Requires image_url.',
+    description:
+      'Publishes an image post to Instagram. Requires image_urls with at least one URL. Pass 2+ URLs (max 10) for a carousel — a single swipeable post containing all of them, not separate posts.',
     input_schema: {
       type: 'object' as const,
       properties: {
         caption: { type: 'string' },
-        image_url: { type: 'string' },
+        image_urls: { type: 'array', items: { type: 'string' }, description: 'One URL for a single image, 2–10 for a carousel.' },
       },
-      required: ['caption', 'image_url'],
+      required: ['caption', 'image_urls'],
     },
   },
   {
@@ -283,7 +285,11 @@ const tools: Anthropic.Tool[] = [
               scheduled_time: { type: 'string' },
               content: { type: 'string' },
               image_note: { type: 'string', description: 'Human-readable label for the image, e.g. "Nervión skyline at dusk".' },
-              image_url: { type: 'string', description: 'The exact URL of the chosen image from browse_drive_images.' },
+              image_urls: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Exact URL(s) of the chosen image(s) from browse_drive_images. One image is the default; only include multiple if the user specifically asked for a carousel/multi-image post.',
+              },
             },
             required: ['platform', 'scheduled_date', 'scheduled_time', 'content'],
           },
@@ -514,7 +520,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
         try {
           await withTimeout((async () => {
         if (block.name === 'post_to_linkedin') {
-          const input = block.input as { content: string; image_url?: string; via_community_management?: boolean };
+          const input = block.input as { content: string; image_urls?: string[]; via_community_management?: boolean };
           let credentials: { token: string; authorId: string } | undefined;
           if (input.via_community_management) {
             const token = process.env.LINKEDIN_ACCESS_TOKEN_COMM;
@@ -525,7 +531,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
             credentials = token && authorId ? { token, authorId } : undefined;
           }
           if (!resultContent) {
-            const result = await postToLinkedIn(input.content, input.image_url, credentials);
+            const result = await postToLinkedIn(input.content, input.image_urls, credentials);
             if (result.success && result.postId) await trackDirectPost('linkedin', result.postId);
             resultContent = result.success
               ? `Posted to LinkedIn${input.via_community_management ? ' via the Community Management app' : ''}!${result.url ? ` URL: ${result.url}` : ''}`
@@ -534,15 +540,15 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
         }
 
         if (block.name === 'post_to_facebook') {
-          const input = block.input as { message: string; image_url?: string };
-          const result = await postToFacebook(input.message, input.image_url);
+          const input = block.input as { message: string; image_urls?: string[] };
+          const result = await postToFacebook(input.message, input.image_urls);
           if (result.success && result.postId) await trackDirectPost('facebook', result.postId);
           resultContent = result.success ? `Posted to Facebook!${result.url ? ` URL: ${result.url}` : ''}` : `Failed: ${result.error}`;
         }
 
         if (block.name === 'post_to_instagram') {
-          const input = block.input as { caption: string; image_url: string };
-          const result = await postToInstagram(input.caption, input.image_url);
+          const input = block.input as { caption: string; image_urls: string[] };
+          const result = await postToInstagram(input.caption, input.image_urls);
           if (result.success && result.postId) await trackDirectPost('instagram', result.postId);
           resultContent = result.success ? `Posted to Instagram!${result.url ? ` URL: ${result.url}` : ''}` : `Failed: ${result.error}`;
         }
@@ -573,7 +579,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
         if (block.name === 'save_marketing_plan') {
           const input = block.input as {
             week_start: string;
-            posts: Array<{ platform: 'linkedin' | 'instagram' | 'facebook'; scheduled_date: string; scheduled_time: string; content: string; image_note?: string; image_url?: string }>;
+            posts: Array<{ platform: 'linkedin' | 'instagram' | 'facebook'; scheduled_date: string; scheduled_time: string; content: string; image_note?: string; image_urls?: string[] }>;
           };
           try {
             const saved = await saveDraftPlan(input.posts.map(p => ({ ...p, week_start: input.week_start })));
@@ -593,7 +599,13 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
             resultContent = posts.length === 0
               ? `No posts found for week of ${weekStart}.`
               : `Plan for week of ${weekStart} (${posts.length} posts):\n${
-                  posts.map((p, i) => `${i + 1}. [${p.platform}] ${p.scheduled_date} ${p.scheduled_time} [${p.status}]\n   ID: ${p.id}\n   Image: ${p.image_url ?? '(none selected — the user may have picked or changed this in the dashboard planner)'}\n   ${p.content.substring(0, 80)}...`).join('\n\n')
+                  posts.map((p, i) => {
+                    const images = (p.image_urls?.length ? p.image_urls : p.image_url ? [p.image_url] : []);
+                    const imageLine = images.length === 0
+                      ? '(none selected — the user may have picked or changed this in the dashboard planner)'
+                      : images.length === 1 ? images[0] : `${images.length} images (carousel): ${images.join(', ')}`;
+                    return `${i + 1}. [${p.platform}] ${p.scheduled_date} ${p.scheduled_time} [${p.status}]\n   ID: ${p.id}\n   Image: ${imageLine}\n   ${p.content.substring(0, 80)}...`;
+                  }).join('\n\n')
                 }`;
           } catch (err) {
             resultContent = `Failed to get plan: ${err instanceof Error ? err.message : String(err)}`;

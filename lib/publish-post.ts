@@ -18,25 +18,26 @@ export async function publishPost(postId: string): Promise<PublishResult> {
   if (!post) return { success: false, error: 'Post not found.' };
   if (post.status === 'posted') return { success: false, error: 'This post has already been posted.' };
 
-  let imageUrl = post.image_url || undefined;
-  if (!imageUrl) {
+  let imageUrls = (post.image_urls ?? []).filter(Boolean);
+  if (imageUrls.length === 0 && post.image_url) imageUrls = [post.image_url];
+  if (imageUrls.length === 0) {
     try {
       const images = await listCloudinaryImages();
-      if (images.length > 0) imageUrl = images[0].url;
+      if (images.length > 0) imageUrls = [images[0].url];
     } catch {}
   }
 
   let result: { success: boolean; postId?: string; url?: string; error?: string } | undefined;
   if (post.platform === 'linkedin') {
-    result = await postToLinkedIn(post.content, imageUrl);
+    result = await postToLinkedIn(post.content, imageUrls);
   } else if (post.platform === 'facebook') {
-    result = await postToFacebook(post.content, imageUrl);
+    result = await postToFacebook(post.content, imageUrls);
   } else if (post.platform === 'instagram') {
-    if (!imageUrl) {
+    if (imageUrls.length === 0) {
       await markPostStatus(post.id!, 'failed');
       return { success: false, error: 'No image available for Instagram.' };
     }
-    result = await postToInstagram(post.content, imageUrl);
+    result = await postToInstagram(post.content, imageUrls);
   }
 
   if (result?.success) {
