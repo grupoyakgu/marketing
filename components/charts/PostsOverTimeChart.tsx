@@ -23,7 +23,7 @@ export function PostsOverTimeChart({ data }: { data: PostsByDate[] }) {
         <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="currentColor" className="text-neutral-400" />
         <YAxis allowDecimals={false} tick={{ fontSize: 12 }} stroke="currentColor" className="text-neutral-400" />
         <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e5e5e5', fontSize: 13 }} />
-        <Bar dataKey="count" name="Posts published" fill="#171717" radius={[6, 6, 0, 0]} />
+        <Bar dataKey="count" name="Posts published" fill="#6366f1" radius={[6, 6, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );
