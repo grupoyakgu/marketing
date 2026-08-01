@@ -189,7 +189,22 @@ export async function getLinkedInComments(postUrn: string): Promise<SocialCommen
     return [];
   }
   const json = await res.json();
-  return (json.elements ?? [])
+  const elements: Record<string, unknown>[] = json.elements ?? [];
+
+  // If this endpoint's response includes nested replies alongside their
+  // parent (LinkedIn ties a reply to its parent via `parentComment`), treat
+  // any parent that already has a reply authored by our own org URN as
+  // answered — whether that reply came from Pepe or a human at Grupo Yakgu
+  // replying directly on LinkedIn, neither needs a second automated reply.
+  const ownAuthorId = process.env.LINKEDIN_AUTHOR_ID_COMM;
+  const ownOrgUrn = ownAuthorId ? (ownAuthorId.startsWith('urn:li:') ? ownAuthorId : `urn:li:organization:${ownAuthorId}`) : null;
+  const answeredParents = new Set(
+    elements.filter(e => e.parentComment && ownOrgUrn && e.actor === ownOrgUrn).map(e => e.parentComment as string)
+  );
+
+  return elements
+    .filter(e => !e.parentComment) // only top-level comments need a reply
+    .filter(e => !ownOrgUrn || e.actor !== ownOrgUrn) // skip our own top-level comments
     .map((e: Record<string, unknown>) => {
       // The compound comment URN ("$URN") is what LinkedIn's reply API needs as
       // `parentComment`; fall back to building it from the raw numeric `id` when
@@ -206,43 +221,87 @@ export async function getLinkedInComments(postUrn: string): Promise<SocialCommen
         createdAt: new Date((e.created as Record<string, number>)?.time ?? Date.now()).toISOString(),
       };
     })
-    .filter((c: SocialComment) => c.commentId);
+    .filter((c: SocialComment) => c.commentId && !answeredParents.has(c.commentId));
 }
 
+// Pulls each top-level comment's nested replies (comments{from}) so we can
+// tell a comment already answered directly on Facebook — by a human at
+// Grupo Yakgu, not through this app — from one that's genuinely new. Only
+// our internal comment_replies table knew about Pepe's own replies before;
+// a manual reply from the Page never touched that table and would otherwise
+// get answered again.
 export async function getFacebookComments(postId: string): Promise<SocialComment[]> {
   const token = process.env.INSTAGRAM_PAGE_ACCESS_TOKEN;
+  const pageId = process.env.FACEBOOK_PAGE_ID;
   if (!token) return [];
   const res = await fetch(
-    `${GRAPH_API}/${postId}/comments?fields=id,message,from,created_time&access_token=${token}`
+    `${GRAPH_API}/${postId}/comments?fields=id,message,from,created_time,comments.limit(50){from}&access_token=${token}`
   );
   if (!res.ok) return [];
   const json = await res.json();
-  return (json.data ?? []).map((c: Record<string, unknown>) => ({
-    platform: 'facebook' as const,
-    commentId: c.id as string,
-    postId,
-    authorName: ((c.from as Record<string, string>)?.name) ?? 'Facebook user',
-    text: (c.message as string) ?? '',
-    createdAt: (c.created_time as string) ?? new Date().toISOString(),
-  }));
+  return (json.data ?? [])
+    .filter((c: Record<string, unknown>) => {
+      const fromId = (c.from as Record<string, string> | undefined)?.id;
+      if (pageId && fromId === pageId) return false; // our own top-level comment, not a customer comment
+      const replies = ((c.comments as { data?: Record<string, unknown>[] } | undefined)?.data) ?? [];
+      const answeredByUs = pageId
+        ? replies.some(r => (r.from as Record<string, string> | undefined)?.id === pageId)
+        : replies.length > 0;
+      return !answeredByUs;
+    })
+    .map((c: Record<string, unknown>) => ({
+      platform: 'facebook' as const,
+      commentId: c.id as string,
+      postId,
+      authorName: ((c.from as Record<string, string>)?.name) ?? 'Facebook user',
+      text: (c.message as string) ?? '',
+      createdAt: (c.created_time as string) ?? new Date().toISOString(),
+    }));
 }
 
+let cachedIgUsername: string | null | undefined;
+
+async function getOwnInstagramUsername(token: string, igAccountId: string): Promise<string | null> {
+  if (cachedIgUsername !== undefined) return cachedIgUsername;
+  const res = await fetch(`${GRAPH_API}/${igAccountId}?fields=username&access_token=${token}`);
+  if (!res.ok) {
+    cachedIgUsername = null;
+    return null;
+  }
+  const json = await res.json();
+  const username: string | null = json.username ?? null;
+  cachedIgUsername = username;
+  return username;
+}
+
+// Same reasoning as getFacebookComments — pulls nested replies{username} so a
+// comment a human already answered directly on Instagram is treated as
+// handled, not re-answered.
 export async function getInstagramComments(mediaId: string): Promise<SocialComment[]> {
   const token = process.env.INSTAGRAM_PAGE_ACCESS_TOKEN;
+  const igAccountId = process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID;
   if (!token) return [];
+  const ownUsername = igAccountId ? await getOwnInstagramUsername(token, igAccountId) : null;
   const res = await fetch(
-    `${GRAPH_API}/${mediaId}/comments?fields=id,text,username,timestamp&access_token=${token}`
+    `${GRAPH_API}/${mediaId}/comments?fields=id,text,username,timestamp,replies{username}&access_token=${token}`
   );
   if (!res.ok) return [];
   const json = await res.json();
-  return (json.data ?? []).map((c: Record<string, unknown>) => ({
-    platform: 'instagram' as const,
-    commentId: c.id as string,
-    postId: mediaId,
-    authorName: (c.username as string) ?? 'Instagram user',
-    text: (c.text as string) ?? '',
-    createdAt: (c.timestamp as string) ?? new Date().toISOString(),
-  }));
+  return (json.data ?? [])
+    .filter((c: Record<string, unknown>) => {
+      if (ownUsername && c.username === ownUsername) return false; // our own top-level comment
+      const replies = ((c.replies as { data?: Record<string, unknown>[] } | undefined)?.data) ?? [];
+      const answeredByUs = ownUsername ? replies.some(r => r.username === ownUsername) : replies.length > 0;
+      return !answeredByUs;
+    })
+    .map((c: Record<string, unknown>) => ({
+      platform: 'instagram' as const,
+      commentId: c.id as string,
+      postId: mediaId,
+      authorName: (c.username as string) ?? 'Instagram user',
+      text: (c.text as string) ?? '',
+      createdAt: (c.timestamp as string) ?? new Date().toISOString(),
+    }));
 }
 
 export interface CommentPostResult {
