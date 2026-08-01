@@ -180,6 +180,30 @@ export async function listCloudinaryImagesByFolder(): Promise<CloudinaryFolderIm
   const { cloudName, apiKey, apiSecret } = getCredentials();
   const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
 
+  // TEMP DIAGNOSTIC — by_asset_folder("marketing/images/General") only
+  // returned 1 of the 2 images the user sees in that folder in Cloudinary's
+  // console, so the gap is in the asset's actual asset_folder metadata, not
+  // in our filtering. Broad, unfiltered account-wide listing to find where
+  // the "missing" image is actually tagged. Remove once root-caused.
+  try {
+    const res = await fetch(
+      `${CLOUDINARY_API}/${cloudName}/resources/image?max_results=500`,
+      { headers: { Authorization: `Basic ${auth}` } }
+    );
+    if (res.ok) {
+      const json = await res.json();
+      const resources: { public_id: string; asset_folder?: string; folder?: string }[] = json.resources ?? [];
+      console.error(
+        `[cloudinary debug] account-wide listing (${resources.length} resource(s)): ` +
+          JSON.stringify(resources.map(r => ({ public_id: r.public_id, asset_folder: r.asset_folder, folder: r.folder })))
+      );
+    } else {
+      console.error(`[cloudinary debug] account-wide listing failed: ${res.status} ${await res.text()}`);
+    }
+  } catch (err) {
+    console.error(`[cloudinary debug] account-wide listing threw: ${err instanceof Error ? err.message : err}`);
+  }
+
   const childNames = await listChildFolders(cloudName, auth, GALLERY_ROOT);
 
   const [rootImages, subfolders] = await Promise.all([
