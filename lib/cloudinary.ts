@@ -148,7 +148,17 @@ async function listResourcesByAssetFolder(cloudName: string, auth: string, asset
       throw new Error(`Cloudinary by_asset_folder API error ${res.status}: ${body}`);
     }
     const json = await res.json();
-    const resources: { public_id: string; secure_url: string; filename?: string }[] = json.resources ?? [];
+    const resources: { public_id: string; secure_url: string; filename?: string; resource_type?: string; type?: string }[] =
+      json.resources ?? [];
+    // TEMP DIAGNOSTIC — a user reported seeing fewer images in the picker than
+    // in the Cloudinary console for one folder; logging the raw resource_type/
+    // type/public_id here to see what by_asset_folder actually returns vs what
+    // the console shows, since api.cloudinary.com isn't reachable from this
+    // sandbox to check directly. Remove once root-caused.
+    console.error(
+      `[cloudinary debug] by_asset_folder("${assetFolder}") returned ${resources.length} resource(s): ` +
+        JSON.stringify(resources.map(r => ({ public_id: r.public_id, resource_type: r.resource_type, type: r.type })))
+    );
     all.push(...resources.map(mapResource));
 
     cursor = json.next_cursor;
