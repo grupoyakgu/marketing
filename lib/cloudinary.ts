@@ -220,6 +220,22 @@ export async function listCloudinaryImagesByFolder(): Promise<CloudinaryFolderIm
     listAllImageResources(cloudName, auth),
   ]);
 
+  // TEMP DIAGNOSTIC — the account-wide /resources/image listing works fine
+  // for every other folder's images but excludes all 10 "Food" images, while
+  // by_asset_folder finds them without issue. Fetching one food image's full
+  // raw metadata directly by public_id (moderation/access_mode/tags/context/
+  // dates) to compare against how the working images look, to find the real
+  // differentiator instead of guessing further. Remove once root-caused.
+  try {
+    const res = await fetch(`${CLOUDINARY_API}/${cloudName}/resources/image/upload/food1_hifav4`, {
+      headers: { Authorization: `Basic ${auth}` },
+    });
+    const json = await res.json().catch(() => ({}));
+    console.error(`[cloudinary debug] direct fetch of food1_hifav4 status=${res.status}: ${JSON.stringify(json)}`);
+  } catch (err) {
+    console.error(`[cloudinary debug] direct food1_hifav4 fetch threw: ${err instanceof Error ? err.message : err}`);
+  }
+
   const rootPrefix = `${GALLERY_ROOT}/`;
   const byFolder = new Map<string, CloudinaryImage[]>();
   const rootImages: CloudinaryImage[] = [];
