@@ -10,6 +10,7 @@ export interface MarketingPost {
   content: string;
   image_note?: string;
   image_url?: string | null;
+  image_urls?: string[] | null;
   status?: string;
   post_url?: string;
   platform_post_id?: string;
@@ -89,6 +90,7 @@ export interface PostUpdate {
   scheduled_time?: string;
   platform?: 'linkedin' | 'instagram' | 'facebook';
   image_url?: string | null;
+  image_urls?: string[] | null;
 }
 
 export async function updatePost(postId: string, fields: PostUpdate): Promise<MarketingPost> {

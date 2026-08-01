@@ -70,7 +70,7 @@ async function uploadMedia(uploadUrl: string, data: ArrayBuffer, mimeType: strin
 
 export async function postToLinkedIn(
   text: string,
-  media?: MediaUpload | string,
+  media?: MediaUpload | string | string[],
   credentials?: { token: string; authorId: string }
 ): Promise<LinkedInPostResult> {
   const token = credentials?.token ?? process.env.LINKEDIN_ACCESS_TOKEN;
@@ -84,7 +84,31 @@ export async function postToLinkedIn(
   let shareMediaCategory = 'NONE';
   let mediaElements: object[] | undefined;
 
-  if (media) {
+  if (Array.isArray(media)) {
+    // Multi-image share: register + upload each image separately, then list
+    // them all as media elements on the same ugcPost (LinkedIn's multi-image
+    // share format).
+    const urls = media.filter(Boolean);
+    if (urls.length > 0) {
+      try {
+        const assets = await Promise.all(
+          urls.map(async url => {
+            const imgRes = await fetch(url);
+            if (!imgRes.ok) throw new Error(`Failed to fetch image: ${imgRes.status}`);
+            const data = await imgRes.arrayBuffer();
+            const mimeType = imgRes.headers.get('content-type') ?? 'image/jpeg';
+            const { uploadUrl, asset } = await registerUpload(token, authorUrn, 'IMAGE');
+            await uploadMedia(uploadUrl, data, mimeType);
+            return asset;
+          })
+        );
+        shareMediaCategory = 'IMAGE';
+        mediaElements = assets.map(asset => ({ status: 'READY', media: asset }));
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    }
+  } else if (media) {
     let mediaUpload: MediaUpload;
 
     if (typeof media === 'string') {

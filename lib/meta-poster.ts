@@ -11,16 +11,60 @@ async function getPageToken(): Promise<string> {
   return process.env.INSTAGRAM_PAGE_ACCESS_TOKEN!;
 }
 
-export async function postToFacebook(message: string, imageUrl?: string): Promise<MetaPostResult> {
+// Uploads a photo unpublished (no feed post created yet) — used both for the
+// single-photo path below (post_id comes back directly) and, via
+// attached_media, for the multi-photo path where each photo is uploaded this
+// way first and then all attached to one feed post together.
+async function uploadUnpublishedFacebookPhoto(
+  pageId: string,
+  imageUrl: string,
+  token: string
+): Promise<{ id: string } | { error: string }> {
+  const res = await fetch(`${GRAPH_API}/${pageId}/photos`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: imageUrl, published: false, access_token: token }),
+  });
+  const json = await res.json();
+  if (!res.ok) return { error: json.error?.message ?? 'Failed to upload photo' };
+  return { id: json.id };
+}
+
+export async function postToFacebook(message: string, imageUrls?: string | string[]): Promise<MetaPostResult> {
   const token = await getPageToken();
   const pageId = process.env.FACEBOOK_PAGE_ID!;
+  const urls = (imageUrls ? (Array.isArray(imageUrls) ? imageUrls : [imageUrls]) : []).filter(Boolean);
 
-  if (imageUrl) {
+  if (urls.length > 1) {
+    // Multi-photo post: upload each photo unpublished first (in parallel —
+    // each is independent, and this can otherwise add up to a lot of
+    // sequential round-trips against the cron's tight time budget), then
+    // attach all of them to one feed post together.
+    const uploads = await Promise.all(urls.map(url => uploadUnpublishedFacebookPhoto(pageId, url, token)));
+    const failed = uploads.find(u => 'error' in u) as { error: string } | undefined;
+    if (failed) return { success: false, error: failed.error };
+    const uploadedIds = uploads.map(u => (u as { id: string }).id);
+    const res = await fetch(`${GRAPH_API}/${pageId}/feed`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message,
+        attached_media: uploadedIds.map(id => ({ media_fbid: id })),
+        access_token: token,
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok) return { success: false, error: json.error?.message ?? 'Unknown error' };
+    const postId: string = json.id;
+    return { success: true, postId, url: `https://www.facebook.com/${postId.replace('_', '/posts/')}` };
+  }
+
+  if (urls.length === 1) {
     // Post as photo with caption
     const res = await fetch(`${GRAPH_API}/${pageId}/photos`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: imageUrl, caption: message, access_token: token }),
+      body: JSON.stringify({ url: urls[0], caption: message, access_token: token }),
     });
     const json = await res.json();
     if (!res.ok) return { success: false, error: json.error?.message ?? 'Unknown error' };
@@ -59,14 +103,74 @@ async function waitForContainerReady(containerId: string, token: string): Promis
   return { ready: false, error: 'Timed out waiting for Instagram to finish processing the media.' };
 }
 
-export async function postToInstagram(caption: string, imageUrl: string): Promise<MetaPostResult> {
+async function createInstagramCarouselItem(
+  igAccountId: string,
+  imageUrl: string,
+  token: string
+): Promise<{ id: string } | { error: string }> {
+  const res = await fetch(`${GRAPH_API}/${igAccountId}/media`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image_url: imageUrl, is_carousel_item: true, access_token: token }),
+  });
+  const json = await res.json();
+  if (!res.ok) return { error: json.error?.message ?? 'Failed to create carousel item' };
+  return { id: json.id };
+}
+
+export async function postToInstagram(caption: string, imageUrls: string | string[]): Promise<MetaPostResult> {
   const token = await getPageToken();
   const igAccountId = process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID!;
+  const urls = (Array.isArray(imageUrls) ? imageUrls : [imageUrls]).filter(Boolean);
+
+  if (urls.length === 0) return { success: false, error: 'No image provided.' };
+  if (urls.length > 10) return { success: false, error: 'Instagram carousels support at most 10 images.' };
+
+  if (urls.length > 1) {
+    // Carousel: create each item as a carousel child and wait for it to
+    // finish processing — in parallel, since each is independent and this
+    // step alone can otherwise take 10+ sequential rounds of up to ~12s each,
+    // easily blowing the auto-publish cron's tight time budget — then wrap
+    // them all in a CAROUSEL container and publish that.
+    const children = await Promise.all(
+      urls.map(async url => {
+        const child = await createInstagramCarouselItem(igAccountId, url, token);
+        if ('error' in child) return child;
+        const readiness = await waitForContainerReady(child.id, token);
+        if (!readiness.ready) return { error: readiness.error ?? 'A carousel item was not ready to publish.' };
+        return child;
+      })
+    );
+    const failed = children.find(c => 'error' in c) as { error: string } | undefined;
+    if (failed) return { success: false, error: failed.error };
+    const childIds = children.map(c => (c as { id: string }).id);
+
+    const containerRes = await fetch(`${GRAPH_API}/${igAccountId}/media`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ media_type: 'CAROUSEL', children: childIds.join(','), caption, access_token: token }),
+    });
+    const container = await containerRes.json();
+    if (!containerRes.ok) return { success: false, error: container.error?.message ?? 'Failed to create carousel container' };
+
+    const readiness = await waitForContainerReady(container.id, token);
+    if (!readiness.ready) return { success: false, error: readiness.error ?? 'Carousel container was not ready to publish.' };
+
+    const publishRes = await fetch(`${GRAPH_API}/${igAccountId}/media_publish`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ creation_id: container.id, access_token: token }),
+    });
+    const published = await publishRes.json();
+    if (!publishRes.ok) return { success: false, error: published.error?.message ?? 'Failed to publish carousel' };
+
+    return { success: true, postId: published.id, url: `https://www.instagram.com/p/${published.id}/` };
+  }
 
   const containerRes = await fetch(`${GRAPH_API}/${igAccountId}/media`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image_url: imageUrl, caption, access_token: token }),
+    body: JSON.stringify({ image_url: urls[0], caption, access_token: token }),
   });
   const container = await containerRes.json();
   if (!containerRes.ok) return { success: false, error: container.error?.message ?? 'Failed to create media container' };
