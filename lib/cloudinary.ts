@@ -205,5 +205,25 @@ export async function listCloudinaryImagesByFolder(): Promise<CloudinaryFolderIm
 
   const folderNames = new Set([...childNames, ...byFolder.keys()]);
   const subfolders = Array.from(folderNames).map(name => ({ folder: name, images: byFolder.get(name) ?? [] }));
+
+  // TEMP DIAGNOSTIC — user insists "Food" has images in it, but they didn't
+  // show up in the account-wide /resources/image listing above (no image had
+  // asset_folder === "marketing/images/Food"). Querying by_asset_folder
+  // directly for that one folder, without restricting resource_type, in case
+  // the contents are video/raw rather than image.
+  try {
+    const res = await fetch(
+      `${CLOUDINARY_API}/${cloudName}/resources/by_asset_folder?${new URLSearchParams({ asset_folder: `${GALLERY_ROOT}/Food`, max_results: '500' })}`,
+      { headers: { Authorization: `Basic ${auth}` } }
+    );
+    const json = await res.json().catch(() => ({}));
+    console.error(
+      `[cloudinary debug] by_asset_folder("${GALLERY_ROOT}/Food") status=${res.status}: ` +
+        JSON.stringify((json.resources ?? []).map((r: Record<string, unknown>) => ({ public_id: r.public_id, resource_type: r.resource_type, type: r.type })))
+    );
+  } catch (err) {
+    console.error(`[cloudinary debug] Food probe threw: ${err instanceof Error ? err.message : err}`);
+  }
+
   return rootImages.length > 0 ? [{ folder: 'General', images: rootImages }, ...subfolders] : subfolders;
 }
