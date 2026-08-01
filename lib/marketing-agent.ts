@@ -170,8 +170,8 @@ You have access to these proof points. **Spread them strategically across many p
 - "reject post 3" → call reject_post
 - Edit request → update, re-save, re-ask. Check get_weekly_plan's Image field first — if one is already set (the user may have picked or changed it in the dashboard planner), carry that same image_url into the replacement post instead of picking a new one, unless the user's edit is specifically about the image.
 
-## DELETING OR RESCHEDULING A SCHEDULED POST (anytime, not just right after drafting)
-The user can ask to delete/remove/cancel a post, or move/reschedule its date or time, at any point — not only during the initial approval flow above, e.g. days later, about something already approved and sitting in the schedule. Look it up with get_weekly_plan to find its post_id, then call reject_post to delete it or reschedule_post to change its date/time (pass only the field(s) actually changing). Both only work on posts that haven't been published yet (draft, approved, or failed) — they'll fail with a clear reason if the post has already gone out, since a published post's record is tracked history and can't be changed. If that happens, tell the user it's already live and can't be modified.
+## DELETING, RESCHEDULING, OR EDITING A SCHEDULED POST (anytime, not just right after drafting)
+The user can ask to delete/remove/cancel a post, move/reschedule its date or time, or edit its wording (e.g. "remove the hashtags", "shorten that caption", "drop the last sentence"), at any point — not only during the initial approval flow above, e.g. days later, about something already approved and sitting in the schedule. Look it up with get_weekly_plan to find its post_id and current content, then call reject_post to delete it, reschedule_post to change its date/time (pass only the field(s) actually changing), or edit_post to change its text — for edit_post, apply the requested change to the existing content yourself and pass the FULL new caption, not just a diff or instruction. All three only work on posts that haven't been published yet (draft, approved, or failed) — they'll fail with a clear reason if the post has already gone out, since a published post's record is tracked history and can't be changed. If that happens, tell the user it's already live and can't be modified.
 
 ## COMPARING TWO POSTS
 If the user asks to compare two posts (e.g. "how did post 3 do vs post 5", "compare Monday's LinkedIn post with last week's"), find each one's internal post_id via get_weekly_plan, then call compare_posts with post_id_a and post_id_b. It returns each post's platform, schedule, caption preview, and full engagement stats (or "not posted yet" if either hasn't gone out). Narrate the comparison yourself — call out which one performed better and on what, don't just repeat the raw numbers back.
@@ -182,7 +182,7 @@ If the user asks to compare two posts (e.g. "how did post 3 do vs post 5", "comp
 - post_to_linkedin, post_to_facebook, post_to_instagram — publish posts
 - post_instagram_story, post_facebook_story — publish to Stories (24h, ephemeral, image only, no caption)
 - browse_drive_images — list Cloudinary images (call ONCE per plan)
-- save_marketing_plan, get_weekly_plan, approve_posts, reject_post, reschedule_post, retry_post — plan management
+- save_marketing_plan, get_weekly_plan, approve_posts, reject_post, reschedule_post, retry_post, edit_post — plan management
 - compare_posts — compare engagement between two posts
 - reply_to_comment — reply to a specific comment
 - post_comment — post a new top-level comment on a post (for thank-yous)
@@ -346,6 +346,19 @@ const tools: Anthropic.Tool[] = [
       type: 'object' as const,
       properties: { post_id: { type: 'string' } },
       required: ['post_id'],
+    },
+  },
+  {
+    name: 'edit_post',
+    description:
+      'Rewrites the caption/content of an existing marketing plan post — use this any time the user asks to change the wording, remove hashtags, shorten it, fix a typo, or otherwise edit the text of a scheduled post. Pass the full new content, not just the changed part — this replaces the post\'s content entirely. Only works on posts that have not been published yet (draft, approved, or failed); a post that has already been posted cannot be edited.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        post_id: { type: 'string' },
+        content: { type: 'string', description: 'The full replacement caption/content for the post.' },
+      },
+      required: ['post_id', 'content'],
     },
   },
   {
@@ -636,6 +649,16 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
           try {
             const result = await publishPost(input.post_id);
             resultContent = result.success ? `Post ${input.post_id} published successfully.` : `Failed: ${result.error}`;
+          } catch (err) {
+            resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        }
+
+        if (block.name === 'edit_post') {
+          const input = block.input as { post_id: string; content: string };
+          try {
+            const post = await updatePost(input.post_id, { content: input.content });
+            resultContent = `Post ${post.id} updated. New content:\n"${post.content}"`;
           } catch (err) {
             resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
           }
