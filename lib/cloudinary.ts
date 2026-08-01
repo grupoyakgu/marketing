@@ -104,16 +104,28 @@ export async function listCloudinaryImages(): Promise<CloudinaryImage[]> {
 const GALLERY_ROOT = process.env.CLOUDINARY_GALLERY_ROOT ?? 'marketing/images';
 
 async function listChildFolders(cloudName: string, auth: string, path: string): Promise<string[]> {
-  const res = await fetch(`${CLOUDINARY_API}/${cloudName}/folders/${path.split('/').map(encodeURIComponent).join('/')}`, {
-    headers: { Authorization: `Basic ${auth}` },
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Cloudinary folders API error ${res.status}: ${body}`);
-  }
-  const json = await res.json();
-  const folders: { name: string }[] = json.folders ?? [];
-  return folders.map(f => f.name);
+  const encodedPath = path.split('/').map(encodeURIComponent).join('/');
+  const names: string[] = [];
+  let cursor: string | undefined;
+
+  do {
+    const params = new URLSearchParams({ max_results: '500' });
+    if (cursor) params.set('next_cursor', cursor);
+
+    const res = await fetch(`${CLOUDINARY_API}/${cloudName}/folders/${encodedPath}?${params}`, {
+      headers: { Authorization: `Basic ${auth}` },
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Cloudinary folders API error ${res.status}: ${body}`);
+    }
+    const json = await res.json();
+    const folders: { name: string }[] = json.folders ?? [];
+    names.push(...folders.map(f => f.name));
+    cursor = json.next_cursor;
+  } while (cursor);
+
+  return names;
 }
 
 // Cloudinary caps each by_asset_folder response at 500 results and returns a
@@ -149,23 +161,35 @@ async function listResourcesByAssetFolder(cloudName: string, auth: string, asset
 /** Lists each project subfolder under CLOUDINARY_GALLERY_ROOT (default
  * "marketing/images") separately — never merged — for the planner's image
  * picker. Subfolders are discovered dynamically, so the picker always
- * reflects whatever projects actually exist under the root. */
+ * reflects whatever projects actually exist under the root. Also includes
+ * images uploaded directly into the root itself (asset_folder ===
+ * GALLERY_ROOT, no subfolder) as a "General" bucket — by_asset_folder is an
+ * exact match, so those were previously invisible since only subfolder
+ * paths were ever queried. */
 export async function listCloudinaryImagesByFolder(): Promise<CloudinaryFolderImages[]> {
   const { cloudName, apiKey, apiSecret } = getCredentials();
   const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
 
   const childNames = await listChildFolders(cloudName, auth, GALLERY_ROOT);
 
-  return Promise.all(
-    childNames.map(async name => {
-      const assetFolder = `${GALLERY_ROOT}/${name}`;
-      try {
-        const images = await listResourcesByAssetFolder(cloudName, auth, assetFolder);
-        return { folder: name, images };
-      } catch (err) {
-        console.error(`listCloudinaryImagesByFolder failed for "${assetFolder}": ${err instanceof Error ? err.message : err}`);
-        return { folder: name, images: [] };
-      }
-    })
-  );
+  const [rootImages, subfolders] = await Promise.all([
+    listResourcesByAssetFolder(cloudName, auth, GALLERY_ROOT).catch(err => {
+      console.error(`listCloudinaryImagesByFolder failed for root "${GALLERY_ROOT}": ${err instanceof Error ? err.message : err}`);
+      return [] as CloudinaryImage[];
+    }),
+    Promise.all(
+      childNames.map(async name => {
+        const assetFolder = `${GALLERY_ROOT}/${name}`;
+        try {
+          const images = await listResourcesByAssetFolder(cloudName, auth, assetFolder);
+          return { folder: name, images };
+        } catch (err) {
+          console.error(`listCloudinaryImagesByFolder failed for "${assetFolder}": ${err instanceof Error ? err.message : err}`);
+          return { folder: name, images: [] };
+        }
+      })
+    ),
+  ]);
+
+  return rootImages.length > 0 ? [{ folder: 'General', images: rootImages }, ...subfolders] : subfolders;
 }
