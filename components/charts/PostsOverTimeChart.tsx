@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export interface PostsByDate {
@@ -10,6 +11,15 @@ export interface PostsByDate {
 function formatDate(value: string): string {
   const d = new Date(value);
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// Recharts calls Tooltip's labelFormatter with `label: ReactNode` (it can be
+// undefined, a number, an element — not just the string dates this chart
+// actually uses), unlike XAxis's tickFormatter which always passes a real
+// date string. formatDate's stricter (value: string) => string signature
+// isn't assignable to that looser callback type, hence this adapter.
+function formatTooltipLabel(label: ReactNode): ReactNode {
+  return typeof label === 'string' ? formatDate(label) : label;
 }
 
 export function PostsOverTimeChart({ data }: { data: PostsByDate[] }) {
@@ -35,7 +45,7 @@ export function PostsOverTimeChart({ data }: { data: PostsByDate[] }) {
         <YAxis allowDecimals={false} tick={{ fontSize: 12 }} stroke="currentColor" className="text-neutral-400" />
         <Tooltip
           contentStyle={{ borderRadius: 12, border: '1px solid #e5e5e5', fontSize: 13 }}
-          labelFormatter={formatDate}
+          labelFormatter={formatTooltipLabel}
         />
         <Bar dataKey="count" name="Posts published" fill="#6366f1" radius={[6, 6, 0, 0]} />
       </BarChart>

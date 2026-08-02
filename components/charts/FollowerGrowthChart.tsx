@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 export interface FollowerHistoryPoint {
@@ -17,6 +18,15 @@ const PLATFORM_COLOR: Record<string, string> = {
 function formatDate(value: string): string {
   const d = new Date(value);
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// Recharts calls Tooltip's labelFormatter with `label: ReactNode` (it can be
+// undefined, a number, an element — not just the string dates this chart
+// actually uses), unlike XAxis's tickFormatter which always passes a real
+// date string. formatDate's stricter (value: string) => string signature
+// isn't assignable to that looser callback type, hence this adapter.
+function formatTooltipLabel(label: ReactNode): ReactNode {
+  return typeof label === 'string' ? formatDate(label) : label;
 }
 
 export function FollowerGrowthChart({ data }: { data: FollowerHistoryPoint[] }) {
@@ -55,7 +65,7 @@ export function FollowerGrowthChart({ data }: { data: FollowerHistoryPoint[] }) 
         <Tooltip
           contentStyle={{ borderRadius: 12, border: '1px solid #e5e5e5', fontSize: 13 }}
           labelStyle={{ fontWeight: 600 }}
-          labelFormatter={formatDate}
+          labelFormatter={formatTooltipLabel}
         />
         <Legend wrapperStyle={{ fontSize: 12 }} />
         {platforms.map(platform => (
