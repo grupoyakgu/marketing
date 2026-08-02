@@ -9,13 +9,16 @@
 - LinkedIn UGC Posts API
 
 ## Project Structure
-- /app/api/telegram/route.ts        → webhook handler (maxDuration: 60s)
+- /app/api/telegram/route.ts        → Pepe's webhook handler (maxDuration: 60s)
+- /app/api/telegram-santi/route.ts  → Santi's webhook handler (maxDuration: 300s)
 - /app/api/linkedin/process/route.ts → background video processor (maxDuration: 300s)
 - /lib/linkedin-poster.ts           → LinkedIn text/image/video posting
 - /lib/linkedin-queue.ts            → Supabase job queue helpers
 - /lib/leads-agent.ts               → Claude-powered lead extraction from HTML
-- /lib/telegram.ts                  → Telegram API wrapper
+- /lib/telegram.ts                  → Telegram API wrapper (takes any bot token)
 - /lib/marketing-agent.ts           → Pepe agent (LinkedIn/Facebook/Instagram posting, Cloudinary image browsing)
+- /lib/dev-agent.ts                 → Santi agent (CTO persona; reads/edits this repo via GitHub API, opens + merges PRs)
+- /lib/github-dev.ts                → GitHub REST API wrapper used by Santi (read/write files, branches, PRs)
 - /lib/cloudinary.ts                → Cloudinary Admin API image listing
 - /lib/meta-poster.ts               → Facebook/Instagram posting
 - /supabase/migrations/             → SQL migrations
@@ -36,6 +39,9 @@
 - INSTAGRAM_PAGE_ACCESS_TOKEN
 - INSTAGRAM_BUSINESS_ACCOUNT_ID
 - FACEBOOK_PAGE_ID
+- SANTI_BOT_TOKEN           # Telegram bot token for Santi (the dev/CTO bot)
+- SANTI_GITHUB_TOKEN        # fine-grained PAT scoped to grupoyakgu/marketing (Contents + Pull requests: read/write)
+- SANTI_OWNER_TELEGRAM_ID   # numeric Telegram user ID — Santi ignores messages from anyone else
 
 ## Telegram Commands
 - /post linkedin <message>              — text post

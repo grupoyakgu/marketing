@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     // tool_result pairing Claude's API requires. A duplicate update_id is a
     // no-op instead of a second full run.
     const updateId: number | undefined = body?.update_id;
-    if (updateId !== undefined && !(await claimTelegramUpdate(updateId))) {
+    if (updateId !== undefined && !(await claimTelegramUpdate(updateId, 'pepe'))) {
       return NextResponse.json({ ok: true });
     }
 
