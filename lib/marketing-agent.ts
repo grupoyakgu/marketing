@@ -484,7 +484,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
     const response = await client.messages.create(
       {
         model: 'claude-sonnet-4-6',
-        max_tokens: 4096,
+        max_tokens: 8192,
         system: buildSystemPrompt(),
         tools,
         messages: history,
@@ -870,7 +870,19 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
     }
 
     const textBlock = response.content.find(b => b.type === 'text');
-    if (!textBlock || textBlock.type !== 'text') throw new Error('No text response');
+    if (!textBlock || textBlock.type !== 'text') {
+      // Seen in production on a heavy generation (e.g. drafting a full weekly
+      // plan) that hit max_tokens before emitting any text block — the model
+      // was still mid tool-call when the turn got cut off. Not pushing this
+      // truncated turn into history: since stop_reason wasn't 'tool_use',
+      // any tool_use block here (complete or not) never got a matching
+      // tool_result, and saving it would corrupt every later turn in this
+      // chat with a dangling tool_use id.
+      console.error(`[marketing-agent] turn ended with no text block, stop_reason: ${response.stop_reason}, content types: ${response.content.map(b => b.type).join(', ')}`);
+      return response.stop_reason === 'max_tokens'
+        ? 'My response got cut off because it was too long — could you try asking for something more specific, or in smaller steps?'
+        : 'Something went wrong generating a reply. Please try again.';
+    }
     const reply = textBlock.text;
     await saveMessage(chatId, BOT_NAME, 'assistant', reply);
     return reply;
