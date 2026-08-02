@@ -59,10 +59,13 @@ export async function POST(req: NextRequest) {
     chatId = message?.chat?.id;
     if (!chatId) return NextResponse.json({ ok: true });
 
-    // Santi shares this group chat and only responds when explicitly
-    // addressed — Pepe needs the opposite check, so a message clearly meant
-    // for Santi doesn't also get a reply from Pepe.
-    if (isAddressedTo(message, 'santi', process.env.SANTI_BOT_TOKEN)) {
+    // Santi and Angeles share this group chat and only respond when
+    // explicitly addressed — Pepe needs the opposite check, so a message
+    // clearly meant for one of them doesn't also get a reply from Pepe.
+    if (
+      isAddressedTo(message, 'santi', process.env.SANTI_BOT_TOKEN) ||
+      isAddressedTo(message, 'angeles', process.env.ANGELES_BOT_TOKEN)
+    ) {
       return NextResponse.json({ ok: true });
     }
 
