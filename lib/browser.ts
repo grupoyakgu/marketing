@@ -7,12 +7,18 @@ import puppeteer from 'puppeteer-core';
 // shipping those files, so they were silently missing from the deployed
 // function ("error while loading shared libraries: libnss3.so..."), even
 // after forcing the whole package in via outputFileTracingIncludes. The
-// "-min" variant sidesteps this entirely: it ships no binary of its own and
-// instead downloads a complete, self-contained, already-correct browser
-// build from Sparticuz's GitHub releases at cold start. Slower on a cold
-// Lambda (one download), but actually reliable here. Version must match the
-// pinned @sparticuz/chromium-min version in package.json.
-const CHROMIUM_PACK_URL = 'https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar';
+// "-min" variant sidesteps that entirely by downloading a complete,
+// self-contained browser build from Sparticuz's GitHub releases at cold
+// start instead — but the same libnss3.so error still showed up even after
+// that switch, at @sparticuz/chromium-min@131.0.1 + puppeteer-core@23.10.4.
+// That combination is much newer than the versions actually confirmed
+// working against Vercel's serverless runtime in the wild; pinned back to
+// 119.0.2 / 21.5.1, a documented known-good pairing. Version here must
+// match the exact @sparticuz/chromium-min version pinned in package.json —
+// both intentionally pinned exact (no ^) since this package's Vercel
+// compatibility is version-sensitive enough that letting either drift
+// independently risks silently breaking this again.
+const CHROMIUM_PACK_URL = 'https://github.com/Sparticuz/chromium/releases/download/v119.0.2/chromium-v119.0.2-pack.tar';
 
 function getBaseUrl(): string {
   return process.env.NEXT_PUBLIC_APP_URL ?? 'https://marketing-grupo-yakgu.vercel.app';
