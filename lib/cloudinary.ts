@@ -220,21 +220,16 @@ export async function listCloudinaryImagesByFolder(): Promise<CloudinaryFolderIm
     listAllImageResources(cloudName, auth),
   ]);
 
-  // TEMP DIAGNOSTIC — the account-wide /resources/image listing works fine
-  // for every other folder's images but excludes all 10 "Food" images, while
-  // by_asset_folder finds them without issue. Fetching one food image's full
-  // raw metadata directly by public_id (moderation/access_mode/tags/context/
-  // dates) to compare against how the working images look, to find the real
-  // differentiator instead of guessing further. Remove once root-caused.
-  try {
-    const res = await fetch(`${CLOUDINARY_API}/${cloudName}/resources/image/upload/food1_hifav4`, {
-      headers: { Authorization: `Basic ${auth}` },
-    });
-    const json = await res.json().catch(() => ({}));
-    console.error(`[cloudinary debug] direct fetch of food1_hifav4 status=${res.status}: ${JSON.stringify(json)}`);
-  } catch (err) {
-    console.error(`[cloudinary debug] direct food1_hifav4 fetch threw: ${err instanceof Error ? err.message : err}`);
-  }
+  // TEMP DIAGNOSTIC — a newly added "Restaurants" folder isn't appearing in
+  // the picker at all (not even as an empty folder), unlike other empty
+  // folders such as "Castellar 9"/"Sevilla" which do show up via
+  // listChildFolders. Logging the raw childNames list plus any asset_folder
+  // value that loosely matches "restaurant" to catch a casing/nesting/typo
+  // mismatch instead of guessing further. Remove once root-caused.
+  console.error(`[cloudinary debug] listChildFolders(${GALLERY_ROOT})=${JSON.stringify(childNames)}`);
+  console.error(`[cloudinary debug] asset_folder values matching /restaurant/i=${JSON.stringify(
+    Array.from(new Set(allResources.map(r => r.asset_folder).filter(f => f && /restaurant/i.test(f))))
+  )}`);
 
   const rootPrefix = `${GALLERY_ROOT}/`;
   const byFolder = new Map<string, CloudinaryImage[]>();
