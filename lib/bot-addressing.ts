@@ -50,15 +50,25 @@ export function allBots(): BotIdentity[] {
  * itself names a *different* bot (e.g. typing "Pepe, ..." while the
  * Telegram client still has an older Angeles message selected as the
  * reply target, which mobile clients do easily), the explicit name has to
- * win or the message goes to the wrong bot regardless of what was typed. */
+ * win or the message goes to the wrong bot regardless of what was typed.
+ *
+ * When more than one bot's name appears in the text (e.g. "Angeles, get
+ * Santi to build this"), picks whichever name appears earliest in the
+ * message, not whichever bot happens to come first in the `bots` array —
+ * that's the one actually being addressed; the other is just mentioned. */
 export function resolveAddressee(message: TelegramMessageLike, bots: BotIdentity[]): string | null {
   if (message.from?.is_bot) return null;
 
   const text = message.text;
   if (text) {
+    let earliest: { name: string; index: number } | null = null;
     for (const bot of bots) {
-      if (new RegExp(`\\b${bot.name}\\b`, 'i').test(text)) return bot.name;
+      const match = new RegExp(`\\b${bot.name}\\b`, 'i').exec(text);
+      if (match && (earliest === null || match.index < earliest.index)) {
+        earliest = { name: bot.name, index: match.index };
+      }
     }
+    if (earliest) return earliest.name;
   }
 
   const replyToId = message.reply_to_message?.from?.id;
