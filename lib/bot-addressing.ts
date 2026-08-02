@@ -4,6 +4,11 @@ interface TelegramMessageLike {
   reply_to_message?: { from?: { id?: number } };
 }
 
+export interface BotIdentity {
+  name: string;
+  token: string | undefined;
+}
+
 /** A Telegram bot token is "<numeric bot id>:<secret>" — the id half is the
  * bot's own Telegram user id, the same id that shows up as
  * reply_to_message.from.id when someone replies to that bot's message. No
@@ -13,27 +18,55 @@ function botIdFromToken(token: string | undefined): number | undefined {
   return id && /^\d+$/.test(id) ? Number(id) : undefined;
 }
 
-/** Whether a group message is explicitly directed at a given bot: its name
- * appears anywhere in the text (e.g. "Santi, can you...", "Hi Angeles",
- * "what do you think, Santi?") or it's a reply to that bot's own earlier
- * message. Pepe, Santi, and Angeles share one group chat and all see every
- * message Telegram delivers to them, so without this check every message
- * would go to every bot regardless of who it was actually meant for.
+/** Every bot sharing this Telegram group, so addressing can be resolved once
+ * per message instead of as N independent per-bot checks that could
+ * disagree with each other. */
+export function allBots(): BotIdentity[] {
+  return [
+    { name: 'pepe', token: process.env.TELEGRAM_BOT_TOKEN },
+    { name: 'santi', token: process.env.SANTI_BOT_TOKEN },
+    { name: 'angeles', token: process.env.ANGELES_BOT_TOKEN },
+  ];
+}
+
+/** Which bot (by name) a group message is addressed to, or null if it isn't
+ * clearly addressed to any one of them. Pepe, Santi, and Angeles share one
+ * group chat and all see every message Telegram delivers to them, so
+ * without this every message would go to every bot regardless of who it
+ * was actually meant for.
  *
- * Only ever matches messages from a human. The three bots know about each
- * other and can freely mention one another by name in conversation — if
- * that alone counted as "addressed", one bot's reply mentioning a second
- * could make the second reply and mention the first back, looping
- * indefinitely (real API cost, real chat spam) with no human involved.
- * Restricting matching to human senders closes that off entirely: a bot
- * can suggest "ask Santi about this", but only the human actually asking
- * Santi triggers a response. */
-export function isAddressedTo(message: TelegramMessageLike, name: string, botToken: string | undefined): boolean {
-  if (message.from?.is_bot) return false;
+ * Never resolves to a bot for a message sent by another bot — the three
+ * bots know about each other and can freely mention one another by name in
+ * conversation, and if that alone counted as addressing, one bot's reply
+ * mentioning a second could make the second reply and mention the first
+ * back, looping indefinitely (real API cost, real chat spam) with no human
+ * involved. A bot can suggest "ask Santi about this", but only a human
+ * actually asking Santi triggers a response.
+ *
+ * Checks explicit naming (e.g. "Santi, can you...", "Hi Angeles") before
+ * falling back to reply-to-message context, not the other way around —
+ * replying to a bot's last message is a convenience for continuing that
+ * conversation without restating its name each time, but if the text
+ * itself names a *different* bot (e.g. typing "Pepe, ..." while the
+ * Telegram client still has an older Angeles message selected as the
+ * reply target, which mobile clients do easily), the explicit name has to
+ * win or the message goes to the wrong bot regardless of what was typed. */
+export function resolveAddressee(message: TelegramMessageLike, bots: BotIdentity[]): string | null {
+  if (message.from?.is_bot) return null;
 
   const text = message.text;
-  if (text && new RegExp(`\\b${name}\\b`, 'i').test(text)) return true;
+  if (text) {
+    for (const bot of bots) {
+      if (new RegExp(`\\b${bot.name}\\b`, 'i').test(text)) return bot.name;
+    }
+  }
 
-  const botId = botIdFromToken(botToken);
-  return botId !== undefined && message.reply_to_message?.from?.id === botId;
+  const replyToId = message.reply_to_message?.from?.id;
+  if (replyToId !== undefined) {
+    for (const bot of bots) {
+      if (botIdFromToken(bot.token) === replyToId) return bot.name;
+    }
+  }
+
+  return null;
 }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { TelegramClient } from '@/lib/telegram';
 import { clearHistory, chat } from '@/lib/product-agent';
 import { claimTelegramUpdate } from '@/lib/telegram-dedup';
-import { isAddressedTo } from '@/lib/bot-addressing';
+import { resolveAddressee, allBots } from '@/lib/bot-addressing';
 
 export const maxDuration = 300;
 
@@ -52,9 +52,8 @@ export async function POST(req: NextRequest) {
 
     // Pepe, Santi, and Angeles share this group chat, so every message
     // reaches all three — only actually respond when this one is addressed
-    // to Angeles specifically (starts with "Angeles" or replies to one of
-    // her own messages).
-    if (!isAddressedTo(message, 'angeles', process.env.ANGELES_BOT_TOKEN)) {
+    // to Angeles specifically.
+    if (resolveAddressee(message, allBots()) !== 'angeles') {
       return NextResponse.json({ ok: true });
     }
 
