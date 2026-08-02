@@ -21,6 +21,7 @@
 - /lib/marketing-agent.ts           → Pepe agent (LinkedIn/Facebook/Instagram posting, Cloudinary image browsing)
 - /lib/dev-agent.ts                 → Santi agent (CTO persona; reads/edits this repo via GitHub API, opens + merges PRs)
 - /lib/github-dev.ts                → GitHub REST API wrapper used by Santi + Angeles (read/write files, branches, PRs)
+- /lib/vercel-dev.ts                → Vercel REST API wrapper used by Santi (list_deployments, get_deployment_logs)
 - /lib/product-agent.ts             → Angeles agent (CPO persona; read-only repo access, no write/posting ability)
 - /lib/browser.ts                   → Browserbase (remote Chromium via CDP) screenshot helper used by Angeles's browse_page tool
 - /lib/cloudinary.ts                → Cloudinary Admin API image listing
@@ -51,6 +52,7 @@
 - ANGELES_APP_PASSWORD      # password for that same account
 - BROWSERBASE_API_KEY       # remote-browser session API used by browse_page (running Chromium in-process on Vercel wasn't viable — see lib/browser.ts)
 - BROWSERBASE_PROJECT_ID    # Browserbase project ID paired with the API key above
+- SANTI_VERCEL_TOKEN        # Vercel Access Token scoped to this team, used by list_deployments/get_deployment_logs
 
 ## Telegram Commands
 - /post linkedin <message>              — text post
