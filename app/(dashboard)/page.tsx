@@ -166,7 +166,7 @@ export default async function OverviewPage() {
         />
       </section>
 
-      <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-7">
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <KpiCard
           label="Followers"
           value={totalFollowers}
@@ -174,6 +174,9 @@ export default async function OverviewPage() {
           deltaPct={followerGrowthPct ?? undefined}
         />
         <KpiCard label="Engagement" value={totalEngagement} icon={Heart} />
+      </section>
+
+      <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
         <KpiCard
           label="Reach"
           value={hasEngagementData ? totals.reach : '—'}
