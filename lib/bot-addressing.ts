@@ -12,15 +12,15 @@ function botIdFromToken(token: string | undefined): number | undefined {
   return id && /^\d+$/.test(id) ? Number(id) : undefined;
 }
 
-/** Whether a group message is explicitly directed at a given bot: it starts
- * with the bot's name (e.g. "Santi, can you...") or is a reply to that
- * bot's own earlier message. Pepe and Santi share one group chat and both
- * see every message Telegram delivers to them, so without this check every
- * message would go to both bots regardless of who it was actually meant
- * for. */
+/** Whether a group message is explicitly directed at a given bot: its name
+ * appears anywhere in the text (e.g. "Santi, can you...", "Hi Angeles",
+ * "what do you think, Santi?") or it's a reply to that bot's own earlier
+ * message. Pepe, Santi, and Angeles share one group chat and all see every
+ * message Telegram delivers to them, so without this check every message
+ * would go to every bot regardless of who it was actually meant for. */
 export function isAddressedTo(message: TelegramMessageLike, name: string, botToken: string | undefined): boolean {
-  const text = message.text?.trim();
-  if (text && new RegExp(`^@?${name}\\b`, 'i').test(text)) return true;
+  const text = message.text;
+  if (text && new RegExp(`\\b${name}\\b`, 'i').test(text)) return true;
 
   const botId = botIdFromToken(botToken);
   return botId !== undefined && message.reply_to_message?.from?.id === botId;
