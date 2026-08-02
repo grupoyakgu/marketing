@@ -610,7 +610,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
                     const imageLine = images.length === 0
                       ? '(none selected — the user may have picked or changed this in the dashboard planner)'
                       : images.length === 1 ? images[0] : `${images.length} images (carousel): ${images.join(', ')}`;
-                    return `${i + 1}. [${p.platform}] ${p.scheduled_date} ${p.scheduled_time} [${p.status}]\n   ID: ${p.id}\n   Image: ${imageLine}\n   ${p.content.substring(0, 80)}...`;
+                    return `${i + 1}. [${p.platform}] ${p.scheduled_date} ${p.scheduled_time} [${p.status}]\n   ID: ${p.id}\n   Image: ${imageLine}\n   ${p.content}`;
                   }).join('\n\n')
                 }`;
           } catch (err) {
