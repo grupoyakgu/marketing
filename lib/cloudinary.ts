@@ -220,16 +220,24 @@ export async function listCloudinaryImagesByFolder(): Promise<CloudinaryFolderIm
     listAllImageResources(cloudName, auth),
   ]);
 
-  // TEMP DIAGNOSTIC — a newly added "Restaurants" folder isn't appearing in
-  // the picker at all (not even as an empty folder), unlike other empty
-  // folders such as "Castellar 9"/"Sevilla" which do show up via
-  // listChildFolders. Logging the raw childNames list plus any asset_folder
-  // value that loosely matches "restaurant" to catch a casing/nesting/typo
-  // mismatch instead of guessing further. Remove once root-caused.
+  // TEMP DIAGNOSTIC — a "Restaurants" folder that the user confirms already
+  // has images in it still isn't appearing anywhere: not in listChildFolders,
+  // not as any asset_folder value in the account-wide resource listing, even
+  // after a 15min wait (rules out simple index propagation lag). Logging the
+  // full distinct set of asset_folder values plus a direct by_asset_folder
+  // probe of the exact expected path to see whether the images' asset_folder
+  // metadata actually matches what the folder browser displays. Remove once
+  // root-caused.
   console.error(`[cloudinary debug] listChildFolders(${GALLERY_ROOT})=${JSON.stringify(childNames)}`);
-  console.error(`[cloudinary debug] asset_folder values matching /restaurant/i=${JSON.stringify(
-    Array.from(new Set(allResources.map(r => r.asset_folder).filter(f => f && /restaurant/i.test(f))))
+  console.error(`[cloudinary debug] all distinct asset_folder values=${JSON.stringify(
+    Array.from(new Set(allResources.map(r => r.asset_folder).filter(Boolean)))
   )}`);
+  try {
+    const probe = await listResourcesByAssetFolder(cloudName, auth, `${GALLERY_ROOT}/Restaurants`);
+    console.error(`[cloudinary debug] by_asset_folder("${GALLERY_ROOT}/Restaurants") found ${probe.length} image(s): ${JSON.stringify(probe.map(p => p.id))}`);
+  } catch (err) {
+    console.error(`[cloudinary debug] by_asset_folder("${GALLERY_ROOT}/Restaurants") probe threw: ${err instanceof Error ? err.message : err}`);
+  }
 
   const rootPrefix = `${GALLERY_ROOT}/`;
   const byFolder = new Map<string, CloudinaryImage[]>();
