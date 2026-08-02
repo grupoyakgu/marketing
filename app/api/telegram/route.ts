@@ -5,7 +5,7 @@ import { enqueueLinkedInPost } from '@/lib/linkedin-queue';
 import { clearHistory, chat } from '@/lib/marketing-agent';
 import { trackDirectPost } from '@/lib/marketing-plan';
 import { claimTelegramUpdate } from '@/lib/telegram-dedup';
-import { isAddressedTo } from '@/lib/bot-addressing';
+import { resolveAddressee, allBots } from '@/lib/bot-addressing';
 
 export const maxDuration = 300;
 
@@ -60,12 +60,10 @@ export async function POST(req: NextRequest) {
     if (!chatId) return NextResponse.json({ ok: true });
 
     // Santi and Angeles share this group chat and only respond when
-    // explicitly addressed — Pepe needs the opposite check, so a message
-    // clearly meant for one of them doesn't also get a reply from Pepe.
-    if (
-      isAddressedTo(message, 'santi', process.env.SANTI_BOT_TOKEN) ||
-      isAddressedTo(message, 'angeles', process.env.ANGELES_BOT_TOKEN)
-    ) {
+    // explicitly addressed — Pepe is the default for anything not clearly
+    // meant for one of them.
+    const addressee = resolveAddressee(message, allBots());
+    if (addressee !== null && addressee !== 'pepe') {
       return NextResponse.json({ ok: true });
     }
 
