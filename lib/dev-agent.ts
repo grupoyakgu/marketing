@@ -11,6 +11,7 @@ import {
   listOpenPullRequests,
   mergePullRequest,
 } from '@/lib/github-dev';
+import { listDeployments, getDeploymentLogs } from '@/lib/vercel-dev';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BOT_NAME = 'santi';
@@ -50,7 +51,7 @@ This codebase already has its own working conventions (see \`CLAUDE.md\` in the 
 1. Read before you write. Use \`read_file\`/\`list_directory\`/\`search_code\` to actually look at the relevant code first — don't guess at a file's contents or assume how something is wired up.
 2. Make the smallest change that correctly fixes the actual problem. Don't refactor unrelated things while you're in there.
 3. To ship a change: \`create_branch\`, \`write_file\` for each file you're changing (one call per file, with a clear commit message), then \`create_pull_request\`. Once you're confident it's correct, \`merge_pull_request\` it yourself — you don't need to ask permission first, that's the point of you having this access. Only hold off on merging if something about the change is genuinely uncertain (e.g. you couldn't verify a related piece of the system, or the fix depends on information you don't have) — say so and explain what you'd need to be sure.
-4. You cannot run the app, run tests, or see live logs/deployments — there's no CI configured on this repo and you don't have Vercel access. Reason from reading the code carefully instead. If you need runtime evidence (an actual error message, stack trace, log line) to diagnose something, ask for it rather than guessing at what production is doing.
+4. You can't run the app or run tests directly — there's no CI configured on this repo — but you can check what actually happened in production with \`list_deployments\`/\`get_deployment_logs\`: build failures, runtime errors, console output. Use these before guessing at what production is doing whenever a bug report is vague — check the actual logs first, then read the code.
 5. \`search_code\` uses GitHub's code search index, which lags a few minutes behind pushes — if you just merged something, don't trust a search that contradicts what you just wrote; re-read the file directly instead.
 6. Always report back what you actually did (files changed, PR number/link, merged or not) and why — not a vague "done".
 
@@ -155,6 +156,29 @@ const tools: Anthropic.Tool[] = [
       required: ['pr_number'],
     },
   },
+  {
+    name: 'list_deployments',
+    description: 'Lists recent Vercel deployments for this project — id, state (READY/ERROR/BUILDING), target, and which commit each one is. Use this first to find the deployment you actually want logs for.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        limit: { type: 'integer', description: 'Max deployments to return. Defaults to 10.' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'get_deployment_logs',
+    description: 'Gets the build and runtime log lines for a specific Vercel deployment — covers both a failed build and a runtime error the same way. Get the deployment id from list_deployments first.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        deployment_id: { type: 'string' },
+        limit: { type: 'integer', description: 'Max log lines to return. Defaults to 200.' },
+      },
+      required: ['deployment_id'],
+    },
+  },
 ];
 
 export async function clearHistory(chatId: number): Promise<void> {
@@ -252,6 +276,22 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
               const input = block.input as { pr_number: number };
               const result = await mergePullRequest(input.pr_number);
               resultContent = result.merged ? `Merged PR #${input.pr_number}.` : `Not merged: ${result.message}`;
+            }
+
+            if (block.name === 'list_deployments') {
+              const input = block.input as { limit?: number };
+              const deployments = await listDeployments(input.limit ?? 10);
+              resultContent = deployments.map(d =>
+                `${d.id} — ${d.state}${d.target ? ` (${d.target})` : ''} — ${new Date(d.createdAt).toISOString()} — ${d.commitMessage?.split('\n')[0] ?? '(no commit message)'}`
+              ).join('\n');
+            }
+
+            if (block.name === 'get_deployment_logs') {
+              const input = block.input as { deployment_id: string; limit?: number };
+              const logs = await getDeploymentLogs(input.deployment_id, input.limit ?? 200);
+              resultContent = logs.length === 0
+                ? 'No log lines returned.'
+                : logs.map(l => `[${l.type}] ${l.text}`).join('\n');
             }
           })(), TOOL_TIMEOUT_MS, block.name);
         } catch (err) {
