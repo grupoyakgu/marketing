@@ -2,6 +2,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import { loadHistory, saveMessage, clearHistory as clearDb } from '@/lib/chat-history';
 import { readFile, listDirectory, searchCode } from '@/lib/github-dev';
 import { screenshotPage } from '@/lib/browser';
+import { chat as santiChat } from '@/lib/dev-agent';
+import { TelegramClient } from '@/lib/telegram';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BOT_NAME = 'angeles';
@@ -12,9 +14,10 @@ const BOT_NAME = 'angeles';
 // leaves that tool_use without a tool_result — permanently corrupting this
 // chat's history, since Claude's API then rejects every future message
 // referencing it. Higher than Pepe/Santi's since browse_page launches a
-// headless browser — a cold start plus login plus page render easily takes
-// longer than a plain API call.
-const TOOL_TIMEOUT_MS = 90_000;
+// remote browser session (cold start plus login plus page render), and
+// delegate_to_santi runs Santi's entire multi-step tool loop (read code,
+// write files, open + merge a PR) inline before returning.
+const TOOL_TIMEOUT_MS = 180_000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -63,6 +66,8 @@ You're advising on \`grupoyakgu/marketing\` — this exact Next.js 14 (App Route
 You can also actually look at the live dashboard with \`browse_page\` — it screenshots a real page as it renders right now, logged in as your own dedicated read-only account, so you can judge real layout, spacing, and hierarchy instead of guessing from markup. Use it whenever a UX critique or a "does this screen work well" question is about something that actually exists — don't rely on \`read_file\` alone to imagine what a page looks like when you can just look at it.
 
 Anyone in this group can address you, not just one specific person — you're a shared resource for product discussions, not gated to an owner the way Santi is (Santi can merge code changes on request, which is why he's restricted). Mentioning Pepe or Santi by name in your own reply doesn't ping them — the user has to address them directly for that.
+
+\`delegate_to_santi\` is the one exception: it hands a specific implementation task straight to Santi so he can build it — read the code, write the fix, open and merge a PR — without the user having to separately go address him themselves and repeat everything you already worked out. Only use it when the user has clearly asked for something to actually be built or fixed, not just discussed (e.g. "can you get Santi to build this", "let's ship this change") — don't send Santi work off your own initiative just because you recommended something. Write the instructions like a clear, self-contained spec: what to change and why, not a transcript of your conversation — Santi doesn't see this chat's history, only what you send him. He only acts on requests from the one person who owns this bot setup, so if that check fails you'll get told rather than have it silently happen — just relay that to whoever asked.
 
 Speak English unless addressed in another language. No filler, no over-explaining, no emoji.`;
 }
@@ -115,13 +120,24 @@ const tools: Anthropic.Tool[] = [
       required: ['path'],
     },
   },
+  {
+    name: 'delegate_to_santi',
+    description: 'Hands a specific implementation task directly to Santi (the CTO) to build and ship — he reads the code, writes the fix, and opens + merges a PR. Only use when the user has explicitly asked for something to actually be built/fixed, not just discussed.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        instructions: { type: 'string', description: 'A clear, self-contained spec of what to change and why — Santi does not see this conversation, only this text.' },
+      },
+      required: ['instructions'],
+    },
+  },
 ];
 
 export async function clearHistory(chatId: number): Promise<void> {
   await clearDb(chatId, BOT_NAME);
 }
 
-export async function chat(chatId: number, userMessage: string): Promise<string> {
+export async function chat(chatId: number, userMessage: string, senderId?: number): Promise<string> {
   const history = await loadHistory(chatId, BOT_NAME);
   history.push({ role: 'user', content: userMessage });
   await saveMessage(chatId, BOT_NAME, 'user', userMessage);
@@ -184,6 +200,23 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
                 { type: 'text', text: `Screenshot of ${input.path}:` },
                 { type: 'image', source: { type: 'base64', media_type: 'image/png', data: screenshot.toString('base64') } },
               ];
+            }
+
+            if (block.name === 'delegate_to_santi') {
+              const input = block.input as { instructions: string };
+              const ownerId = process.env.SANTI_OWNER_TELEGRAM_ID;
+              // Santi only acts on requests from his owner precisely because
+              // he can merge real code changes — Angeles is open to the
+              // whole group, so without re-checking that same restriction
+              // here, anyone could get Santi to ship changes just by asking
+              // her to relay it, bypassing his own gate entirely.
+              if (!ownerId || String(senderId) !== ownerId) {
+                resultContent = 'Not delegated: only this bot setup\'s owner can ask Santi to make changes, and this request didn\'t come from them.';
+              } else {
+                const santiReply = await santiChat(chatId, input.instructions);
+                await new TelegramClient(process.env.SANTI_BOT_TOKEN).sendMessage(chatId, santiReply);
+                resultContent = `Santi replied: ${santiReply}`;
+              }
             }
           })(), TOOL_TIMEOUT_MS, block.name);
         } catch (err) {

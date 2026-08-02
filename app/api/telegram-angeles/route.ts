@@ -59,8 +59,9 @@ export async function POST(req: NextRequest) {
 
     if (text) {
       const resolvedChatId = chatId;
+      const senderId: number | undefined = message?.from?.id;
       try {
-        const reply = await chat(resolvedChatId, text);
+        const reply = await chat(resolvedChatId, text, senderId);
         const chunks = splitMessage(reply, 4000);
         for (const chunk of chunks) {
           await telegram.sendMessage(resolvedChatId, chunk);
