@@ -5,6 +5,7 @@ import { enqueueLinkedInPost } from '@/lib/linkedin-queue';
 import { clearHistory, chat } from '@/lib/marketing-agent';
 import { trackDirectPost } from '@/lib/marketing-plan';
 import { claimTelegramUpdate } from '@/lib/telegram-dedup';
+import { isAddressedTo } from '@/lib/bot-addressing';
 
 export const maxDuration = 300;
 
@@ -57,6 +58,13 @@ export async function POST(req: NextRequest) {
     const message = body?.message;
     chatId = message?.chat?.id;
     if (!chatId) return NextResponse.json({ ok: true });
+
+    // Santi shares this group chat and only responds when explicitly
+    // addressed — Pepe needs the opposite check, so a message clearly meant
+    // for Santi doesn't also get a reply from Pepe.
+    if (isAddressedTo(message, 'santi', process.env.SANTI_BOT_TOKEN)) {
+      return NextResponse.json({ ok: true });
+    }
 
     const text: string | undefined = message?.text?.trim();
     const caption: string | undefined = message?.caption?.trim();
