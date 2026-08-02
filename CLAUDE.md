@@ -22,7 +22,7 @@
 - /lib/dev-agent.ts                 → Santi agent (CTO persona; reads/edits this repo via GitHub API, opens + merges PRs)
 - /lib/github-dev.ts                → GitHub REST API wrapper used by Santi + Angeles (read/write files, branches, PRs)
 - /lib/product-agent.ts             → Angeles agent (CPO persona; read-only repo access, no write/posting ability)
-- /lib/browser.ts                   → headless-Chromium screenshot helper used by Angeles's browse_page tool
+- /lib/browser.ts                   → Browserbase (remote Chromium via CDP) screenshot helper used by Angeles's browse_page tool
 - /lib/cloudinary.ts                → Cloudinary Admin API image listing
 - /lib/meta-poster.ts               → Facebook/Instagram posting
 - /supabase/migrations/             → SQL migrations
@@ -49,6 +49,8 @@
 - ANGELES_BOT_TOKEN         # Telegram bot token for Angeles (the CPO bot) — no owner restriction, anyone in the group can address her
 - ANGELES_APP_USERNAME      # login for Angeles's dedicated read-only dashboard account (used by browse_page to screenshot live pages)
 - ANGELES_APP_PASSWORD      # password for that same account
+- BROWSERBASE_API_KEY       # remote-browser session API used by browse_page (running Chromium in-process on Vercel wasn't viable — see lib/browser.ts)
+- BROWSERBASE_PROJECT_ID    # Browserbase project ID paired with the API key above
 
 ## Telegram Commands
 - /post linkedin <message>              — text post
