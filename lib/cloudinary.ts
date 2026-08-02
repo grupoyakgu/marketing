@@ -30,11 +30,9 @@ function mapResource(r: { public_id: string; secure_url: string; filename?: stri
 }
 
 async function fetchResources(cloudName: string, auth: string, prefix?: string): Promise<CloudinaryImage[]> {
-  // Use /resources/image with optional prefix — works on all Cloudinary plans
-  // (the alternative /resources/search endpoint requires a paid Search API add-on).
   // NOTE: prefix matches against public_id, which does NOT reflect an asset's
   // folder on accounts using Cloudinary's Dynamic Folders (folder is separate
-  // metadata there) — see listAllImageResources below for that case.
+  // metadata there) — see searchAllImageResources below for that case.
   const params = new URLSearchParams({ type: 'upload', max_results: '50' });
   if (prefix) params.set('prefix', prefix);
 
@@ -98,32 +96,21 @@ export async function listCloudinaryImages(): Promise<CloudinaryImage[]> {
 // segment at all (e.g. "YK-_AP1_17_vq7yff"). A public_id-prefix search can
 // never match these, regardless of what prefix is used.
 //
-// Both of Cloudinary's ways to get folder contents have independently proven
-// unreliable in production, each missing things the other one has:
-// - by_asset_folder once silently omitted a resource whose asset_folder
-//   metadata exactly matched the query (a plain account-wide listing
-//   correctly included it).
-// - The account-wide listing has, in turn, been seen missing an entire
-//   folder's worth of resources (10 images in a "Food" folder) that
-//   by_asset_folder found without issue for that same folder.
-// Neither index alone is trustworthy, so folder contents come from the union
-// of both — the account-wide listing first (cheap, one call + pagination),
-// then a by_asset_folder cross-check per folder to recover anything the
-// broad listing missed, merged in de-duplicated by public_id.
+// Cloudinary's account-wide /resources/image listing has repeatedly proven
+// unreliable in production — twice now (a "Food" folder, then a
+// "Restaurants" folder) it has silently excluded an entire folder's worth of
+// resources that a targeted by_asset_folder query for that same folder finds
+// without issue, and there's no way to even discover such a folder's name
+// from that listing since it never mentions it. The Search API
+// (/resources/search) was confirmed via production logs to find both
+// resources AND folder names those cases missed, so it's the primary source
+// here. The dedicated folders index (listChildFolders) is kept only for
+// folders with zero images in them — which the Search API, being a resource
+// search, structurally cannot discover — and a by_asset_folder cross-check
+// per folder still runs as a second opinion in case the Search API ever
+// misses something the way the older listing did.
 
 const GALLERY_ROOT = process.env.CLOUDINARY_GALLERY_ROOT ?? 'marketing/images';
-
-// Some folders never surface in either of Cloudinary's bulk indexes (neither
-// listChildFolders nor the account-wide resources listing mentions them) even
-// though their images are correctly tagged and a targeted by_asset_folder
-// query for that exact name finds them fine — confirmed via production logs
-// for both a "Food" folder previously and a "Restaurants" folder since. There
-// is no bulk API to enumerate a folder name neither index will mention, so
-// folders known to hit this need to be named here once to be included.
-const EXTRA_FOLDERS = (process.env.CLOUDINARY_EXTRA_FOLDERS ?? '')
-  .split(',')
-  .map(f => f.trim())
-  .filter(Boolean);
 
 async function listChildFolders(cloudName: string, auth: string, path: string): Promise<string[]> {
   const encodedPath = path.split('/').map(encodeURIComponent).join('/');
@@ -159,20 +146,25 @@ interface CloudinaryResource {
 
 // Capped at 10 pages (5,000 images) as a sanity limit, far beyond any real
 // account size, so a runaway account state can't loop forever.
-async function listAllImageResources(cloudName: string, auth: string): Promise<CloudinaryResource[]> {
+async function searchAllImageResources(cloudName: string, auth: string, folderPath: string): Promise<CloudinaryResource[]> {
   const all: CloudinaryResource[] = [];
   let cursor: string | undefined;
 
   for (let page = 0; page < 10; page++) {
-    const params = new URLSearchParams({ max_results: '500' });
-    if (cursor) params.set('next_cursor', cursor);
+    const body: Record<string, unknown> = {
+      expression: `folder:"${folderPath}" OR folder:"${folderPath}/*"`,
+      max_results: 500,
+    };
+    if (cursor) body.next_cursor = cursor;
 
-    const res = await fetch(`${CLOUDINARY_API}/${cloudName}/resources/image?${params}`, {
-      headers: { Authorization: `Basic ${auth}` },
+    const res = await fetch(`${CLOUDINARY_API}/${cloudName}/resources/search`, {
+      method: 'POST',
+      headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
     });
     if (!res.ok) {
-      const body = await res.text();
-      throw new Error(`Cloudinary resources API error ${res.status}: ${body}`);
+      const errBody = await res.text();
+      throw new Error(`Cloudinary search API error ${res.status}: ${errBody}`);
     }
     const json = await res.json();
     all.push(...((json.resources ?? []) as CloudinaryResource[]));
@@ -184,7 +176,7 @@ async function listAllImageResources(cloudName: string, auth: string): Promise<C
   return all;
 }
 
-// Cross-check counterpart to listAllImageResources — capped at 10 pages
+// Cross-check counterpart to searchAllImageResources — capped at 10 pages
 // (5,000 images) per folder as the same sanity limit.
 async function listResourcesByAssetFolder(cloudName: string, auth: string, assetFolder: string): Promise<CloudinaryImage[]> {
   const all: CloudinaryImage[] = [];
@@ -216,11 +208,10 @@ async function listResourcesByAssetFolder(cloudName: string, auth: string, asset
  * "marketing/images") separately — never merged — for the planner's image
  * picker. Folder names come from the union of listChildFolders (Cloudinary's
  * dedicated folders index, so a folder still shows up even with zero images
- * in it yet), whatever asset_folder values actually appear in the broad
- * account-wide resource listing, and CLOUDINARY_EXTRA_FOLDERS (folders known
- * to appear in neither of those two — see the comment above that constant).
- * Each folder's images are then the union of the account-wide listing and a
- * direct by_asset_folder cross-check — see the comment above
+ * in it yet) and whatever asset_folder values actually appear in the Search
+ * API results (see the comment above GALLERY_ROOT for why that's the primary
+ * source now). Each folder's images are then the union of those search
+ * results and a direct by_asset_folder cross-check — see the comment above
  * listResourcesByAssetFolder for why neither source is trusted alone. Images
  * uploaded directly into the root itself (asset_folder === GALLERY_ROOT, no
  * subfolder) surface as a "General" bucket. */
@@ -230,30 +221,8 @@ export async function listCloudinaryImagesByFolder(): Promise<CloudinaryFolderIm
 
   const [childNames, allResources] = await Promise.all([
     listChildFolders(cloudName, auth, GALLERY_ROOT),
-    listAllImageResources(cloudName, auth),
+    searchAllImageResources(cloudName, auth, GALLERY_ROOT),
   ]);
-
-  // TEMP DIAGNOSTIC — the user doesn't want a manual per-folder registration
-  // step (env var or DB) every time this happens again; they want the
-  // refresh button itself to reliably discover new folders. Both bulk
-  // discovery sources (listChildFolders, account-wide /resources/image) are
-  // confirmed unreliable for brand new folders. Checking whether this
-  // account has access to Cloudinary's Search API (/resources/search) —
-  // a different, more consistent query engine — as a possible real fix
-  // instead of a static allowlist. Remove once root-caused.
-  try {
-    const searchRes = await fetch(`${CLOUDINARY_API}/${cloudName}/resources/search`, {
-      method: 'POST',
-      headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ expression: `folder:"${GALLERY_ROOT}/*"`, max_results: 100, fields: ['asset_folder'] }),
-    });
-    const searchJson = await searchRes.json().catch(() => ({}));
-    console.error(`[cloudinary debug] search API status=${searchRes.status} total_count=${searchJson.total_count} distinct asset_folders=${JSON.stringify(
-      Array.from(new Set((searchJson.resources ?? []).map((r: { asset_folder?: string }) => r.asset_folder).filter(Boolean)))
-    )}`);
-  } catch (err) {
-    console.error(`[cloudinary debug] search API probe threw: ${err instanceof Error ? err.message : err}`);
-  }
 
   const rootPrefix = `${GALLERY_ROOT}/`;
   const byFolder = new Map<string, CloudinaryImage[]>();
@@ -270,7 +239,7 @@ export async function listCloudinaryImagesByFolder(): Promise<CloudinaryFolderIm
     }
   }
 
-  const folderNames = Array.from(new Set([...childNames, ...byFolder.keys(), ...EXTRA_FOLDERS]));
+  const folderNames = Array.from(new Set([...childNames, ...byFolder.keys()]));
 
   function mergeUnique(existing: CloudinaryImage[], extra: CloudinaryImage[]): CloudinaryImage[] {
     const seen = new Set(existing.map(img => img.id));
