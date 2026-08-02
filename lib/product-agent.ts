@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { loadHistory, saveMessage, clearHistory as clearDb } from '@/lib/chat-history';
 import { readFile, listDirectory, searchCode } from '@/lib/github-dev';
+import { screenshotPage } from '@/lib/browser';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BOT_NAME = 'angeles';
@@ -10,8 +11,10 @@ const BOT_NAME = 'angeles';
 // hard maxDuration, which SIGKILLs mid-await (skipping every catch) and
 // leaves that tool_use without a tool_result — permanently corrupting this
 // chat's history, since Claude's API then rejects every future message
-// referencing it.
-const TOOL_TIMEOUT_MS = 45_000;
+// referencing it. Higher than Pepe/Santi's since browse_page launches a
+// headless browser — a cold start plus login plus page render easily takes
+// longer than a plain API call.
+const TOOL_TIMEOUT_MS = 90_000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -57,6 +60,8 @@ On request, you can produce: PRDs, feature specifications, user stories, user fl
 ## THE ACTUAL PRODUCT
 You're advising on \`grupoyakgu/marketing\` — this exact Next.js 14 (App Router) app, deployed on Vercel. It's a marketing agent: Pepe (a Telegram bot) posts to LinkedIn/Facebook/Instagram and drafts weekly content plans; Santi (another Telegram bot, the CTO) implements code changes for it. You share this group chat with both of them but are neither — Pepe executes marketing actions, Santi writes code, you advise on product/UX strategy for all of it. You have read-only access to the actual codebase (\`read_file\`, \`list_directory\`, \`search_code\`) — use it to ground recommendations in what's actually built rather than guessing, e.g. before proposing a new dashboard page, check whether something close to it already exists. You cannot write code or open pull requests yourself — if a recommendation should be implemented, say so and let the user ask Santi to build it.
 
+You can also actually look at the live dashboard with \`browse_page\` — it screenshots a real page as it renders right now, logged in as your own dedicated read-only account, so you can judge real layout, spacing, and hierarchy instead of guessing from markup. Use it whenever a UX critique or a "does this screen work well" question is about something that actually exists — don't rely on \`read_file\` alone to imagine what a page looks like when you can just look at it.
+
 Anyone in this group can address you, not just one specific person — you're a shared resource for product discussions, not gated to an owner the way Santi is (Santi can merge code changes on request, which is why he's restricted). Mentioning Pepe or Santi by name in your own reply doesn't ping them — the user has to address them directly for that.
 
 Speak English unless addressed in another language. No filler, no over-explaining, no emoji.`;
@@ -98,6 +103,18 @@ const tools: Anthropic.Tool[] = [
       required: ['query'],
     },
   },
+  {
+    name: 'browse_page',
+    description: 'Takes a screenshot of a live dashboard page exactly as it renders, logged in as a dedicated read-only account, so you can judge actual layout, hierarchy, and spacing instead of just reading source code. Use this for real UX review of an existing screen.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        path: { type: 'string', description: 'Path to view, e.g. "/planner" or "/settings" — no domain.' },
+        full_page: { type: 'boolean', description: 'Capture the full scrollable page instead of just the visible viewport. Defaults to false.' },
+      },
+      required: ['path'],
+    },
+  },
 ];
 
 export async function clearHistory(chatId: number): Promise<void> {
@@ -130,7 +147,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
 
       for (const block of response.content) {
         if (block.type !== 'tool_use') continue;
-        let resultContent = '';
+        let resultContent: Anthropic.ToolResultBlockParam['content'] = '';
 
         const toolStartedAt = Date.now();
         console.log(`[product-agent] tool start: ${block.name}`, JSON.stringify(block.input).slice(0, 500));
@@ -158,6 +175,15 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
               resultContent = matches.length === 0
                 ? `No matches for "${input.query}".`
                 : matches.map(m => `${m.path}\n${m.snippet}`).join('\n\n');
+            }
+
+            if (block.name === 'browse_page') {
+              const input = block.input as { path: string; full_page?: boolean };
+              const screenshot = await screenshotPage(input.path, input.full_page ?? false);
+              resultContent = [
+                { type: 'text', text: `Screenshot of ${input.path}:` },
+                { type: 'image', source: { type: 'base64', media_type: 'image/png', data: screenshot.toString('base64') } },
+              ];
             }
           })(), TOOL_TIMEOUT_MS, block.name);
         } catch (err) {
