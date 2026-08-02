@@ -8,6 +8,16 @@ const nextConfig = {
   // Next 15.
   experimental: {
     serverComponentsExternalPackages: ['@sparticuz/chromium', 'puppeteer-core'],
+    // serverComponentsExternalPackages alone isn't enough: Next's file
+    // tracer only bundles what it can statically see a route importing, and
+    // @sparticuz/chromium extracts its actual Chromium binary + shared
+    // libraries (e.g. libnss3.so) from a brotli archive at runtime — a
+    // reference the tracer has no way to detect. Without force-including
+    // the whole package here, those files are silently missing from the
+    // deployed function and Chromium fails to launch.
+    outputFileTracingIncludes: {
+      'app/api/telegram-angeles/route.ts': ['./node_modules/@sparticuz/chromium/**'],
+    },
   },
 };
 export default nextConfig;
