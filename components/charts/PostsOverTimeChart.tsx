@@ -7,6 +7,11 @@ export interface PostsByDate {
   count: number;
 }
 
+function formatDate(value: string): string {
+  const d = new Date(value);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 export function PostsOverTimeChart({ data }: { data: PostsByDate[] }) {
   if (data.length === 0) {
     return (
@@ -20,9 +25,18 @@ export function PostsOverTimeChart({ data }: { data: PostsByDate[] }) {
     <ResponsiveContainer width="100%" height={260}>
       <BarChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" className="stroke-neutral-100 dark:stroke-neutral-800" />
-        <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="currentColor" className="text-neutral-400" />
+        <XAxis
+          dataKey="date"
+          tick={{ fontSize: 12 }}
+          stroke="currentColor"
+          className="text-neutral-400"
+          tickFormatter={formatDate}
+        />
         <YAxis allowDecimals={false} tick={{ fontSize: 12 }} stroke="currentColor" className="text-neutral-400" />
-        <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e5e5e5', fontSize: 13 }} />
+        <Tooltip
+          contentStyle={{ borderRadius: 12, border: '1px solid #e5e5e5', fontSize: 13 }}
+          labelFormatter={formatDate}
+        />
         <Bar dataKey="count" name="Posts published" fill="#6366f1" radius={[6, 6, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
