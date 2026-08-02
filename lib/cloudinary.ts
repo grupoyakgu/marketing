@@ -113,6 +113,18 @@ export async function listCloudinaryImages(): Promise<CloudinaryImage[]> {
 
 const GALLERY_ROOT = process.env.CLOUDINARY_GALLERY_ROOT ?? 'marketing/images';
 
+// Some folders never surface in either of Cloudinary's bulk indexes (neither
+// listChildFolders nor the account-wide resources listing mentions them) even
+// though their images are correctly tagged and a targeted by_asset_folder
+// query for that exact name finds them fine — confirmed via production logs
+// for both a "Food" folder previously and a "Restaurants" folder since. There
+// is no bulk API to enumerate a folder name neither index will mention, so
+// folders known to hit this need to be named here once to be included.
+const EXTRA_FOLDERS = (process.env.CLOUDINARY_EXTRA_FOLDERS ?? '')
+  .split(',')
+  .map(f => f.trim())
+  .filter(Boolean);
+
 async function listChildFolders(cloudName: string, auth: string, path: string): Promise<string[]> {
   const encodedPath = path.split('/').map(encodeURIComponent).join('/');
   const names: string[] = [];
@@ -204,13 +216,14 @@ async function listResourcesByAssetFolder(cloudName: string, auth: string, asset
  * "marketing/images") separately — never merged — for the planner's image
  * picker. Folder names come from the union of listChildFolders (Cloudinary's
  * dedicated folders index, so a folder still shows up even with zero images
- * in it yet) and whatever asset_folder values actually appear in the broad
- * account-wide resource listing. Each folder's images are then the union of
- * that same account-wide listing and a direct by_asset_folder cross-check —
- * see the comment above listResourcesByAssetFolder for why neither source is
- * trusted alone. Images uploaded directly into the root itself
- * (asset_folder === GALLERY_ROOT, no subfolder) surface as a "General"
- * bucket. */
+ * in it yet), whatever asset_folder values actually appear in the broad
+ * account-wide resource listing, and CLOUDINARY_EXTRA_FOLDERS (folders known
+ * to appear in neither of those two — see the comment above that constant).
+ * Each folder's images are then the union of the account-wide listing and a
+ * direct by_asset_folder cross-check — see the comment above
+ * listResourcesByAssetFolder for why neither source is trusted alone. Images
+ * uploaded directly into the root itself (asset_folder === GALLERY_ROOT, no
+ * subfolder) surface as a "General" bucket. */
 export async function listCloudinaryImagesByFolder(): Promise<CloudinaryFolderImages[]> {
   const { cloudName, apiKey, apiSecret } = getCredentials();
   const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
@@ -219,25 +232,6 @@ export async function listCloudinaryImagesByFolder(): Promise<CloudinaryFolderIm
     listChildFolders(cloudName, auth, GALLERY_ROOT),
     listAllImageResources(cloudName, auth),
   ]);
-
-  // TEMP DIAGNOSTIC — a "Restaurants" folder that the user confirms already
-  // has images in it still isn't appearing anywhere: not in listChildFolders,
-  // not as any asset_folder value in the account-wide resource listing, even
-  // after a 15min wait (rules out simple index propagation lag). Logging the
-  // full distinct set of asset_folder values plus a direct by_asset_folder
-  // probe of the exact expected path to see whether the images' asset_folder
-  // metadata actually matches what the folder browser displays. Remove once
-  // root-caused.
-  console.error(`[cloudinary debug] listChildFolders(${GALLERY_ROOT})=${JSON.stringify(childNames)}`);
-  console.error(`[cloudinary debug] all distinct asset_folder values=${JSON.stringify(
-    Array.from(new Set(allResources.map(r => r.asset_folder).filter(Boolean)))
-  )}`);
-  try {
-    const probe = await listResourcesByAssetFolder(cloudName, auth, `${GALLERY_ROOT}/Restaurants`);
-    console.error(`[cloudinary debug] by_asset_folder("${GALLERY_ROOT}/Restaurants") found ${probe.length} image(s): ${JSON.stringify(probe.map(p => p.id))}`);
-  } catch (err) {
-    console.error(`[cloudinary debug] by_asset_folder("${GALLERY_ROOT}/Restaurants") probe threw: ${err instanceof Error ? err.message : err}`);
-  }
 
   const rootPrefix = `${GALLERY_ROOT}/`;
   const byFolder = new Map<string, CloudinaryImage[]>();
@@ -254,7 +248,7 @@ export async function listCloudinaryImagesByFolder(): Promise<CloudinaryFolderIm
     }
   }
 
-  const folderNames = Array.from(new Set([...childNames, ...byFolder.keys()]));
+  const folderNames = Array.from(new Set([...childNames, ...byFolder.keys(), ...EXTRA_FOLDERS]));
 
   function mergeUnique(existing: CloudinaryImage[], extra: CloudinaryImage[]): CloudinaryImage[] {
     const seen = new Set(existing.map(img => img.id));

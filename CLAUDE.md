@@ -33,6 +33,7 @@
 - CLOUDINARY_API_KEY
 - CLOUDINARY_API_SECRET
 - CLOUDINARY_FOLDER         # folder containing marketing images
+- CLOUDINARY_EXTRA_FOLDERS  # comma-separated project folder names to force into the picker when Cloudinary's bulk indexes don't mention them (optional)
 - INSTAGRAM_PAGE_ACCESS_TOKEN
 - INSTAGRAM_BUSINESS_ACCOUNT_ID
 - FACEBOOK_PAGE_ID
