@@ -39,6 +39,7 @@ export function PostEditor({
   const [platform, setPlatform] = useState<'linkedin' | 'instagram' | 'facebook'>('linkedin');
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [folders, setFolders] = useState<CloudinaryFolderImages[] | null>(null);
+  const [reloadingFolders, setReloadingFolders] = useState(false);
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
   const [folderPage, setFolderPage] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
@@ -64,6 +65,19 @@ export function PostEditor({
       .then(body => setFolders(body.folders ?? []))
       .catch(() => setFolders([]));
   }, [post, editable, folders]);
+
+  async function reloadFolders() {
+    setReloadingFolders(true);
+    try {
+      const res = await fetch('/api/dashboard/images');
+      const body = await res.json();
+      setFolders(body.folders ?? []);
+    } catch {
+      setFolders([]);
+    } finally {
+      setReloadingFolders(false);
+    }
+  }
 
   function toggleFolder(folder: string) {
     setExpandedFolders(prev => ({ ...prev, [folder]: !prev[folder] }));
@@ -267,6 +281,15 @@ export function PostEditor({
                 <ImageIcon className="h-3.5 w-3.5" />
                 Image{imageUrls.length > 1 ? `s (${imageUrls.length} selected)` : ''}
                 {savingImage && <span className="font-normal text-neutral-400">Saving…</span>}
+                <button
+                  type="button"
+                  onClick={reloadFolders}
+                  disabled={reloadingFolders}
+                  title="Reload Cloudinary folders"
+                  className="ml-auto flex items-center gap-1 text-neutral-400 hover:text-neutral-600 disabled:opacity-60 dark:hover:text-neutral-300"
+                >
+                  <RotateCw className={cn('h-3 w-3', reloadingFolders && 'animate-spin')} />
+                </button>
               </label>
               <p className="mb-1.5 text-xs text-neutral-400">Click an image to select it; click again to remove it. Select more than one for a multi-image/carousel post.</p>
               {folders === null ? (
