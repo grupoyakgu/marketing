@@ -233,6 +233,28 @@ export async function listCloudinaryImagesByFolder(): Promise<CloudinaryFolderIm
     listAllImageResources(cloudName, auth),
   ]);
 
+  // TEMP DIAGNOSTIC — the user doesn't want a manual per-folder registration
+  // step (env var or DB) every time this happens again; they want the
+  // refresh button itself to reliably discover new folders. Both bulk
+  // discovery sources (listChildFolders, account-wide /resources/image) are
+  // confirmed unreliable for brand new folders. Checking whether this
+  // account has access to Cloudinary's Search API (/resources/search) —
+  // a different, more consistent query engine — as a possible real fix
+  // instead of a static allowlist. Remove once root-caused.
+  try {
+    const searchRes = await fetch(`${CLOUDINARY_API}/${cloudName}/resources/search`, {
+      method: 'POST',
+      headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expression: `folder:"${GALLERY_ROOT}/*"`, max_results: 100, fields: ['asset_folder'] }),
+    });
+    const searchJson = await searchRes.json().catch(() => ({}));
+    console.error(`[cloudinary debug] search API status=${searchRes.status} total_count=${searchJson.total_count} distinct asset_folders=${JSON.stringify(
+      Array.from(new Set((searchJson.resources ?? []).map((r: { asset_folder?: string }) => r.asset_folder).filter(Boolean)))
+    )}`);
+  } catch (err) {
+    console.error(`[cloudinary debug] search API probe threw: ${err instanceof Error ? err.message : err}`);
+  }
+
   const rootPrefix = `${GALLERY_ROOT}/`;
   const byFolder = new Map<string, CloudinaryImage[]>();
   const rootImages: CloudinaryImage[] = [];
