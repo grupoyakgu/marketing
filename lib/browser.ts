@@ -1,5 +1,18 @@
-import chromium from '@sparticuz/chromium';
+import chromium from '@sparticuz/chromium-min';
 import puppeteer from 'puppeteer-core';
+
+// @sparticuz/chromium (the full package) bundles its Chromium binary +
+// shared libraries inside node_modules, extracted at runtime — but Next's
+// file-tracing has no static reference to that extraction to know it needs
+// shipping those files, so they were silently missing from the deployed
+// function ("error while loading shared libraries: libnss3.so..."), even
+// after forcing the whole package in via outputFileTracingIncludes. The
+// "-min" variant sidesteps this entirely: it ships no binary of its own and
+// instead downloads a complete, self-contained, already-correct browser
+// build from Sparticuz's GitHub releases at cold start. Slower on a cold
+// Lambda (one download), but actually reliable here. Version must match the
+// pinned @sparticuz/chromium-min version in package.json.
+const CHROMIUM_PACK_URL = 'https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar';
 
 function getBaseUrl(): string {
   return process.env.NEXT_PUBLIC_APP_URL ?? 'https://marketing-grupo-yakgu.vercel.app';
@@ -34,9 +47,9 @@ async function getSessionCookie(): Promise<string> {
 
 /** Screenshots a live dashboard page as Angeles's read-only account, so she
  * can judge actual rendered layout/hierarchy/spacing instead of just
- * reading source. @sparticuz/chromium is a Chromium build specifically
- * trimmed to fit Vercel/Lambda's serverless size and memory constraints —
- * a stock Puppeteer/Playwright download is far too large to bundle here. */
+ * reading source. A stock Puppeteer/Playwright Chromium download is far too
+ * large to run in a Vercel serverless function, hence the trimmed build
+ * fetched via CHROMIUM_PACK_URL above. */
 export async function screenshotPage(path: string, fullPage: boolean): Promise<Buffer> {
   const baseUrl = getBaseUrl();
   const sessionCookie = await getSessionCookie();
@@ -45,7 +58,7 @@ export async function screenshotPage(path: string, fullPage: boolean): Promise<B
   const browser = await puppeteer.launch({
     args: chromium.args,
     defaultViewport: { width: 1440, height: 900 },
-    executablePath: await chromium.executablePath(),
+    executablePath: await chromium.executablePath(CHROMIUM_PACK_URL),
     headless: true,
   });
 
