@@ -88,6 +88,8 @@ async function loadOverview() {
     { likes: 0, comments: 0, shares: 0, impressions: 0, reach: 0 }
   );
 
+  const hasEngagementData = engagements.length > 0;
+
   return {
     postCounts,
     postsByDate,
@@ -95,6 +97,7 @@ async function loadOverview() {
     followerHistory,
     growth,
     totals,
+    hasEngagementData,
     totalEngagement: totals.likes + totals.comments + totals.shares,
     totalFollowers: accountStats.reduce((sum, s) => sum + s.followers, 0),
     refreshStatus,
@@ -121,6 +124,7 @@ export default async function OverviewPage() {
     followerHistory,
     growth,
     totals,
+    hasEngagementData,
     totalEngagement,
     totalFollowers,
     refreshStatus,
@@ -136,7 +140,7 @@ export default async function OverviewPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-neutral-900 dark:text-white">Overview</h1>
           <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-            What Pepe has been up to across LinkedIn, Facebook, and Instagram.
+            Performance overview across LinkedIn, Facebook, and Instagram.
           </p>
         </div>
         <Link
@@ -153,21 +157,38 @@ export default async function OverviewPage() {
         <KpiCard label="Scheduled" value={postCounts.scheduled} icon={Clock} />
         <KpiCard label="Published" value={postCounts.published} icon={CheckCircle2} />
         <KpiCard label="Failed" value={postCounts.failed} icon={XCircle} />
-        <KpiCard label="Pending" value={postCounts.pending} icon={Hourglass} />
+        <KpiCard
+          label="Pending"
+          value={postCounts.pending}
+          icon={Hourglass}
+          tooltip="Posts drafted in the Planner that haven't been scheduled yet."
+          href="/planner"
+        />
       </section>
 
-      <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+      <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-7">
         <KpiCard
           label="Followers"
           value={totalFollowers}
           icon={Users}
           deltaPct={followerGrowthPct ?? undefined}
         />
-        <KpiCard label="Total Engagement" value={totalEngagement} icon={Heart} />
-        <KpiCard label="Reach" value={totals.reach} icon={Eye} />
-        <KpiCard label="Impressions" value={totals.impressions} icon={TrendingUp} />
+        <KpiCard label="Engagement" value={totalEngagement} icon={Heart} />
+        <KpiCard
+          label="Reach"
+          value={hasEngagementData ? totals.reach : '—'}
+          icon={Eye}
+          tooltip={hasEngagementData ? undefined : 'Data not available for this period. Try refreshing in Settings.'}
+        />
+        <KpiCard
+          label="Impressions"
+          value={hasEngagementData ? totals.impressions : '—'}
+          icon={TrendingUp}
+          tooltip={hasEngagementData ? undefined : 'Data not available for this period. Try refreshing in Settings.'}
+        />
         <KpiCard label="Likes" value={totals.likes} icon={ThumbsUp} />
         <KpiCard label="Comments" value={totals.comments} icon={MessageCircle} />
+        <KpiCard label="Shares" value={totals.shares} icon={Share2} />
       </section>
 
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -186,11 +207,6 @@ export default async function OverviewPage() {
           <h2 className="mb-4 text-sm font-semibold text-neutral-900 dark:text-white">Followers by platform</h2>
           <PlatformComparisonChart data={accountStats} />
         </Card>
-      </section>
-
-      <section className="flex items-center gap-2 text-xs text-neutral-400">
-        <Share2 className="h-3.5 w-3.5" />
-        Shares this week: {totals.shares.toLocaleString()}
       </section>
     </div>
   );

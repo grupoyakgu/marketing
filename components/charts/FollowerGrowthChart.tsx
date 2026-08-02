@@ -14,6 +14,11 @@ const PLATFORM_COLOR: Record<string, string> = {
   linkedin: '#0A66C2',
 };
 
+function formatDate(value: string): string {
+  const d = new Date(value);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 export function FollowerGrowthChart({ data }: { data: FollowerHistoryPoint[] }) {
   const dates = Array.from(new Set(data.map(d => d.date))).sort();
   const platforms = Array.from(new Set(data.map(d => d.platform)));
@@ -39,11 +44,18 @@ export function FollowerGrowthChart({ data }: { data: FollowerHistoryPoint[] }) 
     <ResponsiveContainer width="100%" height={260}>
       <LineChart data={rows} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" className="stroke-neutral-100 dark:stroke-neutral-800" />
-        <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="currentColor" className="text-neutral-400" />
+        <XAxis
+          dataKey="date"
+          tick={{ fontSize: 12 }}
+          stroke="currentColor"
+          className="text-neutral-400"
+          tickFormatter={formatDate}
+        />
         <YAxis tick={{ fontSize: 12 }} stroke="currentColor" className="text-neutral-400" />
         <Tooltip
           contentStyle={{ borderRadius: 12, border: '1px solid #e5e5e5', fontSize: 13 }}
           labelStyle={{ fontWeight: 600 }}
+          labelFormatter={formatDate}
         />
         <Legend wrapperStyle={{ fontSize: 12 }} />
         {platforms.map(platform => (
