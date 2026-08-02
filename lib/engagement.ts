@@ -45,8 +45,11 @@ export async function getFacebookPostEngagement(postId: string): Promise<PostEng
     return null;
   }
   const d = await res.json();
+  // DIAG: log whether the insights block is present and what it contains
+  console.log(`[diag][facebook] postId=${postId} insights=${JSON.stringify(d.insights ?? null)}`);
   const impressions = d.insights?.data?.find((m: Record<string, string>) => m.name === 'post_impressions')?.values?.[0]?.value ?? 0;
   const reach = d.insights?.data?.find((m: Record<string, string>) => m.name === 'post_reach')?.values?.[0]?.value ?? 0;
+  console.log(`[diag][facebook] postId=${postId} resolved impressions=${impressions} reach=${reach}`);
   return {
     platform: 'facebook',
     postId,
@@ -94,13 +97,19 @@ export async function getInstagramPostEngagement(mediaId: string): Promise<PostE
     const ins = await fetch(
       `${GRAPH_API}/${mediaId}/insights?metric=impressions,reach&access_token=${token}`
     );
+    // DIAG: log the raw status and body regardless of success/failure
+    const insText = await ins.text();
+    console.log(`[diag][instagram] mediaId=${mediaId} insights status=${ins.status} body=${insText}`);
     if (ins.ok) {
-      const insData = await ins.json();
+      const insData = JSON.parse(insText);
       impressions = insData.data?.find((m: Record<string, string>) => m.name === 'impressions')?.values?.[0]?.value ?? 0;
       reach = insData.data?.find((m: Record<string, string>) => m.name === 'reach')?.values?.[0]?.value ?? 0;
     }
-  } catch {}
+  } catch (err) {
+    console.error(`[diag][instagram] mediaId=${mediaId} insights fetch threw:`, err);
+  }
 
+  console.log(`[diag][instagram] mediaId=${mediaId} resolved impressions=${impressions} reach=${reach}`);
   return {
     platform: 'instagram',
     postId: mediaId,
@@ -150,14 +159,19 @@ export async function getLinkedInPostEngagement(postUrn: string): Promise<PostEn
     return null;
   }
   const d = await res.json();
+  // DIAG: log which top-level keys are present and the raw totalShareStatistics block
+  console.log(`[diag][linkedin] postUrn=${postUrn} responseKeys=${JSON.stringify(Object.keys(d))} totalShareStatistics=${JSON.stringify(d.totalShareStatistics ?? null)}`);
+  const impressions = d.totalShareStatistics?.impressionCount ?? 0;
+  const reach = d.totalShareStatistics?.uniqueImpressionsCount ?? 0;
+  console.log(`[diag][linkedin] postUrn=${postUrn} resolved impressions=${impressions} reach=${reach}`);
   return {
     platform: 'linkedin',
     postId: postUrn,
     likes: d.likesSummary?.totalLikes ?? 0,
     comments: d.commentsSummary?.totalFirstLevelComments ?? 0,
     shares: d.sharesSummary?.totalShares ?? 0,
-    impressions: d.totalShareStatistics?.impressionCount ?? 0,
-    reach: d.totalShareStatistics?.uniqueImpressionsCount ?? 0,
+    impressions,
+    reach,
   };
 }
 
