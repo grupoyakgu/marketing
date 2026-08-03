@@ -1,6 +1,10 @@
 import { supabase } from '@/lib/supabase';
 
-const GRAPH_API = 'https://graph.facebook.com/v19.0';
+// v19.0 was already past Meta's ~2-year support window by the time this was
+// last touched — bumped to the current stable version. Also matters for the
+// metric-name fixes below: several post-insights metrics were deprecated in
+// v22.0+ and only work on a current version.
+const GRAPH_API = 'https://graph.facebook.com/v26.0';
 // LinkedIn blocks the legacy unversioned /v2 API for these resources (see
 // social-comments.ts) — organization stats need the versioned /rest API with
 // a LinkedIn-Version header. networkSizes is also deprecated outright; its
@@ -35,21 +39,43 @@ export function computeEngagementRate(e: PostEngagement): number {
 
 // ─── Facebook ────────────────────────────────────────────────────────────────
 
+// Meta deprecated the post_impressions/post_reach Page-insights metrics for
+// organic posts effective June 15, 2026, with no per-post replacement — Page
+// Insights only exposes them aggregated at the Page level now. Production
+// logs confirmed every post now gets "(#100) The value must be a valid
+// insights metric" for that clause, and because it used to be requested in
+// the same combined `fields` string as likes/comments/shares, one dead
+// metric was failing the *entire* request — likes/comments/shares included.
+// Impressions/reach are fetched in a separate, best-effort call so losing
+// them doesn't take down the rest, but expect them to stay 0: there's
+// currently no Graph API metric that gives per-post reach/impressions for
+// organic Facebook posts.
 export async function getFacebookPostEngagement(postId: string): Promise<PostEngagement | null> {
   const token = process.env.INSTAGRAM_PAGE_ACCESS_TOKEN;
   if (!token) return null;
-  const fields = 'likes.summary(true),comments.summary(true),shares,insights.metric(post_impressions,post_reach)';
+  const fields = 'likes.summary(true),comments.summary(true),shares';
   const res = await fetch(`${GRAPH_API}/${postId}?fields=${fields}&access_token=${token}`);
   if (!res.ok) {
     console.error(`Facebook getPostEngagement failed for ${postId}: ${res.status} ${await res.text()}`);
     return null;
   }
   const d = await res.json();
-  // DIAG: log whether the insights block is present and what it contains
-  console.log(`[diag][facebook] postId=${postId} insights=${JSON.stringify(d.insights ?? null)}`);
-  const impressions = d.insights?.data?.find((m: Record<string, string>) => m.name === 'post_impressions')?.values?.[0]?.value ?? 0;
-  const reach = d.insights?.data?.find((m: Record<string, string>) => m.name === 'post_reach')?.values?.[0]?.value ?? 0;
-  console.log(`[diag][facebook] postId=${postId} resolved impressions=${impressions} reach=${reach}`);
+
+  let impressions = 0;
+  let reach = 0;
+  try {
+    const ins = await fetch(`${GRAPH_API}/${postId}/insights?metric=post_impressions,post_reach&access_token=${token}`);
+    if (ins.ok) {
+      const insData = await ins.json();
+      impressions = insData.data?.find((m: Record<string, string>) => m.name === 'post_impressions')?.values?.[0]?.value ?? 0;
+      reach = insData.data?.find((m: Record<string, string>) => m.name === 'post_reach')?.values?.[0]?.value ?? 0;
+    } else {
+      console.error(`Facebook getPostEngagement insights failed for ${postId}: ${ins.status} ${await ins.text()}`);
+    }
+  } catch (err) {
+    console.error(`Facebook getPostEngagement insights threw for ${postId}:`, err);
+  }
+
   return {
     platform: 'facebook',
     postId,
@@ -76,6 +102,13 @@ export async function getFacebookAccountStats(): Promise<AccountStats | null> {
 
 // ─── Instagram ───────────────────────────────────────────────────────────────
 
+// The `impressions` media-insights metric was deprecated in Graph API v22.0
+// (April 2025) in favor of a single unified `views` metric — production logs
+// confirmed every call here was getting "(#10) Application does not have
+// permission for this action" on the old metric name. `views` is the
+// current metric that plays the same role (it's what impressions folded
+// into), so it's mapped onto this same `impressions` field rather than
+// adding a new one. `reach` is unaffected and still valid.
 export async function getInstagramPostEngagement(mediaId: string): Promise<PostEngagement | null> {
   const token = process.env.INSTAGRAM_PAGE_ACCESS_TOKEN;
   const igId = process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID;
@@ -95,21 +128,19 @@ export async function getInstagramPostEngagement(mediaId: string): Promise<PostE
   let reach = 0;
   try {
     const ins = await fetch(
-      `${GRAPH_API}/${mediaId}/insights?metric=impressions,reach&access_token=${token}`
+      `${GRAPH_API}/${mediaId}/insights?metric=views,reach&access_token=${token}`
     );
-    // DIAG: log the raw status and body regardless of success/failure
-    const insText = await ins.text();
-    console.log(`[diag][instagram] mediaId=${mediaId} insights status=${ins.status} body=${insText}`);
     if (ins.ok) {
-      const insData = JSON.parse(insText);
-      impressions = insData.data?.find((m: Record<string, string>) => m.name === 'impressions')?.values?.[0]?.value ?? 0;
+      const insData = await ins.json();
+      impressions = insData.data?.find((m: Record<string, string>) => m.name === 'views')?.values?.[0]?.value ?? 0;
       reach = insData.data?.find((m: Record<string, string>) => m.name === 'reach')?.values?.[0]?.value ?? 0;
+    } else {
+      console.error(`Instagram getPostEngagement insights failed for ${mediaId}: ${ins.status} ${await ins.text()}`);
     }
   } catch (err) {
-    console.error(`[diag][instagram] mediaId=${mediaId} insights fetch threw:`, err);
+    console.error(`Instagram getPostEngagement insights threw for ${mediaId}:`, err);
   }
 
-  console.log(`[diag][instagram] mediaId=${mediaId} resolved impressions=${impressions} reach=${reach}`);
   return {
     platform: 'instagram',
     postId: mediaId,
@@ -136,10 +167,21 @@ export async function getInstagramAccountStats(): Promise<AccountStats | null> {
 
 // ─── LinkedIn ─────────────────────────────────────────────────────────────────
 
-// Reads socialMetadata (impressions/likes/comments/shares) — this needs the
-// Community Management API's read scope, same as getLinkedInAccountStats
-// below. Production logs confirmed the old posting-scoped token gets a 403
-// here (partnerApiSocialMetadata.GET) even though it can post/reply fine.
+function linkedInOrgUrn(): string | null {
+  const authorId = process.env.LINKEDIN_AUTHOR_ID_COMM;
+  if (!authorId) return null;
+  const orgId = authorId.replace('urn:li:organization:', '').replace('organization:', '');
+  return `urn:li:organization:${orgId}`;
+}
+
+// socialMetadata's response shape changed since this was first written —
+// production logs confirmed the real response only has reactionSummaries
+// (per-reaction-type counts, e.g. {"LIKE": {count: N}, ...}) and
+// commentSummary.count, not the old likesSummary/commentsSummary/
+// sharesSummary/totalShareStatistics fields this used to read (which
+// resolved everything to 0 via ?? fallbacks, silently). socialMetadata never
+// exposes a share count or impressions at all — those come from a separate
+// call below.
 export async function getLinkedInPostEngagement(postUrn: string): Promise<PostEngagement | null> {
   const token = process.env.LINKEDIN_ACCESS_TOKEN_COMM;
   if (!token) return null;
@@ -159,17 +201,49 @@ export async function getLinkedInPostEngagement(postUrn: string): Promise<PostEn
     return null;
   }
   const d = await res.json();
-  // DIAG: log which top-level keys are present and the raw totalShareStatistics block
-  console.log(`[diag][linkedin] postUrn=${postUrn} responseKeys=${JSON.stringify(Object.keys(d))} totalShareStatistics=${JSON.stringify(d.totalShareStatistics ?? null)}`);
-  const impressions = d.totalShareStatistics?.impressionCount ?? 0;
-  const reach = d.totalShareStatistics?.uniqueImpressionsCount ?? 0;
-  console.log(`[diag][linkedin] postUrn=${postUrn} resolved impressions=${impressions} reach=${reach}`);
+  const reactionSummaries = d.reactionSummaries as Record<string, { count?: number }> | undefined;
+  const likes = reactionSummaries
+    ? Object.values(reactionSummaries).reduce((sum, r) => sum + (r.count ?? 0), 0)
+    : 0;
+  const comments = d.commentSummary?.count ?? 0;
+
+  // Best-effort — needs the org's rw_organization_admin analytics access on
+  // top of the read scope socialMetadata uses, which this token may not
+  // carry. Falls back to 0 rather than failing the whole post.
+  let impressions = 0;
+  let reach = 0;
+  const orgUrn = linkedInOrgUrn();
+  if (orgUrn) {
+    try {
+      const statsRes = await fetch(
+        `${LINKEDIN_REST_API}/organizationalEntityShareStatistics?q=organizationalEntity&organizationalEntity=${encodeURIComponent(orgUrn)}&shares[0]=${encoded}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'X-Restli-Protocol-Version': '2.0.0',
+            'LinkedIn-Version': LINKEDIN_API_VERSION,
+          },
+        }
+      );
+      if (statsRes.ok) {
+        const statsData = await statsRes.json();
+        const stats = statsData.elements?.[0]?.totalShareStatistics;
+        impressions = stats?.impressionCount ?? 0;
+        reach = stats?.uniqueImpressionsCount ?? 0;
+      } else {
+        console.error(`LinkedIn getPostEngagement share statistics failed for ${postUrn}: ${statsRes.status} ${await statsRes.text()}`);
+      }
+    } catch (err) {
+      console.error(`LinkedIn getPostEngagement share statistics threw for ${postUrn}:`, err);
+    }
+  }
+
   return {
     platform: 'linkedin',
     postId: postUrn,
-    likes: d.likesSummary?.totalLikes ?? 0,
-    comments: d.commentsSummary?.totalFirstLevelComments ?? 0,
-    shares: d.sharesSummary?.totalShares ?? 0,
+    likes,
+    comments,
+    shares: 0,
     impressions,
     reach,
   };
@@ -181,10 +255,8 @@ export async function getLinkedInPostEngagement(postUrn: string): Promise<PostEn
 // scopes and can't call this endpoint.
 export async function getLinkedInAccountStats(): Promise<AccountStats | null> {
   const token = process.env.LINKEDIN_ACCESS_TOKEN_COMM;
-  const authorId = process.env.LINKEDIN_AUTHOR_ID_COMM;
-  if (!token || !authorId) return null;
-  const orgId = authorId.replace('urn:li:organization:', '').replace('organization:', '');
-  const orgUrn = `urn:li:organization:${orgId}`;
+  const orgUrn = linkedInOrgUrn();
+  if (!token || !orgUrn) return null;
 
   // organizationalEntityFollowerStatistics only exposes demographic
   // breakdowns (byAssociationType/bySeniority/byIndustry/...), and every one
