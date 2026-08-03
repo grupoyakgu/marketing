@@ -141,13 +141,13 @@ async function listChildFolders(cloudName: string, auth: string, path: string): 
  * rather than a URL (unlike uploadVideoFromUrl above) so the Telegram file's
  * download URL, which embeds TELEGRAM_BOT_TOKEN, never has to be handed to a
  * third party; we already have the bytes in memory from downloadTelegramFile.
- * folderInput omitted (or "general", case-insensitive) uploads directly to
- * GALLERY_ROOT — the same root bucket the dashboard gallery labels "General"
- * in listCloudinaryImagesByFolder below. Otherwise matched case-insensitively
- * against existing subfolders (so "restaurants" lands in "Restaurants"
- * instead of creating a near-duplicate with different casing) before falling
- * back to creating a new subfolder with the given name — Dynamic Folders
- * auto-create on first upload into them. */
+ * folderInput omitted defaults to "general" — matched case-insensitively
+ * against existing subfolders first (so it lands in the account's real
+ * "General" folder rather than creating a lowercase near-duplicate, and same
+ * for any other name, e.g. "restaurants" → "Restaurants"), falling back to
+ * creating a new subfolder with the given name if nothing matches — Dynamic
+ * Folders auto-create on first upload into them. Always a real subfolder
+ * under GALLERY_ROOT, never the bare root itself. */
 export async function uploadImageBuffer(
   data: ArrayBuffer,
   mimeType: string,
@@ -156,18 +156,15 @@ export async function uploadImageBuffer(
   const { cloudName, apiKey, apiSecret } = getCredentials();
   const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
 
-  let folderName = folderInput?.trim();
-  if (folderName && folderName.toLowerCase() === 'general') folderName = undefined;
-  if (folderName) {
-    try {
-      const existing = await listChildFolders(cloudName, auth, GALLERY_ROOT);
-      const match = existing.find(name => name.toLowerCase() === folderName!.toLowerCase());
-      if (match) folderName = match;
-    } catch {
-      // Best-effort normalization — fall through with the user's given casing if this lookup fails.
-    }
+  let folderName = folderInput?.trim() || 'general';
+  try {
+    const existing = await listChildFolders(cloudName, auth, GALLERY_ROOT);
+    const match = existing.find(name => name.toLowerCase() === folderName.toLowerCase());
+    if (match) folderName = match;
+  } catch {
+    // Best-effort normalization — fall through with the given/default casing if this lookup fails.
   }
-  const assetFolder = folderName ? `${GALLERY_ROOT}/${folderName}` : GALLERY_ROOT;
+  const assetFolder = `${GALLERY_ROOT}/${folderName}`;
 
   const form = new FormData();
   form.append('file', new Blob([data], { type: mimeType }), 'upload');
@@ -183,7 +180,7 @@ export async function uploadImageBuffer(
     console.error(`Cloudinary uploadImageBuffer failed: ${res.status} ${JSON.stringify(json)}`);
     return { error: json.error?.message ?? `Cloudinary upload failed (${res.status}).` };
   }
-  return { url: json.secure_url, id: json.public_id, folder: folderName ?? 'General' };
+  return { url: json.secure_url, id: json.public_id, folder: folderName };
 }
 
 interface CloudinaryResource {
