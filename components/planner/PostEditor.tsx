@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, Check, Trash2, ImageIcon, ChevronRight, ChevronDown, ChevronLeft, FolderClosed, RotateCw } from 'lucide-react';
+import { X, Check, Trash2, ImageIcon, ChevronRight, ChevronDown, ChevronLeft, FolderClosed, RotateCw, Copy, CopyCheck } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { PlatformBadge } from '@/components/ui/PlatformBadge';
@@ -45,6 +45,7 @@ export function PostEditor({
   const [saving, setSaving] = useState(false);
   const [savingImage, setSavingImage] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [idCopied, setIdCopied] = useState(false);
 
   const editable = post ? post.status === 'draft' || post.status === 'approved' : false;
 
@@ -56,6 +57,7 @@ export function PostEditor({
     setPlatform(post.platform);
     setImageUrls(post.image_urls?.length ? post.image_urls : post.image_url ? [post.image_url] : []);
     setError(null);
+    setIdCopied(false);
   }, [post]);
 
   useEffect(() => {
@@ -85,6 +87,16 @@ export function PostEditor({
 
   function setPage(folder: string, page: number) {
     setFolderPage(prev => ({ ...prev, [folder]: page }));
+  }
+
+  // The internal post_id is what Pepe expects when asked to act on a specific
+  // post (e.g. "delete post <id>") — surfacing it here means the user can
+  // hand it to him directly instead of Pepe having to search for it.
+  async function copyPostId() {
+    if (!post?.id) return;
+    await navigator.clipboard.writeText(post.id);
+    setIdCopied(true);
+    setTimeout(() => setIdCopied(false), 1500);
   }
 
   if (!post) return null;
@@ -273,6 +285,15 @@ export function PostEditor({
                 </option>
               ))}
             </select>
+            <button
+              type="button"
+              onClick={copyPostId}
+              title="Copy post ID — hand this to Pepe to look up or act on this post directly"
+              className="mt-1.5 flex items-center gap-1 font-mono text-xs text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+            >
+              {idCopied ? <CopyCheck className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              {post.id}
+            </button>
           </div>
 
           {editable && (
