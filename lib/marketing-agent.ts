@@ -3,6 +3,7 @@ import { postToLinkedIn } from '@/lib/linkedin-poster';
 import { postToFacebook, postToInstagram, postInstagramStory, postFacebookStory } from '@/lib/meta-poster';
 import { loadHistory, saveMessage, clearHistory as clearDb } from '@/lib/chat-history';
 import { listCloudinaryImages } from '@/lib/cloudinary';
+import { findUploadsByName } from '@/lib/cloudinary-uploads';
 import {
   replyToLinkedInComment,
   replyToFacebookComment,
@@ -166,6 +167,8 @@ You have access to these proof points. **Spread them strategically across many p
 
 **Every post should have an image.** Call browse_drive_images ONCE at the start to see all available images. When calling save_marketing_plan, set each post's image_urls to the exact URL of the specific image you picked for it, as a single-item array — pick a different, relevant image per post rather than reusing the same one. Only put more than one URL in image_urls if the user specifically asked for a carousel/multi-image post. image_note is just a human-readable label for what the image shows; image_urls is the real, clickable choice and is what the dashboard shows the user as "the image Pepe selected," so always set it.
 
+If the user instead refers to an image by a custom name they gave it earlier (e.g. "use the sunset image I uploaded") rather than picking from what browse_drive_images shows, call find_named_image instead — that's how images uploaded through your Telegram "upload" flow are found, since browse_drive_images only surfaces Cloudinary filenames, not the names users gave them.
+
 ---
 
 ## POSTING SCHEDULE — 5 POSTS PER BLOCK (SPAIN LOCAL TIME)
@@ -214,6 +217,7 @@ For "which post got the most likes", "top 5 posts by impressions", "what's our b
 - post_to_linkedin, post_to_facebook, post_to_instagram — publish posts
 - post_instagram_story, post_facebook_story — publish to Stories (24h, ephemeral, image only, no caption)
 - browse_drive_images — list Cloudinary images (call ONCE per plan)
+- find_named_image — look up an image by the custom name the user gave it after uploading it to you
 - save_marketing_plan, get_weekly_plan, get_plan_by_date, approve_posts, reject_post, reschedule_post, retry_post, edit_post — plan management. get_plan_by_date looks up a specific date or range instead of a Monday-aligned week.
 - compare_posts — compare engagement between two named posts
 - get_top_posts — rank all published posts by likes/comments/shares/impressions/reach/engagement_rate
@@ -300,6 +304,18 @@ const tools: Anthropic.Tool[] = [
     name: 'browse_drive_images',
     description: 'Lists all available images from Cloudinary. Call ONCE per plan.',
     input_schema: { type: 'object' as const, properties: {}, required: [] },
+  },
+  {
+    name: 'find_named_image',
+    description:
+      'Looks up an image the user uploaded to Cloudinary through you and gave a custom name to (via the Telegram "upload" flow — you asked what to call it right after the upload, and they replied with a name). Use this whenever the user refers to an image by that name (e.g. "use the sunset image", "post the one I called poolside") instead of browse_drive_images, which only shows filenames, not custom names. Matches case-insensitively as a substring, so a partial name works. Returns each match\'s URL, folder, and when it was uploaded — if more than one matches, ask the user which one they mean rather than guessing.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        name: { type: 'string', description: 'The name (or part of it) the user gave the image.' },
+      },
+      required: ['name'],
+    },
   },
   {
     name: 'save_marketing_plan',
@@ -639,6 +655,19 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
               : `Found ${images.length} images:\n` + images.map(img => `- ${img.name} | URL: ${img.url}`).join('\n');
           } catch (err) {
             resultContent = `Failed to browse images: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        }
+
+        if (block.name === 'find_named_image') {
+          const input = block.input as { name: string };
+          try {
+            const matches = await findUploadsByName(input.name);
+            resultContent = matches.length === 0
+              ? `No named image matching "${input.name}" found.`
+              : `Found ${matches.length} match${matches.length === 1 ? '' : 'es'} for "${input.name}":\n` +
+                matches.map(m => `- "${m.name}" [${m.folder}] uploaded ${m.created_at} — URL: ${m.url}`).join('\n');
+          } catch (err) {
+            resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
           }
         }
 

@@ -3,6 +3,7 @@ import { TelegramClient } from '@/lib/telegram';
 import { postToLinkedIn } from '@/lib/linkedin-poster';
 import { enqueueLinkedInPost } from '@/lib/linkedin-queue';
 import { uploadImageBuffer } from '@/lib/cloudinary';
+import { recordUpload, getPendingUpload, nameUpload } from '@/lib/cloudinary-uploads';
 import { clearHistory, chat } from '@/lib/marketing-agent';
 import { trackDirectPost } from '@/lib/marketing-plan';
 import { claimTelegramUpdate } from '@/lib/telegram-dedup';
@@ -78,9 +79,25 @@ export async function POST(req: NextRequest) {
     const video = message?.video;
     const hasMedia = photo || video;
 
+    // A non-command text reply while an upload is still waiting on a name
+    // (see the "upload" branch below) is that name, not an ordinary chat
+    // message — intercepted here, before /start, /reset, or the agent loop
+    // ever see it. Slash commands are exempt (the `!text.startsWith('/')`
+    // guard) so they still work normally even with a naming prompt pending;
+    // getPendingUpload's own 10-minute window handles a reply that never
+    // comes.
+    if (text && !text.startsWith('/')) {
+      const pending = await getPendingUpload(chatId).catch(() => null);
+      if (pending) {
+        await nameUpload(pending.id, text);
+        await telegram.sendMessage(chatId, `✅ Got it — saved as "${text}". Ask me anytime to use it in a post.`);
+        return NextResponse.json({ ok: true });
+      }
+    }
+
     if (text === '/start' || text === '/help') {
       await telegram.sendMessage(chatId,
-        `👋 MARKETING AGENT\n\nJust talk to me about your marketing strategy — I'll help you plan content, campaigns, and messaging.\n\nCommands:\n/post linkedin <message> — post text to LinkedIn\nsend photo + caption "/post linkedin" — image post\nsend photo + caption "upload" (or "upload to <folder>") — save to the Cloudinary gallery, General folder by default\n/reset — clear conversation\n/help — show this menu`
+        `👋 MARKETING AGENT\n\nJust talk to me about your marketing strategy — I'll help you plan content, campaigns, and messaging.\n\nCommands:\n/post linkedin <message> — post text to LinkedIn\nsend photo + caption "/post linkedin" — image post\nsend photo + caption "upload" (or "upload to <folder>") — save to the Cloudinary gallery (General folder by default) — I'll ask what to name it so you can use it in a post later\n/reset — clear conversation\n/help — show this menu`
       );
       return NextResponse.json({ ok: true });
     }
@@ -162,10 +179,16 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
       const result = await uploadImageBuffer(mediaFile.data, mediaFile.mimeType, folderInput || undefined);
-      await telegram.sendMessage(chatId, 'error' in result
-        ? `❌ Upload failed: ${result.error}`
-        : `✅ Uploaded to ${result.folder}!\n\n${result.url}`
-      );
+      if ('error' in result) {
+        await telegram.sendMessage(chatId, `❌ Upload failed: ${result.error}`);
+      } else {
+        // Recorded unnamed for now — the very next plain-text reply from
+        // this chat is picked up as its name by the intercept above, so the
+        // user can later ask Pepe to build a post with it by that name
+        // instead of a raw Cloudinary URL.
+        await recordUpload({ chatId, folder: result.folder, publicId: result.id, url: result.url });
+        await telegram.sendMessage(chatId, `✅ Uploaded to ${result.folder}!\n\nWhat would you like to name this image? (So you can ask me to use it in a post later.)`);
+      }
       return NextResponse.json({ ok: true });
     }
 

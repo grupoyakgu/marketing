@@ -25,6 +25,7 @@
 - /lib/product-agent.ts             → Angeles agent (CPO persona; read-only repo access, no write/posting ability)
 - /lib/browser.ts                   → Browserbase (remote Chromium via CDP) screenshot helper used by Angeles's browse_page tool
 - /lib/cloudinary.ts                → Cloudinary Admin API image listing + gallery uploads
+- /lib/cloudinary-uploads.ts        → cloudinary_uploads table — name↔image mapping for Pepe's "upload" flow
 - /lib/meta-poster.ts               → Facebook/Instagram posting
 - /supabase/migrations/             → SQL migrations
 
@@ -59,7 +60,7 @@
 - /post linkedin <message>              — text post
 - send photo + caption "/post linkedin" — image post (inline)
 - send video + caption "/post linkedin" — video post (queued, 300s worker)
-- send photo + caption "upload" (or "upload to <folder>") — saves the photo into the Cloudinary gallery under CLOUDINARY_GALLERY_ROOT; "upload" alone (or "upload to general") goes to the root "General" bucket, any other folder name is matched case-insensitively against existing subfolders or created new
+- send photo + caption "upload" (or "upload to <folder>") — saves the photo into the Cloudinary gallery under CLOUDINARY_GALLERY_ROOT; "upload" alone (or "upload to general") goes to the "general" subfolder, any other folder name is matched case-insensitively against existing subfolders or created new. Pepe then asks what to name the image (stored in cloudinary_uploads) so it can be referenced later ("use the sunset image") when asking him to build a post — find_named_image resolves the name back to the upload
 
 ## Rules
 - Always use TypeScript
