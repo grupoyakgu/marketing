@@ -36,8 +36,16 @@ async function fetchResources(cloudName: string, auth: string, prefix?: string):
   const params = new URLSearchParams({ type: 'upload', max_results: '50' });
   if (prefix) params.set('prefix', prefix);
 
+  // Like the Supabase client (see lib/supabase.ts), Next.js's fetch cache
+  // otherwise keeps serving a stale resource list — this route's own
+  // `dynamic = 'force-dynamic'` only stops the outer response from being
+  // cached, not this inner fetch. Without `cache: 'no-store'`, a freshly
+  // uploaded image (e.g. via Pepe's Telegram "upload" flow) wouldn't show up
+  // in the dashboard's image picker even after clicking "reload" repeatedly,
+  // since the reload just re-triggers this same cached fetch.
   const res = await fetch(`${CLOUDINARY_API}/${cloudName}/resources/image?${params}`, {
     headers: { Authorization: `Basic ${auth}` },
+    cache: 'no-store',
   });
 
   if (!res.ok) {
@@ -123,6 +131,7 @@ async function listChildFolders(cloudName: string, auth: string, path: string): 
 
     const res = await fetch(`${CLOUDINARY_API}/${cloudName}/folders/${encodedPath}?${params}`, {
       headers: { Authorization: `Basic ${auth}` },
+      cache: 'no-store',
     });
     if (!res.ok) {
       const body = await res.text();
@@ -207,6 +216,7 @@ async function searchAllImageResources(cloudName: string, auth: string, folderPa
       method: 'POST',
       headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      cache: 'no-store',
     });
     if (!res.ok) {
       const errBody = await res.text();
@@ -234,6 +244,7 @@ async function listResourcesByAssetFolder(cloudName: string, auth: string, asset
 
     const res = await fetch(`${CLOUDINARY_API}/${cloudName}/resources/by_asset_folder?${params}`, {
       headers: { Authorization: `Basic ${auth}` },
+      cache: 'no-store',
     });
     if (!res.ok) {
       const body = await res.text();
