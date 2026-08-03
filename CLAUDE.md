@@ -24,7 +24,7 @@
 - /lib/vercel-dev.ts                → Vercel REST API wrapper used by Santi (list_deployments, get_deployment_logs)
 - /lib/product-agent.ts             → Angeles agent (CPO persona; read-only repo access, no write/posting ability)
 - /lib/browser.ts                   → Browserbase (remote Chromium via CDP) screenshot helper used by Angeles's browse_page tool
-- /lib/cloudinary.ts                → Cloudinary Admin API image listing
+- /lib/cloudinary.ts                → Cloudinary Admin API image listing + gallery uploads
 - /lib/meta-poster.ts               → Facebook/Instagram posting
 - /supabase/migrations/             → SQL migrations
 
@@ -41,6 +41,7 @@
 - CLOUDINARY_API_KEY
 - CLOUDINARY_API_SECRET
 - CLOUDINARY_FOLDER         # folder containing marketing images
+- CLOUDINARY_GALLERY_ROOT   # root folder for the dashboard gallery / Telegram uploads, defaults to "marketing/images"
 - INSTAGRAM_PAGE_ACCESS_TOKEN
 - INSTAGRAM_BUSINESS_ACCOUNT_ID
 - FACEBOOK_PAGE_ID
@@ -58,6 +59,7 @@
 - /post linkedin <message>              — text post
 - send photo + caption "/post linkedin" — image post (inline)
 - send video + caption "/post linkedin" — video post (queued, 300s worker)
+- send photo + caption "upload" (or "upload to <folder>") — saves the photo into the Cloudinary gallery under CLOUDINARY_GALLERY_ROOT; "upload" alone (or "upload to general") goes to the root "General" bucket, any other folder name is matched case-insensitively against existing subfolders or created new
 
 ## Rules
 - Always use TypeScript
