@@ -430,6 +430,50 @@ export async function upsertPostEngagementCache(engagements: PostEngagement[]): 
   );
 }
 
+// ─── Engagement over time ───────────────────────────────────────────────────
+
+export interface EngagementOverTimePoint {
+  date: string;
+  impressions: number;
+  reach: number;
+  likes: number;
+  comments: number;
+}
+
+/** Daily engagement totals across all three platforms, for posts published in the window — joins marketing_plan (dates) with post_engagement_cache (metrics) via getCachedPostEngagements. */
+export async function getEngagementOverTime(days = 14): Promise<EngagementOverTimePoint[]> {
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+  const sinceDate = since.toISOString().split('T')[0];
+
+  const { data: posts, error } = await supabase
+    .from('marketing_plan')
+    .select('platform, platform_post_id, scheduled_date')
+    .eq('status', 'posted')
+    .gte('scheduled_date', sinceDate)
+    .not('platform_post_id', 'is', null);
+  if (error) throw new Error(error.message);
+  if (!posts || posts.length === 0) return [];
+
+  const engagements = await getCachedPostEngagements(
+    posts.map(p => ({ platform: p.platform, platform_post_id: p.platform_post_id }))
+  );
+  const byKey = new Map(engagements.map(e => [`${e.platform}:${e.postId}`, e]));
+
+  const byDate = new Map<string, EngagementOverTimePoint>();
+  for (const p of posts) {
+    const e = byKey.get(`${p.platform}:${p.platform_post_id}`);
+    if (!e) continue;
+    const point = byDate.get(p.scheduled_date) ?? { date: p.scheduled_date, impressions: 0, reach: 0, likes: 0, comments: 0 };
+    point.impressions += e.impressions;
+    point.reach += e.reach;
+    point.likes += e.likes;
+    point.comments += e.comments;
+    byDate.set(p.scheduled_date, point);
+  }
+  return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+}
+
 // ─── Refresh status ─────────────────────────────────────────────────────────
 
 export interface RefreshStatus {

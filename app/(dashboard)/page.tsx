@@ -8,6 +8,7 @@ import {
   getAccountGrowth,
   getFollowerHistory,
   getCachedPostEngagements,
+  getEngagementOverTime,
   getRefreshStatus,
 } from '@/lib/engagement';
 import { KpiCard } from '@/components/ui/KpiCard';
@@ -15,6 +16,7 @@ import { Card } from '@/components/ui/Card';
 import { FollowerGrowthChart } from '@/components/charts/FollowerGrowthChart';
 import { PostsOverTimeChart } from '@/components/charts/PostsOverTimeChart';
 import { PlatformComparisonChart } from '@/components/charts/PlatformComparisonChart';
+import { ReachImpressionsChart, LikesCommentsChart } from '@/components/charts/EngagementOverTimeChart';
 import {
   FileText,
   Clock,
@@ -40,7 +42,7 @@ async function loadOverview() {
   // instead of calling Facebook/Instagram/LinkedIn live on every page load —
   // those external calls used to run serially and added several seconds to
   // every visit, most noticeably right after login.
-  const [postCountsR, postsByDateR, accountStatsR, followerHistoryR, recentPostsR, refreshStatusR] =
+  const [postCountsR, postsByDateR, accountStatsR, followerHistoryR, recentPostsR, refreshStatusR, engagementOverTimeR] =
     await Promise.allSettled([
       getPostCounts(),
       getPostsPublishedByDate(14),
@@ -48,6 +50,7 @@ async function loadOverview() {
       getFollowerHistory(30),
       getPostedPostsForCommentCheck(),
       getRefreshStatus(),
+      getEngagementOverTime(14),
     ]);
 
   for (const [label, r] of [
@@ -57,6 +60,7 @@ async function loadOverview() {
     ['followerHistory', followerHistoryR],
     ['recentPosts', recentPostsR],
     ['refreshStatus', refreshStatusR],
+    ['engagementOverTime', engagementOverTimeR],
   ] as const) {
     if (r.status === 'rejected') console.error(`[Overview] ${label} failed:`, r.reason);
   }
@@ -67,6 +71,7 @@ async function loadOverview() {
   const accountStats = accountStatsR.status === 'fulfilled' ? accountStatsR.value : [];
   const followerHistory = followerHistoryR.status === 'fulfilled' ? followerHistoryR.value : [];
   const recentPosts = recentPostsR.status === 'fulfilled' ? recentPostsR.value : [];
+  const engagementOverTime = engagementOverTimeR.status === 'fulfilled' ? engagementOverTimeR.value : [];
   const refreshStatus =
     refreshStatusR.status === 'fulfilled'
       ? refreshStatusR.value
@@ -101,6 +106,7 @@ async function loadOverview() {
     totalEngagement: totals.likes + totals.comments + totals.shares,
     totalFollowers: accountStats.reduce((sum, s) => sum + s.followers, 0),
     refreshStatus,
+    engagementOverTime,
   };
 }
 
@@ -128,6 +134,7 @@ export default async function OverviewPage() {
     totalEngagement,
     totalFollowers,
     refreshStatus,
+    engagementOverTime,
   } = await loadOverview();
 
   const followerGrowthPct = growth.length
@@ -202,6 +209,17 @@ export default async function OverviewPage() {
         <Card>
           <h2 className="mb-4 text-sm font-semibold text-neutral-900 dark:text-white">Posts published (14 days)</h2>
           <PostsOverTimeChart data={postsByDate} />
+        </Card>
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <h2 className="mb-4 text-sm font-semibold text-neutral-900 dark:text-white">Reach & impressions (14 days)</h2>
+          <ReachImpressionsChart data={engagementOverTime} />
+        </Card>
+        <Card>
+          <h2 className="mb-4 text-sm font-semibold text-neutral-900 dark:text-white">Likes & comments (14 days)</h2>
+          <LikesCommentsChart data={engagementOverTime} />
         </Card>
       </section>
 
