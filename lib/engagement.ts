@@ -474,6 +474,84 @@ export async function getEngagementOverTime(days = 14): Promise<EngagementOverTi
   return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
 
+// ─── Top-performing posts ────────────────────────────────────────────────────
+
+export type PerformanceMetric = 'likes' | 'comments' | 'shares' | 'impressions' | 'reach' | 'engagement_rate';
+
+export interface PostPerformance {
+  postId: string;
+  platform: 'linkedin' | 'instagram' | 'facebook';
+  scheduledDate: string;
+  scheduledTime: string;
+  contentPreview: string;
+  postUrl?: string;
+  likes: number;
+  comments: number;
+  shares: number;
+  impressions: number;
+  reach: number;
+  engagementRate: number;
+}
+
+function performanceMetricValue(p: PostPerformance, metric: PerformanceMetric): number {
+  switch (metric) {
+    case 'likes': return p.likes;
+    case 'comments': return p.comments;
+    case 'shares': return p.shares;
+    case 'impressions': return p.impressions;
+    case 'reach': return p.reach;
+    case 'engagement_rate': return p.engagementRate;
+  }
+}
+
+/** Every published post, ranked by the requested metric — for "which post did best" / "top 5 by X" questions, unlike getCachedPostEngagements (which only looks up a given list) or compare_posts (fixed at two). No lookback window: unlike getPostedPostsForCommentCheck, ranking needs the full history, not just the recent window comment-replying cares about. */
+export async function getTopPerformingPosts(options: {
+  metric?: PerformanceMetric;
+  platform?: 'linkedin' | 'instagram' | 'facebook';
+  limit?: number;
+} = {}): Promise<PostPerformance[]> {
+  const { metric = 'likes', platform, limit = 5 } = options;
+
+  let query = supabase
+    .from('marketing_plan')
+    .select('id, platform, scheduled_date, scheduled_time, content, post_url, platform_post_id')
+    .eq('status', 'posted')
+    .not('platform_post_id', 'is', null);
+  if (platform) query = query.eq('platform', platform);
+  const { data: posts, error } = await query;
+  if (error) throw new Error(error.message);
+  if (!posts || posts.length === 0) return [];
+
+  const engagements = await getCachedPostEngagements(
+    posts.map(p => ({ platform: p.platform, platform_post_id: p.platform_post_id }))
+  );
+  const byKey = new Map(engagements.map(e => [`${e.platform}:${e.postId}`, e]));
+
+  const performance = posts
+    .map((p): PostPerformance | null => {
+      const e = byKey.get(`${p.platform}:${p.platform_post_id}`);
+      if (!e) return null;
+      return {
+        postId: p.id,
+        platform: p.platform,
+        scheduledDate: p.scheduled_date,
+        scheduledTime: p.scheduled_time,
+        contentPreview: p.content.slice(0, 80),
+        postUrl: p.post_url ?? undefined,
+        likes: e.likes,
+        comments: e.comments,
+        shares: e.shares,
+        impressions: e.impressions,
+        reach: e.reach,
+        engagementRate: computeEngagementRate(e),
+      };
+    })
+    .filter((p): p is PostPerformance => p !== null);
+
+  performance.sort((a, b) => performanceMetricValue(b, metric) - performanceMetricValue(a, metric));
+  return performance.slice(0, limit);
+}
+
 // ─── Refresh status ─────────────────────────────────────────────────────────
 
 export interface RefreshStatus {

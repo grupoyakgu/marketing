@@ -20,11 +20,14 @@ import {
   getLinkedInPostEngagement,
   getAllAccountStats,
   computeEngagementRate,
+  getTopPerformingPosts,
   type PostEngagement,
+  type PerformanceMetric,
 } from '@/lib/engagement';
 import {
   saveDraftPlan,
   getWeeklyPlan,
+  getPlanByDateRange,
   getPostById,
   approveAllDrafts,
   approvePost,
@@ -63,6 +66,19 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
       err => { clearTimeout(timer); reject(err); }
     );
   });
+}
+
+// Shared by get_weekly_plan and get_plan_by_date — both list plan posts the
+// same way, just scoped differently (a Monday-aligned week vs. an arbitrary
+// date/range).
+function formatPlanPosts(posts: MarketingPost[]): string {
+  return posts.map((p, i) => {
+    const images = (p.image_urls?.length ? p.image_urls : p.image_url ? [p.image_url] : []);
+    const imageLine = images.length === 0
+      ? '(none selected — the user may have picked or changed this in the dashboard planner)'
+      : images.length === 1 ? images[0] : `${images.length} images (carousel): ${images.join(', ')}`;
+    return `${i + 1}. [${p.platform}] ${p.scheduled_date} ${p.scheduled_time} [${p.status}]\n   ID: ${p.id}\n   Image: ${imageLine}\n   ${p.content}`;
+  }).join('\n\n');
 }
 
 function buildSystemPrompt(): string {
@@ -180,10 +196,13 @@ You have access to these proof points. **Spread them strategically across many p
 - Edit request → update, re-save, re-ask. Check get_weekly_plan's Image field first — if one is already set (the user may have picked or changed it in the dashboard planner), carry those same image_urls into the replacement post instead of picking a new one, unless the user's edit is specifically about the image.
 
 ## DELETING, RESCHEDULING, OR EDITING A SCHEDULED POST (anytime, not just right after drafting)
-The user can ask to delete/remove/cancel a post, move/reschedule its date or time, or edit its wording (e.g. "remove the hashtags", "shorten that caption", "drop the last sentence"), at any point — not only during the initial approval flow above, e.g. days later, about something already approved and sitting in the schedule. Look it up with get_weekly_plan to find its post_id and current content, then call reject_post to delete it, reschedule_post to change its date/time (pass only the field(s) actually changing), or edit_post to change its text — for edit_post, apply the requested change to the existing content yourself and pass the FULL new caption, not just a diff or instruction. All three only work on posts that haven't been published yet (draft, approved, or failed) — they'll fail with a clear reason if the post has already gone out, since a published post's record is tracked history and can't be changed. If that happens, tell the user it's already live and can't be modified.
+The user can ask to delete/remove/cancel a post, move/reschedule its date or time, or edit its wording (e.g. "remove the hashtags", "shorten that caption", "drop the last sentence"), at any point — not only during the initial approval flow above, e.g. days later, about something already approved and sitting in the schedule. Look it up first — use get_weekly_plan when the user names a week, or get_plan_by_date when they name a specific day or range instead (e.g. "what's on the 15th", "anything between the 10th and 14th") — to find its post_id and current content, then call reject_post to delete it, reschedule_post to change its date/time (pass only the field(s) actually changing), or edit_post to change its text — for edit_post, apply the requested change to the existing content yourself and pass the FULL new caption, not just a diff or instruction. All three only work on posts that haven't been published yet (draft, approved, or failed) — they'll fail with a clear reason if the post has already gone out, since a published post's record is tracked history and can't be changed. If that happens, tell the user it's already live and can't be modified.
 
 ## COMPARING TWO POSTS
-If the user asks to compare two posts (e.g. "how did post 3 do vs post 5", "compare Monday's LinkedIn post with last week's"), find each one's internal post_id via get_weekly_plan, then call compare_posts with post_id_a and post_id_b. It returns each post's platform, schedule, caption preview, and full engagement stats (or "not posted yet" if either hasn't gone out). Narrate the comparison yourself — call out which one performed better and on what, don't just repeat the raw numbers back.
+If the user asks to compare two posts (e.g. "how did post 3 do vs post 5", "compare Monday's LinkedIn post with last week's"), find each one's internal post_id via get_weekly_plan or get_plan_by_date, then call compare_posts with post_id_a and post_id_b. It returns each post's platform, schedule, caption preview, and full engagement stats (or "not posted yet" if either hasn't gone out). Narrate the comparison yourself — call out which one performed better and on what, don't just repeat the raw numbers back.
+
+## TOP / BEST-PERFORMING POSTS
+For "which post got the most likes", "top 5 posts by impressions", "what's our best performing content", or anything else ranking posts rather than comparing two named ones, call get_top_posts with the metric the user cares about (likes, comments, shares, impressions, reach, or engagement_rate — defaults to likes) and a platform filter if they named one. This ranks across the full posting history, not just a recent window. Narrate the ranking yourself — name what stands out about the top post(s), don't just dump the numbers back.
 
 ---
 
@@ -191,8 +210,9 @@ If the user asks to compare two posts (e.g. "how did post 3 do vs post 5", "comp
 - post_to_linkedin, post_to_facebook, post_to_instagram — publish posts
 - post_instagram_story, post_facebook_story — publish to Stories (24h, ephemeral, image only, no caption)
 - browse_drive_images — list Cloudinary images (call ONCE per plan)
-- save_marketing_plan, get_weekly_plan, approve_posts, reject_post, reschedule_post, retry_post, edit_post — plan management
-- compare_posts — compare engagement between two posts
+- save_marketing_plan, get_weekly_plan, get_plan_by_date, approve_posts, reject_post, reschedule_post, retry_post, edit_post — plan management. get_plan_by_date looks up a specific date or range instead of a Monday-aligned week.
+- compare_posts — compare engagement between two named posts
+- get_top_posts — rank all published posts by likes/comments/shares/impressions/reach/engagement_rate
 - reply_to_comment — reply to a specific comment
 - post_comment — post a new top-level comment on a post (for thank-yous)
 - get_engagement — fetch likes/comments/reach stats
@@ -317,6 +337,19 @@ const tools: Anthropic.Tool[] = [
     },
   },
   {
+    name: 'get_plan_by_date',
+    description:
+      'Retrieves plan posts for a specific date or date range — use this (instead of get_weekly_plan) whenever the user asks about a particular day rather than a whole week, e.g. "what\'s scheduled for August 15th" or "show me everything between the 10th and the 14th". Not limited to a Monday-aligned week and returns posts of any status (draft, approved, posted, failed), across all platforms. Use the returned post_id with reject_post/reschedule_post/edit_post to act on a specific post found this way.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        date: { type: 'string', description: 'Start date, YYYY-MM-DD. For a single day, this is the only date needed.' },
+        date_to: { type: 'string', description: 'Optional end date (inclusive), YYYY-MM-DD, for a range. Omit for a single day.' },
+      },
+      required: ['date'],
+    },
+  },
+  {
     name: 'approve_posts',
     description: 'Approves marketing posts for auto-publishing.',
     input_schema: {
@@ -426,6 +459,20 @@ const tools: Anthropic.Tool[] = [
         post_id_b: { type: 'string' },
       },
       required: ['post_id_a', 'post_id_b'],
+    },
+  },
+  {
+    name: 'get_top_posts',
+    description:
+      'Ranks published posts by a performance metric — use this for "which post did best", "top 5 by likes/impressions/etc.", or any question about the best/worst performing content across the full history (not just a recent window). Defaults to top 5 by likes across all platforms; narrow with platform and/or limit as needed.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        metric: { type: 'string', enum: ['likes', 'comments', 'shares', 'impressions', 'reach', 'engagement_rate'], description: 'Defaults to "likes".' },
+        platform: { type: 'string', enum: ['linkedin', 'instagram', 'facebook'], description: 'Omit to rank across all platforms.' },
+        limit: { type: 'number', description: 'How many posts to return. Defaults to 5.' },
+      },
+      required: [],
     },
   },
   {
@@ -613,15 +660,20 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
             const posts = await getWeeklyPlan(weekStart);
             resultContent = posts.length === 0
               ? `No posts found for week of ${weekStart}.`
-              : `Plan for week of ${weekStart} (${posts.length} posts):\n${
-                  posts.map((p, i) => {
-                    const images = (p.image_urls?.length ? p.image_urls : p.image_url ? [p.image_url] : []);
-                    const imageLine = images.length === 0
-                      ? '(none selected — the user may have picked or changed this in the dashboard planner)'
-                      : images.length === 1 ? images[0] : `${images.length} images (carousel): ${images.join(', ')}`;
-                    return `${i + 1}. [${p.platform}] ${p.scheduled_date} ${p.scheduled_time} [${p.status}]\n   ID: ${p.id}\n   Image: ${imageLine}\n   ${p.content}`;
-                  }).join('\n\n')
-                }`;
+              : `Plan for week of ${weekStart} (${posts.length} posts):\n${formatPlanPosts(posts)}`;
+          } catch (err) {
+            resultContent = `Failed to get plan: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        }
+
+        if (block.name === 'get_plan_by_date') {
+          const input = block.input as { date: string; date_to?: string };
+          try {
+            const posts = await getPlanByDateRange(input.date, input.date_to);
+            const rangeLabel = input.date_to && input.date_to !== input.date ? `${input.date} to ${input.date_to}` : input.date;
+            resultContent = posts.length === 0
+              ? `No posts found for ${rangeLabel}.`
+              : `Plan for ${rangeLabel} (${posts.length} posts):\n${formatPlanPosts(posts)}`;
           } catch (err) {
             resultContent = `Failed to get plan: ${err instanceof Error ? err.message : String(err)}`;
           }
@@ -819,6 +871,23 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
               const [descA, descB] = await Promise.all([describe(postA), describe(postB)]);
               resultContent = `POST A:\n${descA}\n\nPOST B:\n${descB}`;
             }
+          } catch (err) {
+            resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        }
+
+        if (block.name === 'get_top_posts') {
+          const input = block.input as { metric?: PerformanceMetric; platform?: 'linkedin' | 'instagram' | 'facebook'; limit?: number };
+          try {
+            const metric = input.metric ?? 'likes';
+            const top = await getTopPerformingPosts({ metric, platform: input.platform, limit: input.limit });
+            resultContent = top.length === 0
+              ? 'No published posts with engagement data found yet.'
+              : `Top ${top.length} posts by ${metric}${input.platform ? ` (${input.platform} only)` : ''}:\n${
+                  top.map((p, i) =>
+                    `${i + 1}. [${p.platform}] ${p.scheduledDate} ${p.scheduledTime} — "${p.contentPreview}${p.contentPreview.length >= 80 ? '...' : ''}"\n   ID: ${p.postId}\n   Likes: ${p.likes} | Comments: ${p.comments} | Shares: ${p.shares} | Impressions: ${p.impressions} | Reach: ${p.reach} | Engagement rate: ${p.engagementRate.toFixed(2)}%${p.postUrl ? `\n   URL: ${p.postUrl}` : ''}`
+                  ).join('\n\n')
+                }`;
           } catch (err) {
             resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
           }

@@ -38,6 +38,19 @@ export async function getWeeklyPlan(weekStart: string): Promise<MarketingPost[]>
   return data ?? [];
 }
 
+/** All posts (any status, any platform) whose scheduled_date falls in [dateFrom, dateTo ?? dateFrom] — unlike getWeeklyPlan, not tied to a Monday-aligned week_start, so a single arbitrary date or an arbitrary range both work. */
+export async function getPlanByDateRange(dateFrom: string, dateTo?: string): Promise<MarketingPost[]> {
+  const { data, error } = await supabase
+    .from('marketing_plan')
+    .select('*')
+    .gte('scheduled_date', dateFrom)
+    .lte('scheduled_date', dateTo ?? dateFrom)
+    .order('scheduled_date')
+    .order('scheduled_time');
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
 export async function getPostById(postId: string): Promise<MarketingPost | null> {
   const { data, error } = await supabase
     .from('marketing_plan')
