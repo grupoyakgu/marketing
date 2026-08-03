@@ -44,6 +44,13 @@ export async function publishPost(postId: string): Promise<PublishResult> {
     await markPostStatus(post.id!, 'posted', result.url, result.postId);
     return { success: true };
   }
+  const error = result?.error ?? 'Unknown error.';
+  // The only other record of a failure is whatever surfaces to the caller
+  // (a Telegram message from the cron, a toast in the dashboard) — once
+  // that's gone, the actual platform error was gone for good. Logging it
+  // here means it's diagnosable from Vercel logs (or Santi's
+  // get_deployment_logs) regardless of which of the three callers hit it.
+  console.error(`[publishPost] ${post.platform} post ${post.id} failed: ${error}`);
   await markPostStatus(post.id!, 'failed');
-  return { success: false, error: result?.error ?? 'Unknown error.' };
+  return { success: false, error };
 }
