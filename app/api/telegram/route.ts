@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { TelegramClient } from '@/lib/telegram';
 import { postToLinkedIn } from '@/lib/linkedin-poster';
 import { enqueueLinkedInPost } from '@/lib/linkedin-queue';
+import { uploadImageBuffer } from '@/lib/cloudinary';
 import { clearHistory, chat } from '@/lib/marketing-agent';
 import { trackDirectPost } from '@/lib/marketing-plan';
 import { claimTelegramUpdate } from '@/lib/telegram-dedup';
@@ -25,6 +26,10 @@ async function downloadTelegramFile(fileId: string): Promise<{ data: ArrayBuffer
   const isVideo = filePath.endsWith('.mp4') || filePath.includes('video');
   return { data, mimeType: isVideo ? 'video/mp4' : 'image/jpeg', mediaType: isVideo ? 'VIDEO' : 'IMAGE' };
 }
+
+// Matches "upload", "upload to Restaurants", "upload Restaurants" (case-insensitive).
+// Capture group is the folder name, empty when none was given (→ General).
+const UPLOAD_CAPTION = /^upload\b\s*(?:to\s+)?(.*)$/i;
 
 function splitMessage(text: string, maxLen: number): string[] {
   if (text.length <= maxLen) return [text];
@@ -75,7 +80,7 @@ export async function POST(req: NextRequest) {
 
     if (text === '/start' || text === '/help') {
       await telegram.sendMessage(chatId,
-        `👋 MARKETING AGENT\n\nJust talk to me about your marketing strategy — I'll help you plan content, campaigns, and messaging.\n\nCommands:\n/post linkedin <message> — post text to LinkedIn\n/reset — clear conversation\n/help — show this menu`
+        `👋 MARKETING AGENT\n\nJust talk to me about your marketing strategy — I'll help you plan content, campaigns, and messaging.\n\nCommands:\n/post linkedin <message> — post text to LinkedIn\nsend photo + caption "/post linkedin" — image post\nsend photo + caption "upload" (or "upload to <folder>") — save to the Cloudinary gallery, General folder by default\n/reset — clear conversation\n/help — show this menu`
       );
       return NextResponse.json({ ok: true });
     }
@@ -138,6 +143,28 @@ export async function POST(req: NextRequest) {
       await telegram.sendMessage(chatId, result.success
         ? (result.url ? `✅ Posted!\n\n${result.url}` : '✅ Posted to LinkedIn!')
         : `❌ Failed: ${result.error}`
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    if (hasMedia && caption && UPLOAD_CAPTION.test(caption)) {
+      if (!photo) {
+        await telegram.sendMessage(chatId, '❌ Only images can be uploaded to Cloudinary this way — videos aren\'t supported.');
+        return NextResponse.json({ ok: true });
+      }
+      const folderInput = caption.match(UPLOAD_CAPTION)![1].trim();
+      const fileId = photo[photo.length - 1].file_id;
+
+      await telegram.sendMessage(chatId, `⏳ Uploading to ${folderInput || 'General'}...`);
+      const mediaFile = await downloadTelegramFile(fileId);
+      if (!mediaFile) {
+        await telegram.sendMessage(chatId, '❌ Failed to download image from Telegram.');
+        return NextResponse.json({ ok: true });
+      }
+      const result = await uploadImageBuffer(mediaFile.data, mediaFile.mimeType, folderInput || undefined);
+      await telegram.sendMessage(chatId, 'error' in result
+        ? `❌ Upload failed: ${result.error}`
+        : `✅ Uploaded to ${result.folder}!\n\n${result.url}`
       );
       return NextResponse.json({ ok: true });
     }
