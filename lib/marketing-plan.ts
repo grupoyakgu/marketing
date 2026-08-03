@@ -133,23 +133,32 @@ export async function getPostsDueNow(): Promise<MarketingPost[]> {
   const spainDate = new Intl.DateTimeFormat('sv-SE', {
     timeZone: 'Europe/Madrid',
   }).format(now);
-  const spainHour = parseInt(
-    new Intl.DateTimeFormat('en', {
-      timeZone: 'Europe/Madrid',
-      hour: 'numeric',
-      hour12: false,
-    }).format(now),
-    10
-  );
-  const hourStr = String(spainHour).padStart(2, '0');
+  // Previously matched only the CURRENT hour bucket (scheduled_time between
+  // HH:00 and HH:59) — a post that became 'approved' after its hour's single
+  // cron tick had already passed (e.g. approved a few minutes late, or the
+  // matching tick was missed for any reason) fell out of every future tick's
+  // window forever, since each run only ever checks the hour it's currently
+  // in, never "anything still overdue." Comparing against the exact current
+  // time instead of a hard hour boundary means a post that's due — whether
+  // that's this minute or hours ago — gets picked up on the very next tick,
+  // and once it's posted/failed the status filter below excludes it from
+  // ever being reconsidered, so this can't cause a duplicate post.
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Madrid',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(now);
+  const part = (type: string) => parts.find(p => p.type === type)?.value ?? '00';
+  const spainTime = `${part('hour')}:${part('minute')}:${part('second')}`;
 
   const { data, error } = await supabase
     .from('marketing_plan')
     .select('*')
     .eq('scheduled_date', spainDate)
     .eq('status', 'approved')
-    .gte('scheduled_time', `${hourStr}:00`)
-    .lte('scheduled_time', `${hourStr}:59`);
+    .lte('scheduled_time', spainTime);
   if (error) throw new Error(error.message);
   return data ?? [];
 }
