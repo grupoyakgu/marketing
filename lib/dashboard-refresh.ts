@@ -7,6 +7,7 @@ import {
   getFacebookPostEngagement,
   getInstagramPostEngagement,
   getLinkedInPostEngagement,
+  getPostsForPerformanceRefresh,
   type PostEngagement,
 } from '@/lib/engagement';
 import { getPostedPostsForCommentCheck } from '@/lib/marketing-plan';
@@ -23,13 +24,26 @@ export interface DashboardRefreshResult {
 export async function refreshDashboardData(): Promise<DashboardRefreshResult> {
   const start = Date.now();
 
-  const [accountStats, recentPosts] = await Promise.all([
+  const [accountStats, recentPosts, performancePosts] = await Promise.all([
     getAllAccountStats(),
     getPostedPostsForCommentCheck(),
+    getPostsForPerformanceRefresh(),
   ]);
+  // Two different windows with two different purposes, unioned and deduped:
+  // getPostedPostsForCommentCheck's 7-30 day window is for comment-reply
+  // relevance, while the Performance leaderboard needs every published post
+  // (up to its own cap) kept fresh daily — a post outside the comment window
+  // would otherwise never get refreshed again once it aged out.
+  const seen = new Set<string>();
+  const postsToRefresh = [...recentPosts, ...performancePosts].filter(row => {
+    const key = `${row.platform}:${row.platform_post_id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 
   const engagementResults = await Promise.allSettled(
-    recentPosts.map(row => {
+    postsToRefresh.map(row => {
       if (row.platform === 'facebook') return getFacebookPostEngagement(row.platform_post_id);
       if (row.platform === 'instagram') return getInstagramPostEngagement(row.platform_post_id);
       return getLinkedInPostEngagement(row.platform_post_id);
@@ -53,7 +67,7 @@ export async function refreshDashboardData(): Promise<DashboardRefreshResult> {
   });
 
   console.log(
-    `[dashboard-refresh] durationMs=${durationMs} accounts=${JSON.stringify(accountStats)} postsRefreshed=${engagements.length}/${recentPosts.length}`
+    `[dashboard-refresh] durationMs=${durationMs} accounts=${JSON.stringify(accountStats)} postsRefreshed=${engagements.length}/${postsToRefresh.length}`
   );
 
   // Overview is force-dynamic (always reads fresh from the DB on the server),

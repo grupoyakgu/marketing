@@ -1,3 +1,4 @@
+import { Crown } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { PlatformBadge } from '@/components/ui/PlatformBadge';
 import type { MarketingPost } from '@/lib/marketing-plan';
@@ -9,7 +10,15 @@ const STATUS_TONE: Record<string, 'neutral' | 'positive' | 'negative'> = {
   failed: 'negative',
 };
 
-export function PostCard({ post, onClick }: { post: MarketingPost; onClick: () => void }) {
+export function PostCard({
+  post,
+  isWeeklyLeader,
+  onClick,
+}: {
+  post: MarketingPost;
+  isWeeklyLeader?: boolean;
+  onClick: () => void;
+}) {
   return (
     <button
       onClick={onClick}
@@ -21,6 +30,11 @@ export function PostCard({ post, onClick }: { post: MarketingPost; onClick: () =
           <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
             {post.scheduled_time.slice(0, 5)}
           </span>
+          {isWeeklyLeader && (
+            <span title={`Best-performing ${post.platform} post this week`}>
+              <Crown className="h-3.5 w-3.5 text-amber-500" />
+            </span>
+          )}
         </div>
         <Badge tone={STATUS_TONE[post.status ?? 'draft']} className="shrink-0">{post.status}</Badge>
       </div>

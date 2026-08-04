@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, Check, Trash2, ImageIcon, ChevronRight, ChevronDown, ChevronLeft, FolderClosed, RotateCw, Copy, CopyCheck } from 'lucide-react';
+import { X, Check, Trash2, ImageIcon, ChevronRight, ChevronDown, ChevronLeft, FolderClosed, RotateCw, Copy, CopyCheck, ThumbsUp, MessageCircle, Share2, Eye, TrendingUp, type LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { PlatformBadge } from '@/components/ui/PlatformBadge';
@@ -17,6 +17,15 @@ interface CloudinaryImage {
 interface CloudinaryFolderImages {
   folder: string;
   images: CloudinaryImage[];
+}
+
+interface PostEngagementStats {
+  likes: number;
+  comments: number;
+  shares: number;
+  impressions: number;
+  reach: number;
+  engagementRate: number;
 }
 
 const PLATFORMS: Array<'linkedin' | 'instagram' | 'facebook'> = ['linkedin', 'instagram', 'facebook'];
@@ -46,6 +55,9 @@ export function PostEditor({
   const [savingImage, setSavingImage] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [idCopied, setIdCopied] = useState(false);
+  const [engagement, setEngagement] = useState<PostEngagementStats | null>(null);
+  const [engagementError, setEngagementError] = useState<string | null>(null);
+  const [loadingEngagement, setLoadingEngagement] = useState(false);
 
   const editable = post ? post.status === 'draft' || post.status === 'approved' : false;
 
@@ -58,6 +70,21 @@ export function PostEditor({
     setImageUrls(post.image_urls?.length ? post.image_urls : post.image_url ? [post.image_url] : []);
     setError(null);
     setIdCopied(false);
+    setEngagement(null);
+    setEngagementError(null);
+  }, [post]);
+
+  useEffect(() => {
+    if (!post || post.status !== 'posted') return;
+    setLoadingEngagement(true);
+    fetch(`/api/dashboard/plan/${post.id}/engagement`, { cache: 'no-store' })
+      .then(async res => {
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error ?? 'Failed to load stats.');
+        setEngagement(body.engagement);
+      })
+      .catch(err => setEngagementError(err instanceof Error ? err.message : 'Failed to load stats.'))
+      .finally(() => setLoadingEngagement(false));
   }, [post]);
 
   useEffect(() => {
@@ -215,6 +242,26 @@ export function PostEditor({
             <RotateCw className="h-4 w-4" />
             {saving ? 'Retrying…' : 'Retry — publish now'}
           </Button>
+        )}
+
+        {post.status === 'posted' && (
+          <div className="mb-4">
+            <p className="mb-1.5 text-xs font-medium text-neutral-500">Stats</p>
+            {loadingEngagement ? (
+              <p className="text-xs text-neutral-400">Loading stats…</p>
+            ) : engagementError ? (
+              <p className="text-xs text-red-600 dark:text-red-400">{engagementError}</p>
+            ) : engagement ? (
+              <div className="grid grid-cols-3 gap-2">
+                <StatTile icon={ThumbsUp} label="Likes" value={engagement.likes} />
+                <StatTile icon={MessageCircle} label="Comments" value={engagement.comments} />
+                <StatTile icon={Share2} label="Shares" value={engagement.shares} />
+                <StatTile icon={Eye} label="Reach" value={engagement.reach} />
+                <StatTile icon={TrendingUp} label="Impressions" value={engagement.impressions} />
+                <StatTile label="Eng. rate" value={`${engagement.engagementRate.toFixed(1)}%`} />
+              </div>
+            ) : null}
+          </div>
         )}
 
         {imageUrls.length === 1 ? (
@@ -428,6 +475,26 @@ export function PostEditor({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function StatTile({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon?: LucideIcon;
+  label: string;
+  value: number | string;
+}) {
+  return (
+    <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-2 py-1.5 dark:border-neutral-700 dark:bg-neutral-800">
+      <div className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-neutral-400">
+        {Icon && <Icon className="h-3 w-3" />}
+        {label}
+      </div>
+      <p className="mt-0.5 text-sm font-semibold tabular-nums text-neutral-900 dark:text-white">{value}</p>
     </div>
   );
 }
