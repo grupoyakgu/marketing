@@ -504,30 +504,63 @@ function performanceMetricValue(p: PostPerformance, metric: PerformanceMetric): 
   }
 }
 
-/** Every published post, ranked by the requested metric — for "which post did best" / "top 5 by X" questions, unlike getCachedPostEngagements (which only looks up a given list) or compare_posts (fixed at two). No lookback window: unlike getPostedPostsForCommentCheck, ranking needs the full history, not just the recent window comment-replying cares about. */
-export async function getTopPerformingPosts(options: {
-  metric?: PerformanceMetric;
-  platform?: 'linkedin' | 'instagram' | 'facebook';
-  limit?: number;
-} = {}): Promise<PostPerformance[]> {
-  const { metric = 'likes', platform, limit = 5 } = options;
+interface PostedRow {
+  id: string;
+  platform: 'linkedin' | 'instagram' | 'facebook';
+  scheduled_date: string;
+  scheduled_time: string;
+  content: string;
+  post_url: string | null;
+  platform_post_id: string | null;
+}
 
+async function getPostedRows(options: {
+  platform?: 'linkedin' | 'instagram' | 'facebook';
+  dateFrom?: string;
+  dateTo?: string;
+  limit?: number;
+} = {}): Promise<PostedRow[]> {
   let query = supabase
     .from('marketing_plan')
     .select('id, platform, scheduled_date, scheduled_time, content, post_url, platform_post_id')
     .eq('status', 'posted')
-    .not('platform_post_id', 'is', null);
-  if (platform) query = query.eq('platform', platform);
-  const { data: posts, error } = await query;
+    .not('platform_post_id', 'is', null)
+    .order('scheduled_date', { ascending: false });
+  if (options.platform) query = query.eq('platform', options.platform);
+  if (options.dateFrom) query = query.gte('scheduled_date', options.dateFrom);
+  if (options.dateTo) query = query.lte('scheduled_date', options.dateTo);
+  if (options.limit) query = query.limit(options.limit);
+  const { data, error } = await query;
   if (error) throw new Error(error.message);
-  if (!posts || posts.length === 0) return [];
+  return data ?? [];
+}
+
+/** The (platform, platform_post_id) pairs the daily refresh cron needs to
+ * keep the Performance leaderboard's stats genuinely fresh — every published
+ * post up to the same 300-post cap getPerformanceLeaderboard reads from,
+ * not just the comment-reply window getPostedPostsForCommentCheck covers
+ * (which exists for a different purpose and only looks back 7-30 days). */
+export async function getPostsForPerformanceRefresh(): Promise<{ platform: 'linkedin' | 'instagram' | 'facebook'; platform_post_id: string }[]> {
+  const rows = await getPostedRows({ limit: 300 });
+  return rows
+    .filter((r): r is PostedRow & { platform_post_id: string } => r.platform_post_id !== null)
+    .map(r => ({ platform: r.platform, platform_post_id: r.platform_post_id }));
+}
+
+// Shared by getTopPerformingPosts, getPerformanceLeaderboard, and
+// getBestPostsInRange — all three start from a set of posted marketing_plan
+// rows and need the same join against post_engagement_cache to turn them
+// into PostPerformance.
+async function buildPostPerformance(rows: PostedRow[]): Promise<PostPerformance[]> {
+  const withPlatformPostId = rows.filter((r): r is PostedRow & { platform_post_id: string } => r.platform_post_id !== null);
+  if (withPlatformPostId.length === 0) return [];
 
   const engagements = await getCachedPostEngagements(
-    posts.map(p => ({ platform: p.platform, platform_post_id: p.platform_post_id }))
+    withPlatformPostId.map(p => ({ platform: p.platform, platform_post_id: p.platform_post_id }))
   );
   const byKey = new Map(engagements.map(e => [`${e.platform}:${e.postId}`, e]));
 
-  const performance = posts
+  return withPlatformPostId
     .map((p): PostPerformance | null => {
       const e = byKey.get(`${p.platform}:${p.platform_post_id}`);
       if (!e) return null;
@@ -547,9 +580,107 @@ export async function getTopPerformingPosts(options: {
       };
     })
     .filter((p): p is PostPerformance => p !== null);
+}
 
+/** Every published post, ranked by the requested metric — for "which post did best" / "top 5 by X" questions, unlike getCachedPostEngagements (which only looks up a given list) or compare_posts (fixed at two). No lookback window: unlike getPostedPostsForCommentCheck, ranking needs the full history, not just the recent window comment-replying cares about. */
+export async function getTopPerformingPosts(options: {
+  metric?: PerformanceMetric;
+  platform?: 'linkedin' | 'instagram' | 'facebook';
+  limit?: number;
+} = {}): Promise<PostPerformance[]> {
+  const { metric = 'likes', platform, limit = 5 } = options;
+  const rows = await getPostedRows({ platform });
+  const performance = await buildPostPerformance(rows);
   performance.sort((a, b) => performanceMetricValue(b, metric) - performanceMetricValue(a, metric));
   return performance.slice(0, limit);
+}
+
+// ─── Composite performance score ────────────────────────────────────────────
+//
+// Five stats: likes, comments, shares, reach, and engagement rate. Impressions
+// is deliberately left out — Meta deprecated per-post impressions/reach for
+// organic Facebook posts (see getFacebookPostEngagement above), so it's
+// always 0 there and would just be dead weight in the score.
+//
+// Each stat is min-max normalized to 0-100 across whatever set is being
+// scored (so a scale difference — reach in the hundreds vs. shares in the
+// single digits — can't let one stat dominate by magnitude alone), then
+// combined with fixed weights. Comments and shares are weighted highest:
+// both take more effort from a follower than a passive like, so they're a
+// stronger signal of genuine engagement. Reach is weighted lowest since it's
+// the least reliable across platforms (0 for every Facebook post).
+
+export interface RankedPostPerformance extends PostPerformance {
+  score: number;
+}
+
+const SCORE_WEIGHTS = { likes: 0.20, comments: 0.25, shares: 0.20, reach: 0.15, engagementRate: 0.20 } as const;
+
+function normalize(value: number, min: number, max: number): number {
+  // Every post tying on this stat (max === min) contributes the same amount
+  // to every post's score either way — 100 is as good a constant as any,
+  // and avoids a 0/0 division.
+  return max > min ? ((value - min) / (max - min)) * 100 : 100;
+}
+
+function scorePerformance<T extends Pick<PostPerformance, 'likes' | 'comments' | 'shares' | 'reach' | 'engagementRate'>>(
+  list: T[]
+): (T & { score: number })[] {
+  if (list.length === 0) return [];
+  const range = (values: number[]) => ({ min: Math.min(...values), max: Math.max(...values) });
+  const likes = range(list.map(p => p.likes));
+  const comments = range(list.map(p => p.comments));
+  const shares = range(list.map(p => p.shares));
+  const reach = range(list.map(p => p.reach));
+  const rate = range(list.map(p => p.engagementRate));
+
+  return list.map(p => ({
+    ...p,
+    score: Math.round(
+      (normalize(p.likes, likes.min, likes.max) * SCORE_WEIGHTS.likes +
+        normalize(p.comments, comments.min, comments.max) * SCORE_WEIGHTS.comments +
+        normalize(p.shares, shares.min, shares.max) * SCORE_WEIGHTS.shares +
+        normalize(p.reach, reach.min, reach.max) * SCORE_WEIGHTS.reach +
+        normalize(p.engagementRate, rate.min, rate.max) * SCORE_WEIGHTS.engagementRate) *
+        10
+    ) / 10,
+  }));
+}
+
+/** All-time performance leaderboard for the dashboard's Performance page —
+ * every published post (capped at 300, a sanity limit far beyond current
+ * volume) ranked by the composite score above rather than a single metric. */
+export async function getPerformanceLeaderboard(limit = 50): Promise<RankedPostPerformance[]> {
+  const rows = await getPostedRows({ limit: 300 });
+  const performance = await buildPostPerformance(rows);
+  const ranked = scorePerformance(performance);
+  ranked.sort((a, b) => b.score - a.score);
+  return ranked.slice(0, limit);
+}
+
+/** The single best-scoring post per platform among posts posted within
+ * [dateFrom, dateTo] — used for the planner's per-platform "best post of the
+ * week" crown. Scored only against others in the same window, not the
+ * all-time set, so "best this week" means best relative to this week rather
+ * than to the account's entire history. */
+export async function getBestPostsInRange(
+  dateFrom: string,
+  dateTo: string
+): Promise<Partial<Record<'linkedin' | 'instagram' | 'facebook', string>>> {
+  const rows = await getPostedRows({ dateFrom, dateTo });
+  const performance = await buildPostPerformance(rows);
+  const ranked = scorePerformance(performance);
+
+  const best: Partial<Record<'linkedin' | 'instagram' | 'facebook', string>> = {};
+  const bestScore: Partial<Record<'linkedin' | 'instagram' | 'facebook', number>> = {};
+  for (const p of ranked) {
+    const currentBest = bestScore[p.platform];
+    if (currentBest === undefined || p.score > currentBest) {
+      bestScore[p.platform] = p.score;
+      best[p.platform] = p.postId;
+    }
+  }
+  return best;
 }
 
 // ─── Refresh status ─────────────────────────────────────────────────────────

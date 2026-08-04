@@ -9,6 +9,7 @@ import {
   MessageSquare,
   Megaphone,
   Hash,
+  Trophy,
   Settings,
   ChevronsLeft,
   ChevronsRight,
@@ -41,6 +42,7 @@ export function Sidebar({ buildVersion }: { buildVersion: string }) {
   const links = [
     { href: '/', label: 'Overview', icon: LayoutDashboard },
     { href: '/planner', label: 'Planner', icon: CalendarDays },
+    { href: '/performance', label: 'Performance', icon: Trophy },
     { href: '/comments', label: 'Comments', icon: MessageSquare },
     { href: '/ads', label: 'Ads', icon: Megaphone },
     { href: '/hashtags', label: 'Hashtags', icon: Hash },

@@ -18,6 +18,7 @@ function addDays(dateStr: string, days: number): string {
 export default function PlannerPage() {
   const [weekStart, setWeekStart] = useState(currentWeekMonday);
   const [posts, setPosts] = useState<MarketingPost[] | null>(null);
+  const [weeklyLeaders, setWeeklyLeaders] = useState<Partial<Record<'linkedin' | 'instagram' | 'facebook', string>>>({});
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<MarketingPost | null>(null);
 
@@ -28,6 +29,7 @@ export default function PlannerPage() {
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? 'Failed to load the plan.');
       setPosts(body.posts ?? []);
+      setWeeklyLeaders(body.weeklyLeaders ?? {});
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load the plan.');
@@ -77,7 +79,14 @@ export default function PlannerPage() {
                     No posts
                   </p>
                 ) : (
-                  dayPosts.map(post => <PostCard key={post.id} post={post} onClick={() => setSelected(post)} />)
+                  dayPosts.map(post => (
+                    <PostCard
+                      key={post.id}
+                      post={post}
+                      isWeeklyLeader={!!post.id && weeklyLeaders[post.platform] === post.id}
+                      onClick={() => setSelected(post)}
+                    />
+                  ))
                 )}
               </div>
             </div>
