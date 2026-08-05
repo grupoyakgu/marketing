@@ -918,7 +918,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
               ? 'No published posts with engagement data found yet.'
               : `Top ${top.length} posts by ${metric}${input.platform ? ` (${input.platform} only)` : ''}:\n${
                   top.map((p, i) =>
-                    `${i + 1}. [${p.platform}] ${p.scheduledDate} ${p.scheduledTime} — "${p.contentPreview}${p.contentPreview.length >= 80 ? '...' : ''}"\n   ID: ${p.postId}\n   Likes: ${p.likes} | Comments: ${p.comments} | Shares: ${p.shares} | Impressions: ${p.impressions} | Reach: ${p.reach} | Engagement rate: ${p.engagementRate.toFixed(2)}%${p.postUrl ? `\n   URL: ${p.postUrl}` : ''}`
+                    `${i + 1}. [${p.platform}] ${p.scheduledDate} ${p.scheduledTime} — "${p.contentPreview}"\n   ID: ${p.postId}\n   Likes: ${p.likes} | Comments: ${p.comments} | Shares: ${p.shares} | Impressions: ${p.impressions} | Reach: ${p.reach} | Engagement rate: ${p.engagementRate.toFixed(2)}%${p.postUrl ? `\n   URL: ${p.postUrl}` : ''}`
                   ).join('\n\n')
                 }`;
           } catch (err) {
