@@ -760,7 +760,9 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
           const input = block.input as { post_id: string };
           try {
             const result = await publishPost(input.post_id);
-            resultContent = result.success ? `Post ${input.post_id} published successfully.` : `Failed: ${result.error}`;
+            resultContent = result.success
+              ? `Post ${input.post_id} published successfully.${result.url ? ` URL: ${result.url}` : ''}`
+              : `Failed: ${result.error}`;
           } catch (err) {
             resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
           }

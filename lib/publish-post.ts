@@ -5,6 +5,7 @@ import { listCloudinaryImages } from './cloudinary';
 
 export interface PublishResult {
   success: boolean;
+  url?: string;
   error?: string;
 }
 
@@ -42,7 +43,7 @@ export async function publishPost(postId: string): Promise<PublishResult> {
 
   if (result?.success) {
     await markPostStatus(post.id!, 'posted', result.url, result.postId);
-    return { success: true };
+    return { success: true, url: result.url };
   }
   const error = result?.error ?? 'Unknown error.';
   // The only other record of a failure is whatever surfaces to the caller
