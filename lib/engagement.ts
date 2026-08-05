@@ -210,13 +210,21 @@ export async function getLinkedInPostEngagement(postUrn: string): Promise<PostEn
   // Best-effort — needs the org's rw_organization_admin analytics access on
   // top of the read scope socialMetadata uses, which this token may not
   // carry. Falls back to 0 rather than failing the whole post.
+  //
+  // `shares[0]=` was never valid syntax for this Rest.li 2.0.0 call (the
+  // X-Restli-Protocol-Version header below) — production logs confirmed
+  // LinkedIn rejecting every single request with "QUERY_PARAM_NOT_ALLOWED"
+  // on fieldPath "shares[0]", so impressions/reach silently fell back to 0
+  // on every post, always, not just when the token lacked analytics access.
+  // Rest.li 2.0 arrays are serialized as `shares=List(...)`, not indexed
+  // bracket params.
   let impressions = 0;
   let reach = 0;
   const orgUrn = linkedInOrgUrn();
   if (orgUrn) {
     try {
       const statsRes = await fetch(
-        `${LINKEDIN_REST_API}/organizationalEntityShareStatistics?q=organizationalEntity&organizationalEntity=${encodeURIComponent(orgUrn)}&shares[0]=${encoded}`,
+        `${LINKEDIN_REST_API}/organizationalEntityShareStatistics?q=organizationalEntity&organizationalEntity=${encodeURIComponent(orgUrn)}&shares=List(${encoded})`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -569,7 +577,7 @@ async function buildPostPerformance(rows: PostedRow[]): Promise<PostPerformance[
         platform: p.platform,
         scheduledDate: p.scheduled_date,
         scheduledTime: p.scheduled_time,
-        contentPreview: p.content.slice(0, 80),
+        contentPreview: p.content.length > 50 ? `${p.content.slice(0, 50)}...` : p.content,
         postUrl: p.post_url ?? undefined,
         likes: e.likes,
         comments: e.comments,
