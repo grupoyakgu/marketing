@@ -575,7 +575,17 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
     );
     console.log(`[marketing-agent] anthropic turn (${Date.now() - turnStartedAt}ms), stop_reason: ${response.stop_reason}`);
 
-    if (response.stop_reason === 'tool_use') {
+    // Gate on the presence of a tool_use block, not on stop_reason === 'tool_use'
+    // — a turn that runs out of max_tokens mid-generation reports stop_reason
+    // 'max_tokens' even when it already emitted one or more *complete*
+    // tool_use blocks earlier in the same response (Anthropic only ever
+    // returns fully-formed content blocks; one still mid-generation at
+    // truncation is simply omitted, never returned malformed). Gating on the
+    // exact stop_reason would silently discard an already-completed action
+    // (e.g. a successful post_to_linkedin) just because a later, unrelated
+    // block in the same turn ran out of room.
+    const hasToolUse = response.content.some(b => b.type === 'tool_use');
+    if (hasToolUse) {
       history.push({ role: 'assistant', content: response.content });
       await saveMessage(chatId, BOT_NAME, 'assistant', response.content);
       const toolResults: Anthropic.ToolResultBlockParam[] = [];
