@@ -204,7 +204,20 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
     );
     console.log(`[dev-agent] anthropic turn (${Date.now() - turnStartedAt}ms), stop_reason: ${response.stop_reason}`);
 
-    if (response.stop_reason === 'tool_use') {
+    // Gate on the presence of a tool_use block, not on stop_reason === 'tool_use'.
+    // A turn that runs out of max_tokens mid-generation reports stop_reason
+    // 'max_tokens' even when it had already emitted one or more *complete*
+    // tool_use blocks earlier in the same response (Anthropic only ever
+    // returns fully-formed content blocks — a block still being generated at
+    // truncation is simply omitted, never returned malformed). Gating on the
+    // exact stop_reason meant a completed write_file/create_pull_request
+    // sitting right there in response.content got silently discarded because
+    // a later, unrelated block in the same turn ran out of room — seen in
+    // production: Santi created a branch, then a 120s turn hit max_tokens
+    // while writing the files, and whatever it had already finished writing
+    // was thrown away instead of applied.
+    const hasToolUse = response.content.some(b => b.type === 'tool_use');
+    if (hasToolUse) {
       history.push({ role: 'assistant', content: response.content });
       await saveMessage(chatId, BOT_NAME, 'assistant', response.content);
       const toolResults: Anthropic.ToolResultBlockParam[] = [];
