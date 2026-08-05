@@ -557,21 +557,34 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
 
   while (true) {
     const turnStartedAt = Date.now();
-    const response = await client.messages.create(
-      {
-        model: 'claude-sonnet-4-6',
-        max_tokens: 8192,
-        system: buildSystemPrompt(),
-        tools,
-        messages: history,
-      },
-      // Production logs showed repeated "Request timed out" failures
-      // specifically on heavy generations (e.g. drafting a full 5-post
-      // weekly plan) — a single turn occasionally runs past 60s, well
-      // within the /api/telegram route's own 300s budget. Raised so a turn
-      // that's merely slow doesn't get killed client-side before the route
-      // itself would ever time out.
-      { timeout: 120_000 }
+    // Wrapped like every tool call below, for the same SIGKILL-avoidance
+    // reason: the SDK's default maxRetries (2) means an unwrapped call can
+    // silently retry for timeout*(1+maxRetries) = 360s+ before ever
+    // rejecting — past this route's 300s maxDuration, so Vercel kills the
+    // whole function with nothing logged and no reply ever sent, instead of
+    // the call throwing in time for the route's own try/catch to tell the
+    // user something went wrong. (Confirmed happening on Santi's identical
+    // unwrapped call in lib/dev-agent.ts — same risk here, just not yet
+    // observed on this route.)
+    const response = await withTimeout(
+      client.messages.create(
+        {
+          model: 'claude-sonnet-4-6',
+          max_tokens: 8192,
+          system: buildSystemPrompt(),
+          tools,
+          messages: history,
+        },
+        // Production logs showed repeated "Request timed out" failures
+        // specifically on heavy generations (e.g. drafting a full 5-post
+        // weekly plan) — a single turn occasionally runs past 60s, well
+        // within the /api/telegram route's own 300s budget. Raised so a turn
+        // that's merely slow doesn't get killed client-side before the route
+        // itself would ever time out.
+        { timeout: 120_000, maxRetries: 1 }
+      ),
+      150_000,
+      'anthropic messages.create'
     );
     console.log(`[marketing-agent] anthropic turn (${Date.now() - turnStartedAt}ms), stop_reason: ${response.stop_reason}`);
 

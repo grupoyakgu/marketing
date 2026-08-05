@@ -192,15 +192,28 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
 
   while (true) {
     const turnStartedAt = Date.now();
-    const response = await client.messages.create(
-      {
-        model: 'claude-sonnet-4-6',
-        max_tokens: 8192,
-        system: buildSystemPrompt(),
-        tools,
-        messages: history,
-      },
-      { timeout: 120_000 }
+    // Wrapped like every tool call below, for the same reason: the SDK's
+    // default maxRetries (2) means an unwrapped call can silently retry for
+    // timeout*(1+maxRetries) = 360s+ before ever rejecting — comfortably
+    // past this route's 300s maxDuration, so Vercel SIGKILLs the whole
+    // function with nothing logged and no reply ever sent, instead of the
+    // request throwing in time for the route's own try/catch to at least
+    // tell the user something went wrong. Seen in production: Santi created
+    // a branch, then went silent for the rest of the 300s window and the
+    // function was hard-killed with a 504.
+    const response = await withTimeout(
+      client.messages.create(
+        {
+          model: 'claude-sonnet-4-6',
+          max_tokens: 8192,
+          system: buildSystemPrompt(),
+          tools,
+          messages: history,
+        },
+        { timeout: 120_000, maxRetries: 1 }
+      ),
+      150_000,
+      'anthropic messages.create'
     );
     console.log(`[dev-agent] anthropic turn (${Date.now() - turnStartedAt}ms), stop_reason: ${response.stop_reason}`);
 
