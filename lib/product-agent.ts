@@ -146,13 +146,26 @@ export async function chat(chatId: number, userMessage: string, senderId?: numbe
     const turnStartedAt = Date.now();
     // Wrapped like every tool call below, for the same SIGKILL-avoidance
     // reason: the SDK's default maxRetries (2) means an unwrapped call can
-    // silently retry for timeout*(1+maxRetries) = 360s+ before ever
-    // rejecting — past this route's 300s maxDuration, so Vercel kills the
-    // whole function with nothing logged and no reply ever sent, instead of
-    // the call throwing in time for the route's own try/catch to tell the
-    // user something went wrong. (Confirmed happening on Santi's identical
-    // unwrapped call in lib/dev-agent.ts — same risk here, just not yet
-    // observed on this route.)
+    // silently retry for timeout*(1+maxRetries) before ever rejecting —
+    // past this route's 300s maxDuration, so Vercel kills the whole
+    // function with nothing logged and no reply ever sent, instead of the
+    // call throwing in time for the route's own try/catch to tell the user
+    // something went wrong.
+    //
+    // Both the per-attempt SDK timeout and this outer ceiling need to be
+    // long enough for a single heavy-generation turn to actually finish —
+    // confirmed on Santi's identical call in lib/dev-agent.ts: a turn
+    // composing a lot of real output legitimately ran past the original
+    // 120s/150s pair and got cut off mid-generation even though nothing was
+    // stuck. The outer ceiling stays comfortably below this route's 300s
+    // maxDuration so a *genuinely* hung call still fails fast enough for
+    // the route to reply instead of going silent. Note this is Angeles's
+    // own turn loop, separate from the 180s TOOL_TIMEOUT_MS wrapping her
+    // whole delegate_to_santi call below — a single Santi turn nested
+    // inside that call can now legitimately want close to this same 220s,
+    // which is *more* than that 180s outer budget allows, so delegating
+    // through Angeles remains more time-constrained than messaging Santi
+    // directly.
     const response = await withTimeout(
       client.messages.create(
         {
@@ -162,9 +175,9 @@ export async function chat(chatId: number, userMessage: string, senderId?: numbe
           tools,
           messages: history,
         },
-        { timeout: 120_000, maxRetries: 1 }
+        { timeout: 200_000, maxRetries: 1 }
       ),
-      150_000,
+      220_000,
       'anthropic messages.create'
     );
     console.log(`[product-agent] anthropic turn (${Date.now() - turnStartedAt}ms), stop_reason: ${response.stop_reason}`);

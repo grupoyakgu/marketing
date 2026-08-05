@@ -51,6 +51,7 @@ This codebase already has its own working conventions (see \`CLAUDE.md\` in the 
 1. Read before you write. Use \`read_file\`/\`list_directory\`/\`search_code\` to actually look at the relevant code first — don't guess at a file's contents or assume how something is wired up.
 2. Make the smallest change that correctly fixes the actual problem. Don't refactor unrelated things while you're in there.
 3. To ship a change: \`create_branch\`, \`write_file\` for each file you're changing (one call per file, with a clear commit message), then \`create_pull_request\`. Once you're confident it's correct, \`merge_pull_request\` it yourself — you don't need to ask permission first, that's the point of you having this access. Only hold off on merging if something about the change is genuinely uncertain (e.g. you couldn't verify a related piece of the system, or the fix depends on information you don't have) — say so and explain what you'd need to be sure.
+3a. When a change touches multiple files, or one file needs a lot of new code, don't compose it all in one turn — call \`write_file\` for a single file, let that turn finish, then continue with the next one. Composing several large files' worth of content plus your reasoning in a single response makes that one turn slow enough to risk timing out before it ever reaches you as a tool call — pacing one substantial file per turn keeps each turn fast and means partial progress is never lost even if something interrupts a later step.
 4. You can't run the app or run tests directly — there's no CI configured on this repo — but you can check what actually happened in production with \`list_deployments\`/\`get_deployment_logs\`: build failures, runtime errors, console output. Use these before guessing at what production is doing whenever a bug report is vague — check the actual logs first, then read the code.
 5. \`search_code\` uses GitHub's code search index, which lags a few minutes behind pushes — if you just merged something, don't trust a search that contradicts what you just wrote; re-read the file directly instead.
 6. Always report back what you actually did (files changed, PR number/link, merged or not) and why — not a vague "done".
@@ -194,13 +195,22 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
     const turnStartedAt = Date.now();
     // Wrapped like every tool call below, for the same reason: the SDK's
     // default maxRetries (2) means an unwrapped call can silently retry for
-    // timeout*(1+maxRetries) = 360s+ before ever rejecting — comfortably
-    // past this route's 300s maxDuration, so Vercel SIGKILLs the whole
-    // function with nothing logged and no reply ever sent, instead of the
-    // request throwing in time for the route's own try/catch to at least
-    // tell the user something went wrong. Seen in production: Santi created
-    // a branch, then went silent for the rest of the 300s window and the
+    // timeout*(1+maxRetries) before ever rejecting — comfortably past this
+    // route's 300s maxDuration, so Vercel SIGKILLs the whole function with
+    // nothing logged and no reply ever sent, instead of the request
+    // throwing in time for the route's own try/catch to at least tell the
+    // user something went wrong. Seen in production: Santi created a
+    // branch, then went silent for the rest of the 300s window and the
     // function was hard-killed with a 504.
+    //
+    // Both the per-attempt SDK timeout and this outer ceiling need to be
+    // long enough for a single turn that writes a large file (or several)
+    // to actually finish generating — also seen in production: a turn
+    // composing real code for multiple files legitimately ran past the
+    // original 120s/150s pair and got cut off mid-generation, twice, even
+    // though nothing was stuck. The outer ceiling stays comfortably below
+    // this route's 300s maxDuration so a *genuinely* hung call still fails
+    // fast enough for the route to reply instead of going silent.
     const response = await withTimeout(
       client.messages.create(
         {
@@ -210,9 +220,9 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
           tools,
           messages: history,
         },
-        { timeout: 120_000, maxRetries: 1 }
+        { timeout: 200_000, maxRetries: 1 }
       ),
-      150_000,
+      220_000,
       'anthropic messages.create'
     );
     console.log(`[dev-agent] anthropic turn (${Date.now() - turnStartedAt}ms), stop_reason: ${response.stop_reason}`);
