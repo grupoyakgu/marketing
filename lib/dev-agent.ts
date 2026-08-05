@@ -284,9 +284,21 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
             }
 
             if (block.name === 'write_file') {
-              const input = block.input as { branch: string; path: string; content: string; message: string };
-              await writeFile(input.branch, input.path, input.content, input.message);
-              resultContent = `Wrote ${input.path} on branch "${input.branch}".`;
+              const input = block.input as { branch: string; path: string; content?: string; message: string };
+              // Seen in production, twice in a row on the same large file:
+              // the model can emit a structurally complete write_file call
+              // that simply omits `content`. Unguarded, that reached
+              // Buffer.from(undefined) and surfaced as a low-level Node
+              // type error with no hint what was actually wrong, so the
+              // model repeated the identical mistake on retry instead of
+              // correcting it. Failing clearly here — before ever touching
+              // GitHub — gives it something to actually act on.
+              if (!input.content) {
+                resultContent = `Failed: this write_file call for "${input.path}" had no content. You must include the complete new file content in this exact call — retry it with content set.`;
+              } else {
+                await writeFile(input.branch, input.path, input.content, input.message);
+                resultContent = `Wrote ${input.path} on branch "${input.branch}".`;
+              }
             }
 
             if (block.name === 'create_pull_request') {
