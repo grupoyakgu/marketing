@@ -51,7 +51,7 @@ This codebase already has its own working conventions (see \`CLAUDE.md\` in the 
 1. Read before you write. Use \`read_file\`/\`list_directory\`/\`search_code\` to actually look at the relevant code first — don't guess at a file's contents or assume how something is wired up.
 2. Make the smallest change that correctly fixes the actual problem. Don't refactor unrelated things while you're in there.
 3. To ship a change: \`create_branch\`, \`write_file\` for each file you're changing (one call per file, with a clear commit message), then \`create_pull_request\`. Once you're confident it's correct, \`merge_pull_request\` it yourself — you don't need to ask permission first, that's the point of you having this access. Only hold off on merging if something about the change is genuinely uncertain (e.g. you couldn't verify a related piece of the system, or the fix depends on information you don't have) — say so and explain what you'd need to be sure.
-3a. When a change touches multiple files, or one file needs a lot of new code, don't compose it all in one turn — call \`write_file\` for a single file, let that turn finish, then continue with the next one. Composing several large files' worth of content plus your reasoning in a single response makes that one turn slow enough to risk timing out before it ever reaches you as a tool call — pacing one substantial file per turn keeps each turn fast and means partial progress is never lost even if something interrupts a later step.
+3a. When a change touches multiple files, or one file needs a lot of new code, don't compose it all in one turn — call \`write_file\` for a single file, let that turn finish, then continue with the next one. Composing several large files' worth of content plus your reasoning in a single response makes that one turn slow enough to risk timing out before it ever reaches you as a tool call — pacing one substantial file per turn keeps each turn fast and means partial progress is never lost even if something interrupts a later step. When the files you're touching are very different sizes, write the smaller ones first — that way if the largest file's write ever fails or runs out of room, the easier files are already safely committed instead of everything riding on the hardest one going first.
 4. You can't run the app or run tests directly — there's no CI configured on this repo — but you can check what actually happened in production with \`list_deployments\`/\`get_deployment_logs\`: build failures, runtime errors, console output. Use these before guessing at what production is doing whenever a bug report is vague — check the actual logs first, then read the code.
 5. \`search_code\` uses GitHub's code search index, which lags a few minutes behind pushes — if you just merged something, don't trust a search that contradicts what you just wrote; re-read the file directly instead.
 6. Always report back what you actually did (files changed, PR number/link, merged or not) and why — not a vague "done".
@@ -211,18 +211,25 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
     // though nothing was stuck. The outer ceiling stays comfortably below
     // this route's 300s maxDuration so a *genuinely* hung call still fails
     // fast enough for the route to reply instead of going silent.
+    //
+    // max_tokens confirmed the same way: two consecutive production turns
+    // writing lib/engagement.ts (one of the largest files in this repo)
+    // logged stop_reason: max_tokens at ~120s each, and the write_file call
+    // that made it through both times was missing its `content` entirely —
+    // generation ran out of room reproducing the full file before ever
+    // getting to that field. Raised well past what that file needed.
     const response = await withTimeout(
       client.messages.create(
         {
           model: 'claude-sonnet-4-6',
-          max_tokens: 8192,
+          max_tokens: 16000,
           system: buildSystemPrompt(),
           tools,
           messages: history,
         },
-        { timeout: 200_000, maxRetries: 1 }
+        { timeout: 250_000, maxRetries: 1 }
       ),
-      220_000,
+      270_000,
       'anthropic messages.create'
     );
     console.log(`[dev-agent] anthropic turn (${Date.now() - turnStartedAt}ms), stop_reason: ${response.stop_reason}`);
