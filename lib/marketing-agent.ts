@@ -559,13 +559,20 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
     const turnStartedAt = Date.now();
     // Wrapped like every tool call below, for the same SIGKILL-avoidance
     // reason: the SDK's default maxRetries (2) means an unwrapped call can
-    // silently retry for timeout*(1+maxRetries) = 360s+ before ever
-    // rejecting — past this route's 300s maxDuration, so Vercel kills the
-    // whole function with nothing logged and no reply ever sent, instead of
-    // the call throwing in time for the route's own try/catch to tell the
-    // user something went wrong. (Confirmed happening on Santi's identical
-    // unwrapped call in lib/dev-agent.ts — same risk here, just not yet
-    // observed on this route.)
+    // silently retry for timeout*(1+maxRetries) before ever rejecting —
+    // past this route's 300s maxDuration, so Vercel kills the whole
+    // function with nothing logged and no reply ever sent, instead of the
+    // call throwing in time for the route's own try/catch to tell the user
+    // something went wrong.
+    //
+    // Both the per-attempt SDK timeout and this outer ceiling need to be
+    // long enough for a single heavy-generation turn to actually finish —
+    // confirmed on Santi's identical call in lib/dev-agent.ts: a turn
+    // composing a lot of real output legitimately ran past the original
+    // 120s/150s pair and got cut off mid-generation even though nothing was
+    // stuck. The outer ceiling stays comfortably below this route's 300s
+    // maxDuration so a *genuinely* hung call still fails fast enough for
+    // the route to reply instead of going silent.
     const response = await withTimeout(
       client.messages.create(
         {
@@ -575,15 +582,9 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
           tools,
           messages: history,
         },
-        // Production logs showed repeated "Request timed out" failures
-        // specifically on heavy generations (e.g. drafting a full 5-post
-        // weekly plan) — a single turn occasionally runs past 60s, well
-        // within the /api/telegram route's own 300s budget. Raised so a turn
-        // that's merely slow doesn't get killed client-side before the route
-        // itself would ever time out.
-        { timeout: 120_000, maxRetries: 1 }
+        { timeout: 200_000, maxRetries: 1 }
       ),
-      150_000,
+      220_000,
       'anthropic messages.create'
     );
     console.log(`[marketing-agent] anthropic turn (${Date.now() - turnStartedAt}ms), stop_reason: ${response.stop_reason}`);
