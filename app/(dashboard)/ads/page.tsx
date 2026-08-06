@@ -32,6 +32,10 @@ function engagementTotal(a: ActionTotals): number {
   return a.likes + a.comments + a.shares + a.saves;
 }
 
+function isNoDelivery(c: CampaignRow): boolean {
+  return c.status === 'ACTIVE' && c.windowImpressions === 0 && c.windowSpend === 0;
+}
+
 type Preset = 'today' | '7d' | '30d' | 'month' | 'custom';
 
 function isoDate(d: Date): string {
@@ -90,6 +94,7 @@ export default function AdsPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeOnly, setActiveOnly] = useState(false);
+  const [showNoDelivery, setShowNoDelivery] = useState(false);
 
   useEffect(() => {
     fetch('/api/dashboard/ads/accounts')
@@ -166,6 +171,12 @@ export default function AdsPage() {
     if (accounts !== null) load();
   }, [load, accounts]);
 
+  // Reset the no-delivery reveal whenever the data reloads so stale reveals
+  // don't carry over to a different date range.
+  useEffect(() => {
+    setShowNoDelivery(false);
+  }, [platform, range, accountId]);
+
   function handlePreset(p: Preset) {
     setPreset(p);
     if (p !== 'custom') setRange(presetRange(p));
@@ -186,9 +197,19 @@ export default function AdsPage() {
 
   // "Active only" hides paused campaigns with zero activity in the window.
   // Paused campaigns that had actual delivery are kept.
-  const visibleCampaigns = activeOnly
+  // No-delivery campaigns (ACTIVE but 0 spend + 0 impressions) are hidden by
+  // default and only shown when the user explicitly reveals them.
+  const afterActiveFilter = activeOnly
     ? (campaigns ?? []).filter(c => c.status === 'ACTIVE' || c.windowSpend > 0 || c.windowImpressions > 0)
     : (campaigns ?? []);
+
+  const hiddenNoDeliveryCount = showNoDelivery
+    ? 0
+    : afterActiveFilter.filter(isNoDelivery).length;
+
+  const visibleCampaigns = showNoDelivery
+    ? afterActiveFilter
+    : afterActiveFilter.filter(c => !isNoDelivery(c));
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -359,61 +380,81 @@ export default function AdsPage() {
           <div className="space-y-3">
             {campaigns === null ? (
               <p className="text-sm text-neutral-400">Loading campaigns…</p>
-            ) : visibleCampaigns.length === 0 ? (
+            ) : visibleCampaigns.length === 0 && hiddenNoDeliveryCount === 0 ? (
               <Card>
                 <p className="text-sm text-neutral-400">No campaigns match this filter.</p>
               </Card>
             ) : (
-              visibleCampaigns.map(c => (
-                <Card
-                  key={c.id}
-                  className="cursor-pointer transition hover:border-neutral-300 dark:hover:border-neutral-700"
-                  onClick={() => setSelectedId(c.id)}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <div className="mb-1 flex items-center gap-1.5">
-                        {c.platformBreakdown.map(p => (
-                          <PlatformBadge key={p.platform} platform={p.platform} />
-                        ))}
-                        <Badge tone={c.status === 'ACTIVE' ? 'positive' : 'neutral'}>{c.status}</Badge>
-                      </div>
-                      <p className="truncate text-sm font-medium text-neutral-900 dark:text-white">{c.name}</p>
-                      <p className="text-xs text-neutral-400">
-                        {formatDate(c.startTime)} – {c.endTime ? formatDate(c.endTime) : 'ongoing'}
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-500 dark:text-neutral-400">
-                        <span className="inline-flex items-center gap-1">
-                          <Eye className="h-3 w-3" /> {c.windowImpressions.toLocaleString()} impressions
-                        </span>
-                        <span className="inline-flex items-center gap-1">
-                          <MousePointerClick className="h-3 w-3" /> {c.windowActions.linkClicks.toLocaleString()} clicks
-                        </span>
-                        <span className="inline-flex items-center gap-1">
-                          <Sparkles className="h-3 w-3" /> {engagementTotal(c.windowActions).toLocaleString()} engagement
-                        </span>
-                      </div>
-                      {c.status === 'ACTIVE' && c.windowImpressions === 0 && c.windowSpend === 0 && (
-                        <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-                          Active but no spend or impressions in this period — verify the campaign is set up correctly in Meta.
+              <>
+                {visibleCampaigns.map(c => (
+                  <Card
+                    key={c.id}
+                    className="cursor-pointer transition hover:border-neutral-300 dark:hover:border-neutral-700"
+                    onClick={() => setSelectedId(c.id)}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="mb-1 flex items-center gap-1.5">
+                          {c.platformBreakdown.map(p => (
+                            <PlatformBadge key={p.platform} platform={p.platform} />
+                          ))}
+                          <Badge tone={c.status === 'ACTIVE' ? 'positive' : 'neutral'}>{c.status}</Badge>
+                        </div>
+                        <p className="truncate text-sm font-medium text-neutral-900 dark:text-white">{c.name}</p>
+                        <p className="text-xs text-neutral-400">
+                          {formatDate(c.startTime)} – {c.endTime ? formatDate(c.endTime) : 'ongoing'}
                         </p>
-                      )}
+                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-500 dark:text-neutral-400">
+                          <span className="inline-flex items-center gap-1">
+                            <Eye className="h-3 w-3" /> {c.windowImpressions.toLocaleString()} impressions
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <MousePointerClick className="h-3 w-3" /> {c.windowActions.linkClicks.toLocaleString()} clicks
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <Sparkles className="h-3 w-3" /> {engagementTotal(c.windowActions).toLocaleString()} engagement
+                          </span>
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-sm font-semibold text-neutral-900 dark:text-white">
+                          {formatMoney(c.windowSpend, currency)}
+                        </p>
+                        <p className="text-xs text-neutral-400">
+                          {c.dailyBudget !== null
+                            ? `${formatMoney(c.dailyBudget, currency)}/day`
+                            : c.lifetimeBudget !== null
+                              ? `${formatMoney(c.lifetimeBudget, currency)} total`
+                              : 'no budget cap'}
+                        </p>
+                      </div>
                     </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-sm font-semibold text-neutral-900 dark:text-white">
-                        {formatMoney(c.windowSpend, currency)}
-                      </p>
-                      <p className="text-xs text-neutral-400">
-                        {c.dailyBudget !== null
-                          ? `${formatMoney(c.dailyBudget, currency)}/day`
-                          : c.lifetimeBudget !== null
-                            ? `${formatMoney(c.lifetimeBudget, currency)} total`
-                            : 'no budget cap'}
-                      </p>
-                    </div>
-                  </div>
-                </Card>
-              ))
+                  </Card>
+                ))}
+
+                {hiddenNoDeliveryCount > 0 && (
+                  <p className="text-right text-xs text-neutral-400 dark:text-neutral-500">
+                    {hiddenNoDeliveryCount} active campaign{hiddenNoDeliveryCount !== 1 ? 's' : ''} with no delivery hidden —{' '}
+                    <button
+                      onClick={() => setShowNoDelivery(true)}
+                      className="underline hover:text-neutral-600 dark:hover:text-neutral-300"
+                    >
+                      show
+                    </button>
+                  </p>
+                )}
+
+                {showNoDelivery && visibleCampaigns.some(isNoDelivery) && (
+                  <p className="text-right text-xs text-neutral-400 dark:text-neutral-500">
+                    <button
+                      onClick={() => setShowNoDelivery(false)}
+                      className="underline hover:text-neutral-600 dark:hover:text-neutral-300"
+                    >
+                      Hide campaigns with no delivery
+                    </button>
+                  </p>
+                )}
+              </>
             )}
           </div>
         </>
