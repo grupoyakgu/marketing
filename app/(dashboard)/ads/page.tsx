@@ -346,7 +346,7 @@ export default function AdsPage() {
             <KpiCard label="Impressions" value={totals.impressions} icon={Eye} />
             <KpiCard label="Reach" value={totals.reach} icon={TrendingUp} />
             <KpiCard label="Total likes" value={totalActions?.likes ?? 0} icon={Heart} />
-            <KpiCard label="Daily budget cap" value={formatMoney(totals.dailyBudget, currency)} icon={Calendar} />
+            <KpiCard label="Daily Cap" value={formatMoney(totals.dailyBudget, currency)} icon={Calendar} />
             <KpiCard label="Active campaigns" value={totals.active} icon={Megaphone} />
           </section>
 
