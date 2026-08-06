@@ -577,7 +577,7 @@ async function buildPostPerformance(rows: PostedRow[]): Promise<PostPerformance[
         platform: p.platform,
         scheduledDate: p.scheduled_date,
         scheduledTime: p.scheduled_time,
-        contentPreview: p.content.length > 50 ? `${p.content.slice(0, 50)}...` : p.content,
+        contentPreview: p.content.length > 120 ? `${p.content.slice(0, 120)}...` : p.content,
         postUrl: p.post_url ?? undefined,
         likes: e.likes,
         comments: e.comments,
@@ -657,13 +657,16 @@ function scorePerformance<T extends Pick<PostPerformance, 'likes' | 'comments' |
 
 /** All-time performance leaderboard for the dashboard's Performance page —
  * every published post (capped at 300, a sanity limit far beyond current
- * volume) ranked by the composite score above rather than a single metric. */
-export async function getPerformanceLeaderboard(limit = 50): Promise<RankedPostPerformance[]> {
+ * volume) ranked by the composite score above rather than a single metric.
+ * Returns both the paginated slice and the total scored count so the UI can
+ * display "Showing X of Y posts". */
+export async function getPerformanceLeaderboard(limit = 50): Promise<{ posts: RankedPostPerformance[]; total: number }> {
   const rows = await getPostedRows({ limit: 300 });
   const performance = await buildPostPerformance(rows);
   const ranked = scorePerformance(performance);
   ranked.sort((a, b) => b.score - a.score);
-  return ranked.slice(0, limit);
+  const total = ranked.length;
+  return { posts: ranked.slice(0, limit), total };
 }
 
 /** The single best-scoring post per platform among posts posted within
