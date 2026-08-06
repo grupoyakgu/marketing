@@ -69,6 +69,19 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   });
 }
 
+// String.substring() cuts by UTF-16 code unit, which can land inside a
+// surrogate pair (any emoji, routine in these Spanish social posts) and
+// leave a dangling lone surrogate — invalid JSON once this round-trips
+// through a tool_result into a later Anthropic API request. Confirmed in
+// production on an identical truncation in lib/engagement.ts: "The request
+// body is not valid JSON: no low surrogate in string", which broke the
+// whole conversation with no way to recover mid-turn. Array.from() splits
+// by Unicode code point instead, so a surrogate pair always stays intact.
+function truncateSafely(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text;
+  return `${Array.from(text).slice(0, maxLen).join('')}...`;
+}
+
 // Shared by get_weekly_plan and get_plan_by_date — both list plan posts the
 // same way, just scoped differently (a Monday-aligned week vs. an arbitrary
 // date/range).
@@ -915,7 +928,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
               resultContent = 'One or both post IDs were not found.';
             } else {
               const describe = async (post: MarketingPost): Promise<string> => {
-                const label = `[${post.platform}] ${post.scheduled_date} ${post.scheduled_time} — "${post.content.substring(0, 60)}..."`;
+                const label = `[${post.platform}] ${post.scheduled_date} ${post.scheduled_time} — "${truncateSafely(post.content, 60)}"`;
                 if (post.status !== 'posted' || !post.platform_post_id) {
                   return `${label}\n  Not posted yet — no engagement data.`;
                 }
