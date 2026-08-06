@@ -5,7 +5,7 @@ import { PerformanceTable } from '@/components/performance/PerformanceTable';
 export const dynamic = 'force-dynamic';
 
 export default async function PerformancePage() {
-  const leaderboard = await getPerformanceLeaderboard(50);
+  const { posts, total } = await getPerformanceLeaderboard(300);
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -18,7 +18,7 @@ export default async function PerformancePage() {
       </div>
 
       <Card className="p-0">
-        <PerformanceTable posts={leaderboard} />
+        <PerformanceTable posts={posts} total={total} />
       </Card>
     </div>
   );
