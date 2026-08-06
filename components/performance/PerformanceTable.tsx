@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Trophy, ExternalLink, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { Trophy, ExternalLink, ArrowUp, ArrowDown, ArrowUpDown, Info } from 'lucide-react';
 import { PlatformBadge } from '@/components/ui/PlatformBadge';
 import { cn } from '@/lib/cn';
 import type { RankedPostPerformance } from '@/lib/engagement';
@@ -18,11 +18,14 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'score', label: 'Score' },
 ];
 
+const SCORE_TOOLTIP =
+  'Score = min-max normalized composite: Comments 25%, Likes 20%, Shares 20%, Eng. rate 20%, Reach 15%. Impressions excluded (unavailable for Facebook).';
+
 function formatDate(dateStr: string): string {
   return new Date(dateStr + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
-export function PerformanceTable({ posts }: { posts: RankedPostPerformance[] }) {
+export function PerformanceTable({ posts, total }: { posts: RankedPostPerformance[]; total: number }) {
   const [sortKey, setSortKey] = useState<SortKey>('score');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
@@ -51,6 +54,11 @@ export function PerformanceTable({ posts }: { posts: RankedPostPerformance[] }) 
 
   return (
     <div className="overflow-x-auto">
+      <div className="flex justify-end px-4 pt-3">
+        <span className="text-xs text-neutral-400 dark:text-neutral-500">
+          Showing {sorted.length} of {total} posts
+        </span>
+      </div>
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="border-b border-neutral-200 text-xs uppercase tracking-wide text-neutral-400 dark:border-neutral-800">
@@ -63,7 +71,16 @@ export function PerformanceTable({ posts }: { posts: RankedPostPerformance[] }) 
                   onClick={() => handleSort(col.key)}
                   className="inline-flex flex-row-reverse items-center gap-1 hover:text-neutral-600 dark:hover:text-neutral-300"
                 >
-                  {col.label}
+                  {col.key === 'score' ? (
+                    <span className="inline-flex items-center gap-1">
+                      {col.label}
+                      <span title={SCORE_TOOLTIP}>
+                        <Info className="h-3 w-3 text-neutral-400" />
+                      </span>
+                    </span>
+                  ) : (
+                    col.label
+                  )}
                   {sortKey === col.key ? (
                     sortDir === 'desc' ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />
                   ) : (
@@ -103,7 +120,7 @@ export function PerformanceTable({ posts }: { posts: RankedPostPerformance[] }) 
                     </a>
                   )}
                 </div>
-                <p className={cn('mt-1 truncate text-xs text-neutral-600 dark:text-neutral-300')}>{p.contentPreview}</p>
+                <p className={cn('mt-1 line-clamp-2 text-xs text-neutral-600 dark:text-neutral-300')}>{p.contentPreview}</p>
               </td>
               <td className="px-2 py-3 text-right align-top tabular-nums text-neutral-700 dark:text-neutral-300">{p.likes}</td>
               <td className="px-2 py-3 text-right align-top tabular-nums text-neutral-700 dark:text-neutral-300">{p.comments}</td>
