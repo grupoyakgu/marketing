@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Megaphone, Wallet, TrendingUp, Eye, Calendar, Landmark, Pencil, Heart, MousePointerClick, Sparkles } from 'lucide-react';
+import { Megaphone, Wallet, TrendingUp, Eye, Calendar, Landmark, Pencil, Heart, MousePointerClick, Sparkles, ListFilter } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { PlatformBadge } from '@/components/ui/PlatformBadge';
@@ -89,6 +89,7 @@ export default function AdsPage() {
   const [metric, setMetric] = useState<MetricKey>('spend');
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [activeOnly, setActiveOnly] = useState(false);
 
   useEffect(() => {
     fetch('/api/dashboard/ads/accounts')
@@ -170,6 +171,7 @@ export default function AdsPage() {
     if (p !== 'custom') setRange(presetRange(p));
   }
 
+  // KPI totals always computed from the full unfiltered campaigns list.
   const totals = (campaigns ?? []).reduce(
     (acc, c) => ({
       spend: acc.spend + c.windowSpend,
@@ -181,6 +183,12 @@ export default function AdsPage() {
     }),
     { spend: 0, impressions: 0, reach: 0, dailyBudget: 0, lifetimeBudget: 0, active: 0 }
   );
+
+  // "Active only" hides paused campaigns with zero activity in the window.
+  // Paused campaigns that had actual delivery are kept.
+  const visibleCampaigns = activeOnly
+    ? (campaigns ?? []).filter(c => c.status === 'ACTIVE' || c.windowSpend > 0 || c.windowImpressions > 0)
+    : (campaigns ?? []);
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -255,6 +263,19 @@ export default function AdsPage() {
               </div>
             </div>
 
+            <button
+              onClick={() => setActiveOnly(v => !v)}
+              className={cn(
+                'flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition',
+                activeOnly
+                  ? 'bg-white text-neutral-900 shadow-sm dark:bg-neutral-700 dark:text-white'
+                  : 'text-neutral-500 dark:text-neutral-400'
+              )}
+            >
+              <ListFilter className="h-3.5 w-3.5" />
+              Active only
+            </button>
+
             <div className="flex items-center gap-2">
               <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
                 <Calendar className="mr-1 inline h-3.5 w-3.5" />
@@ -304,7 +325,7 @@ export default function AdsPage() {
             <KpiCard label="Impressions" value={totals.impressions} icon={Eye} />
             <KpiCard label="Reach" value={totals.reach} icon={TrendingUp} />
             <KpiCard label="Total likes" value={totalActions?.likes ?? 0} icon={Heart} />
-            <KpiCard label="Daily budgets" value={formatMoney(totals.dailyBudget, currency)} icon={Calendar} />
+            <KpiCard label="Daily budget cap" value={formatMoney(totals.dailyBudget, currency)} icon={Calendar} />
             <KpiCard label="Active campaigns" value={totals.active} icon={Megaphone} />
           </section>
 
@@ -338,12 +359,12 @@ export default function AdsPage() {
           <div className="space-y-3">
             {campaigns === null ? (
               <p className="text-sm text-neutral-400">Loading campaigns…</p>
-            ) : campaigns.length === 0 ? (
+            ) : visibleCampaigns.length === 0 ? (
               <Card>
                 <p className="text-sm text-neutral-400">No campaigns match this filter.</p>
               </Card>
             ) : (
-              campaigns.map(c => (
+              visibleCampaigns.map(c => (
                 <Card
                   key={c.id}
                   className="cursor-pointer transition hover:border-neutral-300 dark:hover:border-neutral-700"
@@ -352,11 +373,9 @@ export default function AdsPage() {
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
                       <div className="mb-1 flex items-center gap-1.5">
-                        {c.platformBreakdown.length > 0 ? (
-                          c.platformBreakdown.map(p => <PlatformBadge key={p.platform} platform={p.platform} />)
-                        ) : (
-                          <span className="text-xs text-neutral-400">No delivery in range</span>
-                        )}
+                        {c.platformBreakdown.map(p => (
+                          <PlatformBadge key={p.platform} platform={p.platform} />
+                        ))}
                         <Badge tone={c.status === 'ACTIVE' ? 'positive' : 'neutral'}>{c.status}</Badge>
                       </div>
                       <p className="truncate text-sm font-medium text-neutral-900 dark:text-white">{c.name}</p>
@@ -374,6 +393,11 @@ export default function AdsPage() {
                           <Sparkles className="h-3 w-3" /> {engagementTotal(c.windowActions).toLocaleString()} engagement
                         </span>
                       </div>
+                      {c.status === 'ACTIVE' && c.windowImpressions === 0 && c.windowSpend === 0 && (
+                        <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                          Active but no spend or impressions in this period — verify the campaign is set up correctly in Meta.
+                        </p>
+                      )}
                     </div>
                     <div className="shrink-0 text-right">
                       <p className="text-sm font-semibold text-neutral-900 dark:text-white">
