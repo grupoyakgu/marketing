@@ -484,6 +484,19 @@ export async function getEngagementOverTime(days = 14): Promise<EngagementOverTi
 
 // ─── Top-performing posts ────────────────────────────────────────────────────
 
+// String.slice() cuts by UTF-16 code unit, which can land inside a surrogate
+// pair (any emoji, common in these posts) and leave a dangling lone
+// surrogate. That's invalid JSON once this preview round-trips through a
+// tool_result back into a later Anthropic API request — confirmed in
+// production as "The request body is not valid JSON: no low surrogate in
+// string", which broke Pepe's entire turn (post-engagement research)
+// with no way to recover mid-conversation. Array.from() splits by Unicode
+// code point instead, so a surrogate pair always stays intact.
+function truncatePreview(content: string, maxLen: number): string {
+  if (content.length <= maxLen) return content;
+  return `${Array.from(content).slice(0, maxLen).join('')}...`;
+}
+
 export type PerformanceMetric = 'likes' | 'comments' | 'shares' | 'impressions' | 'reach' | 'engagement_rate';
 
 export interface PostPerformance {
@@ -577,7 +590,7 @@ async function buildPostPerformance(rows: PostedRow[]): Promise<PostPerformance[
         platform: p.platform,
         scheduledDate: p.scheduled_date,
         scheduledTime: p.scheduled_time,
-        contentPreview: p.content.length > 120 ? `${p.content.slice(0, 120)}...` : p.content,
+        contentPreview: truncatePreview(p.content, 120),
         postUrl: p.post_url ?? undefined,
         likes: e.likes,
         comments: e.comments,
