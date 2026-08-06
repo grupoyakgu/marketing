@@ -93,7 +93,7 @@ export default function AdsPage() {
   const [metric, setMetric] = useState<MetricKey>('spend');
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [activeOnly, setActiveOnly] = useState(false);
+  const [activeOnly, setActiveOnly] = useState(true);
   const [showNoDelivery, setShowNoDelivery] = useState(false);
 
   useEffect(() => {
