@@ -25,20 +25,25 @@ export async function GET(req: Request) {
   const posts = await getPostsDueNow();
   if (posts.length === 0) return NextResponse.json({ posted: 0 });
 
-  const results: string[] = [];
+  const lines: string[] = [];
 
   for (const post of posts) {
     const result = await publishPost(post.id!);
-    results.push(result.success ? `✅ ${post.platform}` : `❌ ${post.platform}: ${result.error}`);
+    if (result.success) {
+      const urlLine = result.url ? `\n${result.url}` : '';
+      lines.push(`✅ ${post.platform}${urlLine}`);
+    } else {
+      lines.push(`❌ ${post.platform}: ${result.error}`);
+    }
   }
 
   const chatId = await getMostRecentPepeChatId();
   if (chatId) {
     await sendTelegramMessage(
       chatId,
-      `📢 *Publicaciones automáticas:*\n\n${results.join('\n')}`
+      `📢 *Publicaciones automáticas:*\n\n${lines.join('\n\n')}`
     );
   }
 
-  return NextResponse.json({ posted: results.length, results });
+  return NextResponse.json({ posted: lines.length, results: lines });
 }
