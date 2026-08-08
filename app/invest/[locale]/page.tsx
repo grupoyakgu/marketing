@@ -2,7 +2,13 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { COPY, LOCALES, type Locale } from './copy';
+import { getLandingCopy } from '@/lib/landing-copy';
 import { InvestorForm } from './InvestorForm';
+
+// Content is editable at runtime (Pepe's update_landing_page_copy tool), so
+// this can't be statically generated at build time — every request needs a
+// fresh read to reflect the latest edit.
+export const dynamic = 'force-dynamic';
 
 const RENDER_IMAGES = [
   'https://res.cloudinary.com/quupmn8b/image/upload/v1784710353/YK-_AP1_03_moex2b.jpg',
@@ -15,19 +21,15 @@ function isLocale(value: string): value is Locale {
   return (LOCALES as string[]).includes(value);
 }
 
-export function generateStaticParams() {
-  return LOCALES.map(locale => ({ locale }));
-}
-
-export function generateMetadata({ params }: { params: { locale: string } }): Metadata {
+export async function generateMetadata({ params }: { params: { locale: string } }): Promise<Metadata> {
   if (!isLocale(params.locale)) return {};
-  const copy = COPY[params.locale];
+  const copy = await getLandingCopy(params.locale);
   return { title: copy.metaTitle, description: copy.metaDescription };
 }
 
-export default function InvestPage({ params }: { params: { locale: string } }) {
+export default async function InvestPage({ params }: { params: { locale: string } }) {
   if (!isLocale(params.locale)) notFound();
-  const copy = COPY[params.locale];
+  const copy = await getLandingCopy(params.locale);
 
   return (
     <div dir={copy.dir} className="min-h-screen bg-neutral-950 text-white">
