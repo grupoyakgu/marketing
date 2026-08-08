@@ -44,6 +44,8 @@ import { searchHashtag, getTrackedHashtagStats, addTrackedHashtag } from '@/lib/
 import { publishPost } from '@/lib/publish-post';
 import { createVideo, listAvatars, listVoices } from '@/lib/heygen';
 import { createVideoJob } from '@/lib/video-jobs';
+import { getLandingCopyOrThrow, updateLandingCopy, type EditableLandingCopy } from '@/lib/landing-copy';
+import type { Locale } from '@/app/invest/[locale]/copy';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BOT_NAME = 'pepe';
@@ -241,6 +243,7 @@ For "which post got the most likes", "top 5 posts by impressions", "what's our b
 - create_video, list_video_avatars — generate an AI avatar video (HeyGen) and auto-post it once ready; only when explicitly asked, never proactively as part of routine planning
 - get_tracked_hashtags — see the user's tracked hashtag list with cached stats (same as the /hashtags dashboard)
 - add_tracked_hashtag — add a hashtag you've found worth tracking to that list, so the user sees it in the dashboard too
+- get_landing_page_copy, update_landing_page_copy — read and edit the content of the investor landing page (/invest/es, /invest/en, /invest/he — headline, highlights, market intel bullets, form section text, etc.). Edits are live immediately, no deploy needed. Always call get_landing_page_copy first so you're editing from the actual current wording, not guessing. Ask which language(s) to apply a change to if it's not obvious from context — an edit only applies to the locale you pass, it doesn't propagate to the others automatically, since each language's copy is an independent, deliberately localized translation rather than a mechanical mirror of the others.
 
 You speak with authority and warmth. You are direct, strategic, and deeply passionate about the intersection of hospitality and real estate.`;
 }
@@ -555,6 +558,58 @@ const tools: Anthropic.Tool[] = [
         hashtag: { type: 'string', description: 'Hashtag without the # symbol.' },
       },
       required: ['hashtag'],
+    },
+  },
+  {
+    name: 'get_landing_page_copy',
+    description: 'Reads the current live content of the investor landing page (/invest/<locale>) for a given language — headline, highlights, market intel bullets, etc. Use this before update_landing_page_copy so you know the exact current wording rather than guessing at it.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        locale: { type: 'string', enum: ['es', 'en', 'he'], description: 'Which language version to read.' },
+      },
+      required: ['locale'],
+    },
+  },
+  {
+    name: 'update_landing_page_copy',
+    description: 'Edits the content of the investor landing page (/invest/<locale>) for one language — changes are live immediately, no deploy needed. Only pass the fields being changed; everything else on the page stays as it is. Call get_landing_page_copy first so you\'re editing from the actual current wording. highlights and marketPoints, if provided, fully replace the existing list rather than merging item by item — pass the complete new list, not just the item(s) changing.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        locale: { type: 'string', enum: ['es', 'en', 'he'] },
+        metaTitle: { type: 'string', description: 'Browser tab title / SEO title.' },
+        metaDescription: { type: 'string', description: 'SEO meta description.' },
+        eyebrow: { type: 'string', description: 'Small label above the headline, e.g. "Grupo YAKGU presents".' },
+        headline: { type: 'string' },
+        subheadline: { type: 'string' },
+        ctaPrimary: { type: 'string', description: 'Text on the main call-to-action button.' },
+        highlightsTitle: { type: 'string', description: 'Heading above the "opportunity" cards.' },
+        highlights: {
+          type: 'array',
+          description: 'The opportunity highlight cards. Replaces the full list.',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string' },
+              body: { type: 'string' },
+            },
+            required: ['title', 'body'],
+          },
+        },
+        marketTitle: { type: 'string', description: 'Heading above the market intelligence section.' },
+        marketIntro: { type: 'string' },
+        marketPoints: {
+          type: 'array',
+          description: 'Market proof-point bullets. Replaces the full list.',
+          items: { type: 'string' },
+        },
+        galleryTitle: { type: 'string' },
+        formTitle: { type: 'string' },
+        formSubtitle: { type: 'string' },
+        footerLine: { type: 'string' },
+      },
+      required: ['locale'],
     },
   },
 ];
@@ -1000,6 +1055,47 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
             resultContent = 'error' in result
               ? `Failed: ${result.error}`
               : `Added #${result.tag} to the tracked list — it now shows on the /hashtags dashboard (${result.mediaCount} posts sampled, avg ${result.avgLikes.toFixed(1)} likes).`;
+          } catch (err) {
+            resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        }
+
+        if (block.name === 'get_landing_page_copy') {
+          const input = block.input as { locale: Locale };
+          try {
+            const copy = await getLandingCopyOrThrow(input.locale);
+            resultContent = `Current content for /invest/${input.locale}:\n\n` +
+              `metaTitle: ${copy.metaTitle}\n` +
+              `metaDescription: ${copy.metaDescription}\n` +
+              `eyebrow: ${copy.eyebrow}\n` +
+              `headline: ${copy.headline}\n` +
+              `subheadline: ${copy.subheadline}\n` +
+              `ctaPrimary: ${copy.ctaPrimary}\n` +
+              `highlightsTitle: ${copy.highlightsTitle}\n` +
+              `highlights:\n${copy.highlights.map((h, i) => `  ${i + 1}. ${h.title} — ${h.body}`).join('\n')}\n` +
+              `marketTitle: ${copy.marketTitle}\n` +
+              `marketIntro: ${copy.marketIntro}\n` +
+              `marketPoints:\n${copy.marketPoints.map((p, i) => `  ${i + 1}. ${p}`).join('\n')}\n` +
+              `galleryTitle: ${copy.galleryTitle}\n` +
+              `formTitle: ${copy.formTitle}\n` +
+              `formSubtitle: ${copy.formSubtitle}\n` +
+              `footerLine: ${copy.footerLine}`;
+          } catch (err) {
+            resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        }
+
+        if (block.name === 'update_landing_page_copy') {
+          const input = block.input as { locale: Locale } & EditableLandingCopy;
+          try {
+            const { locale, ...fields } = input;
+            const changedKeys = Object.keys(fields);
+            if (changedKeys.length === 0) {
+              resultContent = 'No fields provided — nothing changed.';
+            } else {
+              const updated = await updateLandingCopy(locale, fields);
+              resultContent = `Updated /invest/${locale}: ${changedKeys.join(', ')}. Live immediately, no deploy needed.\n\nCurrent headline: ${updated.headline}`;
+            }
           } catch (err) {
             resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
           }
