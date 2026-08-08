@@ -2,8 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { loadHistory, saveMessage, clearHistory as clearDb } from '@/lib/chat-history';
 import { readFile, listDirectory, searchCode } from '@/lib/github-dev';
 import { screenshotPage } from '@/lib/browser';
-import { chat as santiChat } from '@/lib/dev-agent';
-import { TelegramClient } from '@/lib/telegram';
+import { createDelegation } from '@/lib/santi-delegations';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BOT_NAME = 'angeles';
@@ -14,9 +13,14 @@ const BOT_NAME = 'angeles';
 // leaves that tool_use without a tool_result — permanently corrupting this
 // chat's history, since Claude's API then rejects every future message
 // referencing it. Higher than Pepe/Santi's since browse_page launches a
-// remote browser session (cold start plus login plus page render), and
-// delegate_to_santi runs Santi's entire multi-step tool loop (read code,
-// write files, open + merge a PR) inline before returning.
+// remote browser session (cold start plus login plus page render).
+// delegate_to_santi used to need this same elevated ceiling too — it ran
+// Santi's entire multi-step tool loop (read code, write files, open + merge
+// a PR) inline, sharing this route's 300s maxDuration with whatever Angeles
+// had already spent investigating beforehand. That's no longer true: it now
+// just records the task (see lib/santi-delegations.ts) and returns almost
+// immediately — Santi's actual work runs later, decoupled, via the
+// process-santi-delegations cron, with his own full budget.
 const TOOL_TIMEOUT_MS = 180_000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -67,7 +71,7 @@ You can also actually look at the live dashboard with \`browse_page\` — it scr
 
 Anyone in this group can address you, not just one specific person — you're a shared resource for product discussions, not gated to an owner the way Santi is (Santi can merge code changes on request, which is why he's restricted). Mentioning Pepe or Santi by name in your own reply doesn't ping them — the user has to address them directly for that.
 
-\`delegate_to_santi\` is the one exception: it hands a specific implementation task straight to Santi so he can build it — read the code, write the fix, open and merge a PR — without the user having to separately go address him themselves and repeat everything you already worked out. Only use it when the user has clearly asked for something to actually be built or fixed, not just discussed (e.g. "can you get Santi to build this", "let's ship this change") — don't send Santi work off your own initiative just because you recommended something. Write the instructions like a clear, self-contained spec: what to change and why, not a transcript of your conversation — Santi doesn't see this chat's history, only what you send him. He only acts on requests from the one person who owns this bot setup, so if that check fails you'll get told rather than have it silently happen — just relay that to whoever asked.
+\`delegate_to_santi\` is the one exception: it hands a specific implementation task straight to Santi so he can build it — read the code, write the fix, open and merge a PR — without the user having to separately go address him themselves and repeat everything you already worked out. It only records the task; Santi actually works on it afterward and posts his own results directly in this chat once he's done, which can take a few minutes for a substantial change — tell the user it's been handed off rather than implying it's already done, and don't call it again for the same task just because you haven't seen his reply yet. Only use it when the user has clearly asked for something to actually be built or fixed, not just discussed (e.g. "can you get Santi to build this", "let's ship this change") — don't send Santi work off your own initiative just because you recommended something. Write the instructions like a clear, self-contained spec: what to change and why, not a transcript of your conversation — Santi doesn't see this chat's history, only what you send him. He only acts on requests from the one person who owns this bot setup, so if that check fails you'll get told rather than have it silently happen — just relay that to whoever asked.
 
 Speak English unless addressed in another language. No filler, no over-explaining, no emoji.`;
 }
@@ -122,7 +126,7 @@ const tools: Anthropic.Tool[] = [
   },
   {
     name: 'delegate_to_santi',
-    description: 'Hands a specific implementation task directly to Santi (the CTO) to build and ship — he reads the code, writes the fix, and opens + merges a PR. Only use when the user has explicitly asked for something to actually be built/fixed, not just discussed.',
+    description: 'Hands a specific implementation task to Santi (the CTO) to build and ship — he reads the code, writes the fix, and opens + merges a PR. This only records the task and returns immediately; Santi actually works on it separately and posts his own results directly in this chat once done (can take a few minutes for a substantial change) — don\'t wait for or expect his reply in this same turn, and don\'t re-delegate the same task again just because you haven\'t seen a result yet. Only use when the user has explicitly asked for something to actually be built/fixed, not just discussed.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -249,9 +253,17 @@ export async function chat(chatId: number, userMessage: string, senderId?: numbe
               if (!ownerId || String(senderId) !== ownerId) {
                 resultContent = 'Not delegated: only this bot setup\'s owner can ask Santi to make changes, and this request didn\'t come from them.';
               } else {
-                const santiReply = await santiChat(chatId, input.instructions);
-                await new TelegramClient(process.env.SANTI_BOT_TOKEN).sendMessage(chatId, santiReply);
-                resultContent = `Santi replied: ${santiReply}`;
+                // Not run inline: Santi's full read/write/PR loop used to run
+                // synchronously right here, sharing this route's 300s
+                // maxDuration with whatever Angeles had already spent on her
+                // own investigation beforehand. Confirmed in production: a
+                // real multi-part edit request timed out at 180s with
+                // nothing delivered. Recording it instead and letting the
+                // process-santi-delegations cron (runs every minute) pick it
+                // up gives Santi his own full, undiminished budget, same as
+                // messaging him directly.
+                await createDelegation(chatId, input.instructions);
+                resultContent = 'Delegated to Santi. He\'ll post the result directly in this chat once it\'s done — usually within a few minutes, longer for larger changes.';
               }
             }
           })(), TOOL_TIMEOUT_MS, block.name);
