@@ -180,7 +180,7 @@ export const COPY: Record<Locale, InvestCopy> = {
     ],
     galleryTitle: 'The project',
     formTitle: 'Talk to us',
-    formSubtitle: 'Leave your details and we'll send you the investment dossier and terms of participation in BDS36.',
+    formSubtitle: "Leave your details and we'll send you the investment dossier and terms of participation in BDS36.",
     investorTypeLabel: 'Investor type (optional)',
     investorTypePlaceholder: 'Select your profile',
     investorTypeOptions: [
@@ -198,7 +198,7 @@ export const COPY: Record<Locale, InvestCopy> = {
     submit: 'Submit request',
     submitting: 'Submitting…',
     successTitle: 'Thank you',
-    successBody: 'We've received your request. A member of our team will be in touch shortly.',
+    successBody: "We've received your request. A member of our team will be in touch shortly.",
     errorGeneric: 'Something went wrong. Please try again.',
     errorRequired: 'Please fill in all fields.',
     errorEmail: 'Please enter a valid email address.',
