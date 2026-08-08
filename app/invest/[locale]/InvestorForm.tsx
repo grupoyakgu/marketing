@@ -3,7 +3,7 @@
 import { useState, FormEvent } from 'react';
 import type { InvestCopy, Locale } from './copy';
 
-type Status = 'idle' | 'submitting' | 'success' | 'error';
+type Status = 'idle' | 'submitting' | 'error';
 
 export function InvestorForm({ copy, locale }: { copy: InvestCopy; locale: Locale }) {
   const [status, setStatus] = useState<Status>('idle');
@@ -14,6 +14,7 @@ export function InvestorForm({ copy, locale }: { copy: InvestCopy; locale: Local
   // Honeypot: real visitors never see this field (visually hidden below),
   // so a filled value means a bot filled the form programmatically.
   const [company, setCompany] = useState('');
+  const [investorType, setInvestorType] = useState('');
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -27,7 +28,7 @@ export function InvestorForm({ copy, locale }: { copy: InvestCopy; locale: Local
       const res = await fetch('/api/leads/investor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, mobile, locale, company }),
+        body: JSON.stringify({ name, email, mobile, locale, company, investorType }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -35,20 +36,11 @@ export function InvestorForm({ copy, locale }: { copy: InvestCopy; locale: Local
         setErrorMessage(data.error === 'Invalid email address' ? copy.errorEmail : copy.errorGeneric);
         return;
       }
-      setStatus('success');
+      window.location.href = 'https://www.grupoyakgu.es';
     } catch {
       setStatus('error');
       setErrorMessage(copy.errorGeneric);
     }
-  }
-
-  if (status === 'success') {
-    return (
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-8 text-center dark:border-amber-900 dark:bg-amber-950/40">
-        <h3 className="text-xl font-semibold text-neutral-900 dark:text-white">{copy.successTitle}</h3>
-        <p className="mt-2 text-neutral-600 dark:text-neutral-300">{copy.successBody}</p>
-      </div>
-    );
   }
 
   return (
@@ -109,6 +101,23 @@ export function InvestorForm({ copy, locale }: { copy: InvestCopy; locale: Local
           onChange={e => setMobile(e.target.value)}
           className="mt-1.5 w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 text-neutral-900 placeholder:text-neutral-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-white"
         />
+      </div>
+
+      <div>
+        <label htmlFor="investorType" className="block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+          {copy.investorTypeLabel}
+        </label>
+        <select
+          id="investorType"
+          value={investorType}
+          onChange={e => setInvestorType(e.target.value)}
+          className="mt-1.5 w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 text-neutral-900 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+        >
+          <option value="">{copy.investorTypePlaceholder}</option>
+          {copy.investorTypeOptions.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
       </div>
 
       {status === 'error' && <p className="text-sm text-red-600 dark:text-red-400">{errorMessage}</p>}

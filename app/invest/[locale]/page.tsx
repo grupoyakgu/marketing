@@ -60,7 +60,7 @@ export default async function InvestPage({ params }: { params: { locale: string 
           alt=""
           className="absolute inset-0 h-full w-full object-cover opacity-30"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-neutral-950/60 via-neutral-950/80 to-neutral-950" />
+        <div className="absolute inset-0 bg-gradient-to-b from-neutral-950/20 via-neutral-950/60 to-neutral-950" />
         <div className="relative mx-auto max-w-5xl px-6 py-24 text-center sm:py-32">
           <p className="text-sm font-semibold uppercase tracking-widest text-amber-400">{copy.eyebrow}</p>
           <h1 className="mt-4 text-3xl font-bold tracking-tight sm:text-5xl">{copy.headline}</h1>
@@ -84,6 +84,26 @@ export default async function InvestPage({ params }: { params: { locale: string 
               <p className="mt-2 text-neutral-300">{h.body}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* About */}
+      <section className="border-y border-white/10 bg-white/5">
+        <div className="mx-auto max-w-5xl px-6 py-16">
+          <h2 className="text-2xl font-semibold sm:text-3xl">{copy.aboutTitle}</h2>
+          <div className="mt-6 max-w-2xl space-y-4">
+            {copy.aboutBody.map((para, i) => (
+              <p key={i} className="leading-relaxed text-neutral-300">{para}</p>
+            ))}
+          </div>
+          <div className="mt-10 grid grid-cols-2 gap-6 sm:grid-cols-4">
+            {copy.aboutStats.map(stat => (
+              <div key={stat.label} className="rounded-2xl border border-white/10 bg-white/5 p-5 text-center">
+                <p className="text-2xl font-bold text-amber-400">{stat.value}</p>
+                <p className="mt-1 text-sm text-neutral-400">{stat.label}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
