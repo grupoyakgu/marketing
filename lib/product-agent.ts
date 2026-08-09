@@ -190,6 +190,18 @@ export async function clearHistory(chatId: number): Promise<void> {
   await clearDb(chatId, BOT_NAME);
 }
 
+/** Passively records something Pepe posted in the shared group chat into
+ * Angeles's own history, without running a chat() turn — she has no other way
+ * to see his messages (bot-authored messages never resolve as addressed to
+ * her, see bot-addressing.ts, so they'd otherwise be dropped entirely). This
+ * only makes her aware of it for her next real turn; it doesn't make her
+ * react or reply on its own, unlike consult_pepe's reply loop (see
+ * process-pepe-consultations.ts) which exists specifically to continue a
+ * conversation she initiated. */
+export async function recordPepeMessage(chatId: number, text: string): Promise<void> {
+  await saveMessage(chatId, BOT_NAME, 'user', `[Pepe posted in the group]\n\n${text}`);
+}
+
 export async function chat(chatId: number, userMessage: string, senderId?: number): Promise<string> {
   const history = await loadHistory(chatId, BOT_NAME);
   history.push({ role: 'user', content: userMessage });

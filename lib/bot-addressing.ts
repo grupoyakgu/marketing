@@ -13,7 +13,7 @@ export interface BotIdentity {
  * bot's own Telegram user id, the same id that shows up as
  * reply_to_message.from.id when someone replies to that bot's message. No
  * extra API call needed to learn it. */
-function botIdFromToken(token: string | undefined): number | undefined {
+export function botIdFromToken(token: string | undefined): number | undefined {
   const id = token?.split(':')[0];
   return id && /^\d+$/.test(id) ? Number(id) : undefined;
 }
