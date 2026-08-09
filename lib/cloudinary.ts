@@ -261,6 +261,38 @@ async function listResourcesByAssetFolder(cloudName: string, auth: string, asset
   return all;
 }
 
+/** Lists images in a single named subfolder under CLOUDINARY_GALLERY_ROOT —
+ * used by Pepe's browse_drive_images when the user names a specific folder to
+ * pull from instead of the default flat CLOUDINARY_FOLDER listing. folderInput
+ * is matched case-insensitively against existing subfolders, same as
+ * uploadImageBuffer, so "peral 23" finds the real "Peral 23" folder. Combines
+ * the Search API and by_asset_folder listing for the same reliability reasons
+ * as listCloudinaryImagesByFolder above. */
+export async function listCloudinaryImagesInFolder(folderInput: string): Promise<CloudinaryImage[]> {
+  const { cloudName, apiKey, apiSecret } = getCredentials();
+  const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
+
+  let folderName = folderInput.trim();
+  const existing = await listChildFolders(cloudName, auth, GALLERY_ROOT);
+  const match = existing.find(name => name.toLowerCase() === folderName.toLowerCase());
+  if (match) folderName = match;
+
+  const assetFolder = `${GALLERY_ROOT}/${folderName}`;
+  const [searchResults, crossCheck] = await Promise.all([
+    searchAllImageResources(cloudName, auth, assetFolder),
+    listResourcesByAssetFolder(cloudName, auth, assetFolder),
+  ]);
+
+  const seen = new Set<string>();
+  const images: CloudinaryImage[] = [];
+  for (const img of [...searchResults.map(mapResource), ...crossCheck]) {
+    if (seen.has(img.id)) continue;
+    seen.add(img.id);
+    images.push(img);
+  }
+  return images;
+}
+
 /** Lists each project subfolder under CLOUDINARY_GALLERY_ROOT (default
  * "marketing/images") separately — never merged — for the planner's image
  * picker. Folder names come from the union of listChildFolders (Cloudinary's
