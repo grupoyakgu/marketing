@@ -23,7 +23,7 @@
 - /lib/github-dev.ts                → GitHub REST API wrapper used by Santi + Angeles (read/write files, branches, PRs)
 - /lib/vercel-dev.ts                → Vercel REST API wrapper used by Santi (list_deployments, get_deployment_logs)
 - /lib/product-agent.ts             → Angeles agent (CPO persona; read-only repo access, no write/posting ability)
-- /lib/browser.ts                   → Browserbase (remote Chromium via CDP) screenshot helper used by Angeles's browse_page tool
+- /lib/browser.ts                   → Browserbase (remote Chromium via CDP) screenshot helper used by Angeles's browse_page (internal dashboard, logged-in) and browse_url (any public URL) tools
 - /lib/cloudinary.ts                → Cloudinary Admin API image listing + gallery uploads
 - /lib/cloudinary-uploads.ts        → cloudinary_uploads table — name↔image mapping for Pepe's "upload" flow
 - /lib/meta-poster.ts               → Facebook/Instagram posting
