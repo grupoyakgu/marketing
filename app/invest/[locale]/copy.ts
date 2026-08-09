@@ -12,6 +12,8 @@ export interface InvestCopy {
   eyebrow: string;
   headline: string;
   subheadline: string;
+  heroOpportunityTitle: string;
+  heroOpportunityBody: string;
   ctaPrimary: string;
   highlightsTitle: string;
   highlights: { title: string; body: string }[];
@@ -57,6 +59,9 @@ export const COPY: Record<Locale, InvestCopy> = {
     headline: 'BDS36 — Nervión, Sevilla',
     subheadline:
       'Llevamos más de una década desarrollando activos hoteleros en España. BDS36 es nuestra próxima oportunidad: un aparthotel premium de 18 unidades en Nervión, el distrito de Sevilla que está redefiniendo el turismo urbano de alta gama. Licencia concedida. Construcción lista para iniciar.',
+    heroOpportunityTitle: 'Una gran oportunidad de inversión',
+    heroOpportunityBody:
+      'BDS36 es una de las mejores oportunidades del mercado: un proyecto con alta rentabilidad y un retorno excelente para inversores que buscan resultados sólidos.',
     ctaPrimary: 'Solicitar información para inversores',
     highlightsTitle: 'La oportunidad',
     highlights: [
@@ -138,6 +143,9 @@ export const COPY: Record<Locale, InvestCopy> = {
     headline: 'BDS36 — Nervión, Sevilla',
     subheadline:
       'We have spent over a decade developing hospitality assets across Spain. BDS36 is our next opportunity: a premium 18-unit aparthotel in Nervión, the Seville district redefining upscale urban tourism. Fully permitted. Ready to build.',
+    heroOpportunityTitle: 'A standout investment opportunity',
+    heroOpportunityBody:
+      "BDS36 is one of the best projects around — a high-yield opportunity built for investors looking for strong, reliable returns.",
     ctaPrimary: 'Request investor information',
     highlightsTitle: 'The opportunity',
     highlights: [
@@ -217,6 +225,9 @@ export const COPY: Record<Locale, InvestCopy> = {
     headline: 'BDS36 — נרביון, סביליה',
     subheadline:
       'במשך למעלה מעשור אנו מפתחים נכסי אירוח בספרד. BDS36 הוא ההזדמנות הבאה שלנו: אפרטהוטל יוקרתי בן 18 יחידות בנרביון, השכונה בסביליה שמגדירה מחדש את התיירות העירונית היוקרתית. כל ההיתרים אושרו. מוכן לבנייה.',
+    heroOpportunityTitle: 'הזדמנות השקעה מצוינת',
+    heroOpportunityBody:
+      'BDS36 היא אחת ההזדמנויות הטובות ביותר בשוק — פרויקט בעל תשואה גבוהה ותשואה מצוינת עבור משקיעים המחפשים תוצאות איתנות.',
     ctaPrimary: 'בקשת מידע למשקיעים',
     highlightsTitle: 'ההזדמנות',
     highlights: [

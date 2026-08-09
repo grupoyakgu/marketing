@@ -13,6 +13,8 @@ export interface EditableLandingCopy {
   eyebrow?: string;
   headline?: string;
   subheadline?: string;
+  heroOpportunityTitle?: string;
+  heroOpportunityBody?: string;
   ctaPrimary?: string;
   highlightsTitle?: string;
   highlights?: { title: string; body: string }[];

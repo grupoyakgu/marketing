@@ -61,16 +61,25 @@ export default async function InvestPage({ params }: { params: { locale: string 
           className="absolute inset-0 h-full w-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/40 to-neutral-950" />
-        <div className="relative mx-auto max-w-5xl px-6 py-32 text-center sm:py-44">
-          <p className="text-sm font-semibold uppercase tracking-widest text-amber-400">{copy.eyebrow}</p>
-          <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-6xl">{copy.headline}</h1>
-          <p className="mx-auto mt-6 max-w-2xl text-lg text-neutral-300">{copy.subheadline}</p>
-          <a
-            href="#form"
-            className="mt-10 inline-block rounded-lg bg-amber-500 px-8 py-3.5 font-semibold text-neutral-900 transition-colors hover:bg-amber-400"
-          >
-            {copy.ctaPrimary}
-          </a>
+        <div className="relative mx-auto grid max-w-5xl gap-10 px-6 py-24 sm:grid-cols-2 sm:items-start sm:py-32">
+          {/* Left: title, pinned to the top-left, full width of its column */}
+          <div className="self-start text-left">
+            <p className="text-sm font-semibold uppercase tracking-widest text-amber-400">{copy.eyebrow}</p>
+            <h1 className="mt-4 w-full text-4xl font-bold tracking-tight sm:text-6xl">{copy.headline}</h1>
+          </div>
+
+          {/* Right: the investment opportunity pitch */}
+          <div className="text-left sm:pt-1">
+            <h2 className="text-xl font-semibold text-amber-400 sm:text-2xl">{copy.heroOpportunityTitle}</h2>
+            <p className="mt-3 text-lg text-neutral-200">{copy.heroOpportunityBody}</p>
+            <p className="mt-4 text-neutral-300">{copy.subheadline}</p>
+            <a
+              href="#form"
+              className="mt-8 inline-block rounded-lg bg-amber-500 px-8 py-3.5 font-semibold text-neutral-900 transition-colors hover:bg-amber-400"
+            >
+              {copy.ctaPrimary}
+            </a>
+          </div>
         </div>
       </section>
 
