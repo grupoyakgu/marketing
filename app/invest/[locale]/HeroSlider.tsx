@@ -21,7 +21,7 @@ const SLIDES = [
   },
 ];
 
-const INTERVAL_MS = 5000;
+const INTERVAL_MS = 4000;
 
 interface HeroSliderProps {
   eyebrow: string;
@@ -31,24 +31,33 @@ interface HeroSliderProps {
 
 export function HeroSlider({ eyebrow, headline, subheadline }: HeroSliderProps) {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [cycleCount, setCycleCount] = useState(0);
 
   useEffect(() => {
     const id = setInterval(() => {
       setActiveIndex(prev => (prev + 1) % SLIDES.length);
+      setCycleCount(prev => prev + 1);
     }, INTERVAL_MS);
     return () => clearInterval(id);
   }, []);
 
   return (
     <div className="relative h-[50vh] lg:h-auto lg:flex-[3]">
-      {/* Ken Burns keyframe + active class */}
+      {/* Ken Burns keyframes — even indices zoom in, odd zoom out */}
       <style>{`
-        @keyframes kenburns {
+        @keyframes kenburns-in {
           from { transform: scale(1.0); }
           to   { transform: scale(1.08); }
         }
-        .kb-active {
-          animation: kenburns 5s ease-in-out forwards;
+        @keyframes kenburns-out {
+          from { transform: scale(1.08); }
+          to   { transform: scale(1.0); }
+        }
+        .kb-in {
+          animation: kenburns-in 4s ease-in-out forwards;
+        }
+        .kb-out {
+          animation: kenburns-out 4s ease-in-out forwards;
         }
       `}</style>
 
@@ -67,6 +76,8 @@ export function HeroSlider({ eyebrow, headline, subheadline }: HeroSliderProps) 
       {/* Stacked slides */}
       {SLIDES.map((slide, i) => {
         const isActive = i === activeIndex;
+        // Direction is fixed per slide position: 0,2 zoom in; 1,3 zoom out.
+        const kbClass = i % 2 === 0 ? 'kb-in' : 'kb-out';
         return (
           <div
             key={slide.src}
@@ -74,14 +85,15 @@ export function HeroSlider({ eyebrow, headline, subheadline }: HeroSliderProps) 
             style={{ opacity: isActive ? 1 : 0 }}
           >
             {/*
-              key tied to activeIndex resets the animation every time this
-              slide becomes active, so the zoom always starts from scale(1).
+              key=cycleCount when active forces a remount on each transition,
+              restarting the CSS animation from its `from` value every time
+              this slide comes into view.
             */}
             <img
-              key={isActive ? `active-${i}` : `idle-${i}`}
+              key={isActive ? cycleCount : i}
               src={slide.src}
               alt={slide.alt}
-              className={`absolute inset-0 h-full w-full object-cover${isActive ? ' kb-active' : ''}`}
+              className={`absolute inset-0 h-full w-full object-cover ${kbClass}`}
             />
           </div>
         );
