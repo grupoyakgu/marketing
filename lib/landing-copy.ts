@@ -16,6 +16,7 @@ export interface EditableLandingCopy {
   ctaPrimary?: string;
   highlightsTitle?: string;
   highlights?: { title: string; body: string }[];
+  aboutBody?: string[];
   marketTitle?: string;
   marketIntro?: string;
   marketPoints?: string[];
