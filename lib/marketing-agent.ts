@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { postToLinkedIn } from '@/lib/linkedin-poster';
 import { postToFacebook, postToInstagram, postInstagramStory, postFacebookStory } from '@/lib/meta-poster';
 import { loadHistory, saveMessage, clearHistory as clearDb } from '@/lib/chat-history';
-import { listCloudinaryImages } from '@/lib/cloudinary';
+import { listCloudinaryImages, listCloudinaryImagesInFolder } from '@/lib/cloudinary';
 import { findUploadsByName } from '@/lib/cloudinary-uploads';
 import {
   replyToLinkedInComment,
@@ -197,6 +197,8 @@ You have access to these proof points. **Spread them strategically across many p
 
 **Every post should have an image.** Call browse_drive_images ONCE at the start to see all available images. When calling save_marketing_plan, set each post's image_urls to the exact URL of the specific image you picked for it, as a single-item array — pick a different, relevant image per post rather than reusing the same one. Only put more than one URL in image_urls if the user specifically asked for a carousel/multi-image post. image_note is just a human-readable label for what the image shows; image_urls is the real, clickable choice and is what the dashboard shows the user as "the image Pepe selected," so always set it.
 
+If the user tells you which folder to grab images from (e.g. "use images from the Peral 23 folder"), pass that name as the folder argument to browse_drive_images instead of calling it with no arguments — that lists just that gallery subfolder rather than the default pool. If none of its images fit the post, say so rather than falling back to the default pool without asking.
+
 If the user instead refers to an image by a custom name they gave it earlier (e.g. "use the sunset image I uploaded") rather than picking from what browse_drive_images shows, call find_named_image instead — that's how images uploaded through your Telegram "upload" flow are found, since browse_drive_images only surfaces Cloudinary filenames, not the names users gave them.
 
 ---
@@ -334,8 +336,14 @@ const tools: Anthropic.Tool[] = [
   },
   {
     name: 'browse_drive_images',
-    description: 'Lists all available images from Cloudinary. Call ONCE per plan.',
-    input_schema: { type: 'object' as const, properties: {}, required: [] },
+    description: 'Lists available images from Cloudinary. Call ONCE per plan. By default lists the general image pool; pass folder to instead list a specific named subfolder of the gallery (e.g. a project name the user tells you to pull from).',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        folder: { type: 'string', description: 'Name of a specific gallery subfolder to list instead of the default pool, e.g. "Peral 23". Matched case-insensitively.' },
+      },
+      required: [],
+    },
   },
   {
     name: 'find_named_image',
@@ -773,11 +781,14 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
         }
 
         if (block.name === 'browse_drive_images') {
+          const input = block.input as { folder?: string };
           try {
-            const images = await listCloudinaryImages();
+            const images = input.folder
+              ? await listCloudinaryImagesInFolder(input.folder)
+              : await listCloudinaryImages();
             resultContent = images.length === 0
-              ? 'No images found in Cloudinary.'
-              : `Found ${images.length} images:\n` + images.map(img => `- ${img.name} | URL: ${img.url}`).join('\n');
+              ? (input.folder ? `No images found in folder "${input.folder}".` : 'No images found in Cloudinary.')
+              : `Found ${images.length} images${input.folder ? ` in "${input.folder}"` : ''}:\n` + images.map(img => `- ${img.name} | URL: ${img.url}`).join('\n');
           } catch (err) {
             resultContent = `Failed to browse images: ${err instanceof Error ? err.message : String(err)}`;
           }
