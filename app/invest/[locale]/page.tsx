@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { COPY, LOCALES, type Locale } from './copy';
+import { LOCALES, type Locale } from './copy';
 import { getLandingCopy } from '@/lib/landing-copy';
 import { InvestorForm } from './InvestorForm';
 
@@ -76,24 +75,6 @@ export default async function InvestPage({ params }: { params: { locale: string 
               alt="Grupo YAKGU"
               className="h-12 w-auto object-contain"
             />
-
-            {/* Language switcher */}
-            <div className="mt-4 flex items-center gap-1 text-sm">
-              <span className="sr-only">{copy.languageLabel}:</span>
-              {LOCALES.map(l => (
-                <Link
-                  key={l}
-                  href={`/invest/${l}`}
-                  className={
-                    l === params.locale
-                      ? 'rounded-full bg-white/10 px-3 py-1 font-medium text-white'
-                      : 'rounded-full px-3 py-1 text-white/40 hover:text-white/70'
-                  }
-                >
-                  {COPY[l].languageNames[l]}
-                </Link>
-              ))}
-            </div>
 
             {/* Form heading */}
             <h2 className="mt-8 text-3xl font-black uppercase tracking-tight text-white sm:text-4xl">
