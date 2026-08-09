@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { TelegramClient } from '@/lib/telegram';
-import { clearHistory, chat, recordPepeMessage } from '@/lib/product-agent';
+import { clearHistory, chat, recordTeammateMessage } from '@/lib/product-agent';
 import { claimTelegramUpdate } from '@/lib/telegram-dedup';
-import { resolveAddressee, allBots, botIdFromToken } from '@/lib/bot-addressing';
+import { resolveAddressee, allBots, identifyBotAuthor, BOT_LABELS } from '@/lib/bot-addressing';
 
 export const maxDuration = 300;
 
@@ -52,13 +52,14 @@ export async function POST(req: NextRequest) {
 
     // Bot-authored messages never resolve as addressed to Angeles (see
     // bot-addressing.ts — required to avoid a reply loop between bots), so
-    // without this she'd never learn what Pepe posts in the shared chat at
-    // all. Record it as passive context on her own history rather than
-    // running a full chat() turn — she should be aware of it, not react to
-    // every single thing he posts.
-    if (message?.from?.is_bot) {
-      if (text && message.from.id === botIdFromToken(process.env.TELEGRAM_BOT_TOKEN)) {
-        await recordPepeMessage(chatId, text);
+    // without this she'd never learn what a teammate posts in the shared
+    // chat at all. Record it as passive context on her own history rather
+    // than running a full chat() turn — she should be aware of it, not
+    // react to every single thing they post.
+    const authorBot = identifyBotAuthor(message, allBots());
+    if (authorBot) {
+      if (authorBot !== 'angeles' && text) {
+        await recordTeammateMessage(chatId, BOT_LABELS[authorBot], text);
       }
       return NextResponse.json({ ok: true });
     }

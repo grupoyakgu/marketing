@@ -47,6 +47,7 @@ import { createVideoJob } from '@/lib/video-jobs';
 import { getLandingCopyOrThrow, updateLandingCopy, type EditableLandingCopy } from '@/lib/landing-copy';
 import type { Locale } from '@/app/invest/[locale]/copy';
 import { screenshotUrl } from '@/lib/browser';
+import { createConsultation } from '@/lib/bot-consultations';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BOT_NAME = 'pepe';
@@ -125,7 +126,9 @@ You share this Telegram group with two other bots — you're the only one of the
 - **Santi** — CTO. Reads and writes the actual code for this app, opens and merges pull requests. If someone needs a bug fixed or a feature built, that's him, not you.
 - **Angeles** — CPO. Advises on product strategy, UX, and roadmap (PRDs, user flows, prioritization) — no code access. If a request is really about product/UX direction rather than marketing content, that's her.
 
-You only ever see a message here if it was addressed to you (or wasn't addressed to anyone in particular) — mentioning Santi or Angeles by name in your own reply doesn't ping them; the user has to address them directly for that. The one exception: a message starting with **"[Consultation from Angeles — CPO]"** means she just finished a product/design recommendation elsewhere in this chat and looped you in automatically for your take, via her own initiative rather than the user's — this is real, not spam. Give a focused marketing-manager perspective on it — messaging, positioning, target-audience fit, conversion/growth impact — don't redirect it back to her (you're being asked precisely because it has a marketing angle) and don't just restate her recommendation. Keep it tight: a few sentences unless the topic genuinely needs more, and you don't need get_landing_page_copy or other tools unless the brief specifically requires checking current live copy.
+You only ever see a message here if it was addressed to you (or wasn't addressed to anyone in particular), or if a teammate posted something and it's shown to you as passive context, prefixed **"[Santi posted in the group]"** or **"[Angeles posted in the group]"** — that's just situational awareness, not a request; don't reply to it. Mentioning Santi or Angeles by name in your own reply doesn't ping them either; the user has to address them directly for that, except for \`consult_santi\`/\`consult_angeles\` below, which loop them in on your own initiative, and the one existing exception: a message starting with **"[Consultation from Angeles — CPO]"** means she just finished a product/design recommendation elsewhere in this chat and looped you in automatically for your take, via her own initiative rather than the user's — this is real, not spam. Give a focused marketing-manager perspective on it — messaging, positioning, target-audience fit, conversion/growth impact — don't redirect it back to her (you're being asked precisely because it has a marketing angle) and don't just restate her recommendation. Keep it tight: a few sentences unless the topic genuinely needs more, and you don't need get_landing_page_copy or other tools unless the brief specifically requires checking current live copy.
+
+\`consult_santi\` and \`consult_angeles\` ask a teammate for their read on something you're drafting or considering — a technical-feasibility check from Santi (e.g. before promising a feature in copy), or a product/UX read from Angeles (e.g. whether a flow you're describing actually makes sense). Only call one when a task genuinely needs that input, not for every passing mention of them. Both just record a brief and return immediately; the teammate replies separately and posts their own take directly into this chat once ready (usually a few minutes) — don't wait for it before finishing your own turn. Their reply arrives later as a fresh incoming message prefixed **"[Reply from Santi — CTO, re: your consultation]"** or **"[Reply from Angeles — CPO, re: your consultation]"** (or **"[System]"** if it failed) — treat that as their real answer and fold it in; don't loop more than a couple of rounds if it's not converging.
 
 ---
 
@@ -262,6 +265,7 @@ For "which post got the most likes", "top 5 posts by impressions", "what's our b
 - add_tracked_hashtag — add a hashtag you've found worth tracking to that list, so the user sees it in the dashboard too
 - get_landing_page_copy, update_landing_page_copy — read and edit the content of the investor landing page (/invest/es, /invest/en, /invest/he — headline, highlights, market intel bullets, form section text, etc.). Edits are live immediately, no deploy needed. Always call get_landing_page_copy first so you're editing from the actual current wording, not guessing. Ask which language(s) to apply a change to if it's not obvious from context — an edit only applies to the locale you pass, it doesn't propagate to the others automatically, since each language's copy is an independent, deliberately localized translation rather than a mechanical mirror of the others.
 - browse_url — take a screenshot of any public webpage (a competitor, a reference site, an article the user points you at) so you can judge it from what it actually looks like instead of guessing from memory. Each call launches a real remote browser session that can take up to 30s; you have a budget of a few per conversation turn — pick the handful most worth looking at rather than surveying everything, and if you run out mid-research, answer with what you've already seen and offer to look at more in a follow-up.
+- consult_santi, consult_angeles — loop a teammate in for their technical or product/UX take on your own initiative, when a task genuinely needs it
 
 You speak with authority and warmth. You are direct, strategic, and deeply passionate about the intersection of hospitality and real estate.`;
 }
@@ -648,10 +652,44 @@ const tools: Anthropic.Tool[] = [
       required: ['url'],
     },
   },
+  {
+    name: 'consult_santi',
+    description: 'Asks Santi (the CTO) for a technical-feasibility opinion on something you\'re drafting or considering — e.g. before promising a feature or capability in copy. This only records the brief and returns immediately; Santi replies separately and posts his take directly into this chat as himself once ready (usually a few minutes) — don\'t wait for or expect his reply in this same turn. Only call this when a task genuinely needs his input, not for every passing mention of him.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        brief: { type: 'string', description: 'A clear, self-contained question or context for Santi — he does not see this conversation, only this text.' },
+      },
+      required: ['brief'],
+    },
+  },
+  {
+    name: 'consult_angeles',
+    description: 'Asks Angeles (the CPO) for a product/UX opinion on something you\'re drafting or considering — e.g. whether a flow or feature you\'re describing in copy actually makes sense. This only records the brief and returns immediately; Angeles replies separately and posts her take directly into this chat as herself once ready (usually a few minutes) — don\'t wait for or expect her reply in this same turn. Only call this when a task genuinely needs her input, not for every passing mention of her.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        brief: { type: 'string', description: 'A clear, self-contained question or context for Angeles — she does not see this conversation, only this text.' },
+      },
+      required: ['brief'],
+    },
+  },
 ];
 
 export async function clearHistory(chatId: number): Promise<void> {
   await clearDb(chatId, BOT_NAME);
+}
+
+/** Passively records something a teammate (Santi or Angeles) posted in the
+ * shared group chat into Pepe's own history, without running a chat() turn
+ * — he has no other way to see their messages (bot-authored messages never
+ * resolve as addressed to him, see bot-addressing.ts, so they'd otherwise be
+ * dropped entirely). This only makes him aware of it for his next real turn;
+ * it doesn't make him react or reply on its own, unlike consult_santi/
+ * consult_angeles's reply loop (see process-bot-consultations.ts) which
+ * exists specifically to continue a conversation he initiated. */
+export async function recordTeammateMessage(chatId: number, fromLabel: string, text: string): Promise<void> {
+  await saveMessage(chatId, BOT_NAME, 'user', `[${fromLabel} posted in the group]\n\n${text}`);
 }
 
 export async function chat(chatId: number, userMessage: string): Promise<string> {
@@ -1161,6 +1199,23 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
               resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
             }
           }
+        }
+
+        if (block.name === 'consult_santi') {
+          const input = block.input as { brief: string };
+          // Not run inline — same reasoning as every other consult/delegate
+          // hop in this codebase (see lib/bot-consultations.ts): Santi's own
+          // turn gets his full, undiminished budget via the
+          // process-bot-consultations cron instead of sharing this route's
+          // 300s maxDuration.
+          await createConsultation(chatId, 'pepe', 'santi', input.brief);
+          resultContent = 'Consulted Santi. He\'ll post his technical take directly in this chat once it\'s ready — usually within a few minutes.';
+        }
+
+        if (block.name === 'consult_angeles') {
+          const input = block.input as { brief: string };
+          await createConsultation(chatId, 'pepe', 'angeles', input.brief);
+          resultContent = 'Consulted Angeles. She\'ll post her product take directly in this chat once it\'s ready — usually within a few minutes.';
         }
           })(), TOOL_TIMEOUT_MS, block.name);
         } catch (err) {

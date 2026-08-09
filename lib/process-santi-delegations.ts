@@ -1,19 +1,7 @@
 import { getPendingDelegationIds, claimDelegation, markDelegationDone, markDelegationFailed } from './santi-delegations';
 import { chat } from './dev-agent';
 import { TelegramClient } from './telegram';
-
-// Splits by Unicode code point (Array.from), not raw index — a raw slice()
-// cut can land inside a surrogate pair, leaving a chunk with a dangling lone
-// surrogate that breaks JSON encoding downstream (see PR #97).
-function splitMessage(text: string, maxLen: number): string[] {
-  const codePoints = Array.from(text);
-  if (codePoints.length <= maxLen) return [text];
-  const chunks: string[] = [];
-  for (let i = 0; i < codePoints.length; i += maxLen) {
-    chunks.push(codePoints.slice(i, i + maxLen).join(''));
-  }
-  return chunks;
-}
+import { splitMessage } from './split-message';
 
 export async function processSantiDelegations(): Promise<{ processed: number }> {
   const ids = await getPendingDelegationIds();

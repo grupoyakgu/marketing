@@ -1,13 +1,23 @@
 interface TelegramMessageLike {
   text?: string;
-  from?: { is_bot?: boolean };
+  from?: { is_bot?: boolean; id?: number };
   reply_to_message?: { from?: { id?: number } };
 }
 
+export type BotName = 'pepe' | 'santi' | 'angeles';
+
 export interface BotIdentity {
-  name: string;
+  name: BotName;
   token: string | undefined;
 }
+
+/** Display label for each bot, e.g. for prefixing a passively-recorded
+ * teammate message or a consultation brief so a bot can tell who it's from. */
+export const BOT_LABELS: Record<BotName, string> = {
+  pepe: 'Pepe — CMO',
+  santi: 'Santi — CTO',
+  angeles: 'Angeles — CPO',
+};
 
 /** A Telegram bot token is "<numeric bot id>:<secret>" — the id half is the
  * bot's own Telegram user id, the same id that shows up as
@@ -78,5 +88,22 @@ export function resolveAddressee(message: TelegramMessageLike, bots: BotIdentity
     }
   }
 
+  return null;
+}
+
+/** Which teammate bot authored this message, or null if it wasn't sent by
+ * any of them (a human, or a bot not in this list). Unlike
+ * resolveAddressee — which deliberately never resolves a bot-authored
+ * message as "addressed" to anyone, to avoid a reply loop — this exists so
+ * each bot's route can still passively record what a teammate posted as
+ * context on its own history, without treating it as something to respond
+ * to. See recordTeammateMessage in each of marketing-agent.ts, dev-agent.ts,
+ * and product-agent.ts. */
+export function identifyBotAuthor(message: TelegramMessageLike, bots: BotIdentity[]): BotName | null {
+  if (!message.from?.is_bot) return null;
+  const fromId = message.from.id;
+  for (const bot of bots) {
+    if (botIdFromToken(bot.token) === fromId) return bot.name;
+  }
   return null;
 }

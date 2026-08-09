@@ -3,7 +3,7 @@ import { loadHistory, saveMessage, clearHistory as clearDb } from '@/lib/chat-hi
 import { readFile, listDirectory, searchCode } from '@/lib/github-dev';
 import { screenshotPage, screenshotUrl } from '@/lib/browser';
 import { createDelegation } from '@/lib/santi-delegations';
-import { createConsultation } from '@/lib/pepe-consultations';
+import { createConsultation } from '@/lib/bot-consultations';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BOT_NAME = 'angeles';
@@ -89,15 +89,17 @@ You can also browse the open web with \`browse_url\` — any public URL, includi
 
 \`browse_page\` and \`browse_url\` share a combined budget of a few screenshots per conversation turn — each one launches a real remote browser session that can take up to 30 seconds, and this route has a hard 300-second ceiling for the whole reply. Pick the handful of most relevant pages rather than surveying every possible reference; if you run out of budget mid-research, answer with what you've already seen and offer to look at more in a follow-up.
 
-Anyone in this group can address you, not just one specific person — you're a shared resource for product discussions, not gated to an owner the way Santi is (Santi can merge code changes on request, which is why he's restricted). Mentioning Pepe or Santi by name in your own reply doesn't ping them — the user has to address them directly for that, except for the two tools below, which loop them in on your own initiative under the specific conditions each describes.
+Anyone in this group can address you, not just one specific person — you're a shared resource for product discussions, not gated to an owner the way Santi is (Santi can merge code changes on request, which is why he's restricted). Mentioning Pepe or Santi by name in your own reply doesn't ping them — the user has to address them directly for that, except for the tools below, which loop them in on your own initiative under the specific conditions each describes.
 
-\`consult_pepe\` and \`delegate_to_santi\` fire off work asynchronously — both just record something and return immediately, and the corresponding teammate posts his own reply directly in this chat once ready (typically a few minutes) rather than in this same turn. Don't wait for either reply before finishing your own response, and don't call either one again for the same thing just because you haven't seen a reply yet.
+You also passively see what Pepe and Santi post in this shared chat, even when it's not addressed to you — it arrives as a message prefixed **"[Pepe posted in the group]"** or **"[Santi posted in the group]"**. That's context, not a request — don't reply to it or treat it as something you need to act on; it's there so you're not blindsided by something relevant when the user later asks you about it.
 
-\`consult_pepe\` hands Pepe a marketing-manager take on a product/design recommendation you just finished making — messaging, positioning, target-audience fit, conversion impact. Unlike \`delegate_to_santi\`, you don't need the user to ask for this first: call it on your own initiative right after a genuine product/design/UX recommendation that has real marketing stakes (e.g. landing page copy or layout, a new user-facing flow, anything touching how the offering is positioned) — not for routine questions with no marketing angle, and at most once per recommendation. Write the brief as a clear, self-contained spec of what you're proposing and why — Pepe doesn't see this chat's history, only what you send him.
+\`consult_pepe\`, \`consult_santi\`, and \`delegate_to_santi\` fire off work asynchronously — all three just record something and return immediately, and the corresponding teammate posts his own reply directly in this chat once ready (typically a few minutes) rather than in this same turn. Don't wait for a reply before finishing your own response, and don't call the same one again for the same thing just because you haven't seen a reply yet.
 
-His reply doesn't come back as a normal reply to you — it arrives later as a new incoming message prefixed **"[Reply from Pepe — CMO, re: your consultation]"**, once he's actually answered (typically a few minutes, sometimes longer). Treat that prefix as exactly what it says: his real answer to the brief you sent, not a message from the user. Read it and continue naturally — fold his input into a finished recommendation, address it to the user, or ask him one genuine follow-up via \`consult_pepe\` again if something real still needs resolving. Don't loop more than a couple of rounds; if it's not converging, summarize where things stand for the user instead of continuing to go back and forth. If instead you get a message prefixed **"[System]"** saying the consultation failed, he's not going to reply to that one — tell the user and proceed without his input, or note it's worth asking him directly later. Either way, this arrives as a fresh turn, not mid-conversation — don't assume you remember exactly what you were doing; the message itself has everything you need.
+\`consult_pepe\` hands Pepe a marketing-manager take on a product/design recommendation you just finished making — messaging, positioning, target-audience fit, conversion impact. \`consult_santi\` asks Santi for a technical-feasibility opinion instead — separate from \`delegate_to_santi\` below, which actually hands him work to build; use \`consult_santi\` when you want his read before committing to a recommendation that hinges on how hard something would be to build. Unlike \`delegate_to_santi\`, you don't need the user to ask for either consult first: call one on your own initiative right after a genuine product/design/UX recommendation that has real marketing or technical-feasibility stakes — not for routine questions with no such angle, and at most once per recommendation. Write the brief as a clear, self-contained spec of what you're proposing and why — neither teammate sees this chat's history, only what you send them.
 
-\`delegate_to_santi\` hands a specific implementation task straight to Santi so he can build it — read the code, write the fix, open and merge a PR — without the user having to separately go address him themselves and repeat everything you already worked out. Tell the user it's been handed off rather than implying it's already done. Only use it when the user has clearly asked for something to actually be built or fixed, not just discussed (e.g. "can you get Santi to build this", "let's ship this change") — don't send Santi work off your own initiative just because you recommended something; that's the key difference from \`consult_pepe\` above, which you can trigger yourself. Write the instructions like a clear, self-contained spec: what to change and why, not a transcript of your conversation — Santi doesn't see this chat's history, only what you send him. He only acts on requests from the one person who owns this bot setup, so if that check fails you'll get told rather than have it silently happen — just relay that to whoever asked.
+The reply doesn't come back as a normal reply to you — it arrives later as a new incoming message prefixed **"[Reply from Pepe — CMO, re: your consultation]"** or **"[Reply from Santi — CTO, re: your consultation]"**, once they've actually answered (typically a few minutes, sometimes longer). Treat that prefix as exactly what it says: their real answer to the brief you sent, not a message from the user. Read it and continue naturally — fold their input into a finished recommendation, address it to the user, or ask one genuine follow-up via the same consult tool again if something real still needs resolving. Don't loop more than a couple of rounds; if it's not converging, summarize where things stand for the user instead of continuing to go back and forth. If instead you get a message prefixed **"[System]"** saying the consultation failed, they're not going to reply to that one — tell the user and proceed without their input, or note it's worth asking them directly later. Either way, this arrives as a fresh turn, not mid-conversation — don't assume you remember exactly what you were doing; the message itself has everything you need.
+
+\`delegate_to_santi\` hands a specific implementation task straight to Santi so he can build it — read the code, write the fix, and open a PR (he no longer merges on his own initiative; he'll ask the user directly for approval to merge once it's ready) — without the user having to separately go address him themselves and repeat everything you already worked out. Tell the user it's been handed off rather than implying it's already done or already shipped. Only use it when the user has clearly asked for something to actually be built or fixed, not just discussed (e.g. "can you get Santi to build this", "let's ship this change") — don't send Santi work off your own initiative just because you recommended something; that's the key difference from the consult tools above, which you can trigger yourself. Write the instructions like a clear, self-contained spec: what to change and why, not a transcript of your conversation — Santi doesn't see this chat's history, only what you send him. He only acts on requests from the one person who owns this bot setup, so if that check fails you'll get told rather than have it silently happen — just relay that to whoever asked.
 
 Speak English unless addressed in another language. No filler, no over-explaining, no emoji.`;
 }
@@ -164,7 +166,7 @@ const tools: Anthropic.Tool[] = [
   },
   {
     name: 'delegate_to_santi',
-    description: 'Hands a specific implementation task to Santi (the CTO) to build and ship — he reads the code, writes the fix, and opens + merges a PR. This only records the task and returns immediately; Santi actually works on it separately and posts his own results directly in this chat once done (can take a few minutes for a substantial change) — don\'t wait for or expect his reply in this same turn, and don\'t re-delegate the same task again just because you haven\'t seen a result yet. Only use when the user has explicitly asked for something to actually be built/fixed, not just discussed.',
+    description: 'Hands a specific implementation task to Santi (the CTO) to build — he reads the code, writes the fix, and opens a PR, then asks the user directly for approval before merging it himself. This only records the task and returns immediately; Santi actually works on it separately and posts his own results directly in this chat once done (can take a few minutes for a substantial change) — don\'t wait for or expect his reply in this same turn, and don\'t re-delegate the same task again just because you haven\'t seen a result yet. Only use when the user has explicitly asked for something to actually be built/fixed, not just discussed.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -184,22 +186,33 @@ const tools: Anthropic.Tool[] = [
       required: ['brief'],
     },
   },
+  {
+    name: 'consult_santi',
+    description: 'Loops Santi (the CTO) in for a technical-feasibility opinion on something you\'re considering recommending — separate from delegate_to_santi, which actually hands him work to build. Use this to get his read before you commit to a recommendation that hinges on how hard something would be to build, not to get it shipped. This only records the brief and returns immediately; Santi replies separately and posts his take directly into this chat as himself once ready (usually a few minutes) — don\'t wait for or expect his reply in this same turn.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        brief: { type: 'string', description: 'A clear, self-contained question about technical feasibility, effort, or approach — Santi does not see this conversation, only this text.' },
+      },
+      required: ['brief'],
+    },
+  },
 ];
 
 export async function clearHistory(chatId: number): Promise<void> {
   await clearDb(chatId, BOT_NAME);
 }
 
-/** Passively records something Pepe posted in the shared group chat into
- * Angeles's own history, without running a chat() turn — she has no other way
- * to see his messages (bot-authored messages never resolve as addressed to
- * her, see bot-addressing.ts, so they'd otherwise be dropped entirely). This
- * only makes her aware of it for her next real turn; it doesn't make her
- * react or reply on its own, unlike consult_pepe's reply loop (see
- * process-pepe-consultations.ts) which exists specifically to continue a
- * conversation she initiated. */
-export async function recordPepeMessage(chatId: number, text: string): Promise<void> {
-  await saveMessage(chatId, BOT_NAME, 'user', `[Pepe posted in the group]\n\n${text}`);
+/** Passively records something a teammate (Pepe or Santi) posted in the
+ * shared group chat into Angeles's own history, without running a chat()
+ * turn — she has no other way to see their messages (bot-authored messages
+ * never resolve as addressed to her, see bot-addressing.ts, so they'd
+ * otherwise be dropped entirely). This only makes her aware of it for her
+ * next real turn; it doesn't make her react or reply on its own, unlike
+ * consult_pepe/consult_santi's reply loop (see process-bot-consultations.ts)
+ * which exists specifically to continue a conversation she initiated. */
+export async function recordTeammateMessage(chatId: number, fromLabel: string, text: string): Promise<void> {
+  await saveMessage(chatId, BOT_NAME, 'user', `[${fromLabel} posted in the group]\n\n${text}`);
 }
 
 export async function chat(chatId: number, userMessage: string, senderId?: number): Promise<string> {
@@ -352,10 +365,17 @@ export async function chat(chatId: number, userMessage: string, senderId?: numbe
               // whatever Angeles already spent investigating beforehand
               // risks blowing this route's 300s maxDuration — same reasoning
               // as delegate_to_santi below. Recording it instead and letting
-              // the process-pepe-consultations cron (runs every 5 minutes)
+              // the process-bot-consultations cron (runs every 5 minutes)
               // pick it up gives Pepe his own full, undiminished budget.
-              await createConsultation(chatId, input.brief);
+              await createConsultation(chatId, 'angeles', 'pepe', input.brief);
               resultContent = 'Consulted Pepe. He\'ll post his marketing take directly in this chat once it\'s ready — usually within a few minutes.';
+            }
+
+            if (block.name === 'consult_santi') {
+              const input = block.input as { brief: string };
+              // Same decoupling reasoning as consult_pepe above.
+              await createConsultation(chatId, 'angeles', 'santi', input.brief);
+              resultContent = 'Consulted Santi. He\'ll post his technical take directly in this chat once it\'s ready — usually within a few minutes.';
             }
           })(), TOOL_TIMEOUT_MS, block.name);
         } catch (err) {

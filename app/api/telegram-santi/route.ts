@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { TelegramClient } from '@/lib/telegram';
-import { clearHistory, chat } from '@/lib/dev-agent';
+import { clearHistory, chat, recordTeammateMessage } from '@/lib/dev-agent';
 import { claimTelegramUpdate } from '@/lib/telegram-dedup';
-import { resolveAddressee, allBots } from '@/lib/bot-addressing';
+import { resolveAddressee, allBots, identifyBotAuthor, BOT_LABELS } from '@/lib/bot-addressing';
 
 export const maxDuration = 300;
 
@@ -32,6 +32,19 @@ export async function POST(req: NextRequest) {
     const message = body?.message;
     chatId = message?.chat?.id;
     if (!chatId) return NextResponse.json({ ok: true });
+
+    // Checked before the owner gate below: a bot-authored message will never
+    // numerically match the owner's Telegram user id, so it'd otherwise be
+    // silently dropped by that check — but Santi should still passively see
+    // what a teammate posts. Recorded as context on his own history, not run
+    // through chat() (no reply, no reaction to every single thing posted).
+    const authorBot = identifyBotAuthor(message, allBots());
+    if (authorBot) {
+      if (authorBot !== 'santi' && message.text) {
+        await recordTeammateMessage(chatId, BOT_LABELS[authorBot], message.text);
+      }
+      return NextResponse.json({ ok: true });
+    }
 
     // Only the owner of this bot can instruct it — it can open PRs and merge
     // them, so anyone else in the group being able to trigger that would be
