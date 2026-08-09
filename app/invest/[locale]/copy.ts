@@ -24,15 +24,14 @@ export interface InvestCopy {
   galleryTitle: string;
   formTitle: string;
   formSubtitle: string;
-  investorTypeLabel: string;
-  investorTypePlaceholder: string;
-  investorTypeOptions: { value: string; label: string }[];
   nameLabel: string;
   namePlaceholder: string;
   emailLabel: string;
   emailPlaceholder: string;
   mobileLabel: string;
   mobilePlaceholder: string;
+  consentTerms: string;
+  consentMarketing: string;
   submit: string;
   submitting: string;
   successTitle: string;
@@ -40,6 +39,7 @@ export interface InvestCopy {
   errorGeneric: string;
   errorRequired: string;
   errorEmail: string;
+  errorConsent: string;
   privacyNote: string;
   footerLine: string;
 }
@@ -56,7 +56,7 @@ export const COPY: Record<Locale, InvestCopy> = {
     eyebrow: 'Grupo YAKGU · Promotor inmobiliario hotelero · España',
     headline: 'BDS36 — Nervión, Sevilla',
     subheadline:
-      'Aparthotel boutique en Nervión, Sevilla — permisos concedidos, co-inversión abierta a un grupo selecto de inversores.',
+      'Co-inversión directa junto al promotor. Abrimos una ventana selecta para inversores serios. Aparthotel boutique en Nervión, Sevilla — permisos concedidos, listo para construir.',
     ctaPrimary: 'Solicitar el dossier de inversión',
     highlightsTitle: 'La oportunidad',
     highlights: [
@@ -84,7 +84,6 @@ export const COPY: Record<Locale, InvestCopy> = {
       'Con BDS36 ya hemos hecho el trabajo duro — hemos encontrado el solar, navegado el proceso de planificación y obtenido los permisos. Lo que buscamos ahora es el grupo adecuado de co-inversores para llevarlo hasta la finalización. Mantenemos el círculo pequeño deliberadamente: menos socios, mejor alineación, retornos más transparentes.',
     ],
     aboutStats: [
-      { value: 'Muchos años', label: 'desarrollando activos hoteleros en España' },
       { value: '18', label: 'unidades boutique — diseñadas para el mercado de estancia corta' },
       { value: '100%', label: 'licencias concedidas — sin riesgo de tramitación' },
       { value: 'Nervión', label: 'el distrito hostelero emergente de Sevilla' },
@@ -102,21 +101,14 @@ export const COPY: Record<Locale, InvestCopy> = {
     formTitle: 'SOLICITA ACCESO',
     formSubtitle:
       'Déjanos tus datos y te enviamos el dossier completo: proyecto, estructura financiera y condiciones de participación.',
-    investorTypeLabel: 'Perfil de inversor (opcional)',
-    investorTypePlaceholder: 'Seleccione su perfil',
-    investorTypeOptions: [
-      { value: 'individual', label: 'Inversor particular' },
-      { value: 'family_office', label: 'Family office' },
-      { value: 'hnwi', label: 'Inversor privado (HNWI)' },
-      { value: 'fund', label: 'Fondo de inversión' },
-      { value: 'other', label: 'Otro' },
-    ],
     nameLabel: 'Nombre completo',
     namePlaceholder: 'Su nombre',
     emailLabel: 'Correo electrónico',
     emailPlaceholder: 'nombre@empresa.com',
     mobileLabel: 'Teléfono móvil',
     mobilePlaceholder: '+34 600 000 000',
+    consentTerms: 'Acepto los términos y condiciones',
+    consentMarketing: 'Acepto recibir información comercial.',
     submit: 'Enviarme el pack de inversión',
     submitting: 'Enviando…',
     successTitle: 'En camino.',
@@ -125,6 +117,7 @@ export const COPY: Record<Locale, InvestCopy> = {
     errorGeneric: 'Ha ocurrido un error. Por favor, inténtelo de nuevo.',
     errorRequired: 'Por favor, complete todos los campos.',
     errorEmail: 'Introduzca un correo electrónico válido.',
+    errorConsent: 'Debe aceptar los términos y condiciones para continuar.',
     privacyNote: 'Sus datos se utilizan únicamente para contactarle sobre esta oportunidad de inversión.',
     footerLine: 'Grupo YAKGU — Desarrollador inmobiliario especializado en el ecosistema hotelero, España.',
   },
@@ -139,7 +132,7 @@ export const COPY: Record<Locale, InvestCopy> = {
     eyebrow: 'Grupo YAKGU · Hospitality Real Estate Developer · Spain',
     headline: 'BDS36 — Nervión, Sevilla',
     subheadline:
-      'Boutique aparthotel in Nervión, Seville — fully permitted, co-investment open to a select group of investors.',
+      'A direct co-investment opportunity alongside the developer. We are opening a select window for serious investors. A fully permitted, construction-ready boutique aparthotel in Nervión — Seville\'s fastest-growing hospitality district. 18 units. One asset.',
     ctaPrimary: 'Get the investment dossier',
     highlightsTitle: 'The opportunity',
     highlights: [
@@ -167,7 +160,6 @@ export const COPY: Record<Locale, InvestCopy> = {
       'With BDS36 we have done the hard work already — sourced the site, navigated planning, secured the permits. What we are looking for now is the right group of co-investors to take this through to completion. We keep the circle small deliberately: fewer partners, better alignment, more transparent returns.',
     ],
     aboutStats: [
-      { value: 'Many years', label: 'developing hospitality assets in Spain' },
       { value: '18', label: 'boutique units — designed for the short-stay market' },
       { value: '100%', label: 'permits secured — zero entitlement risk' },
       { value: 'Nervión', label: "Seville's emerging hospitality district" },
@@ -185,21 +177,14 @@ export const COPY: Record<Locale, InvestCopy> = {
     formTitle: 'REQUEST ACCESS',
     formSubtitle:
       "Leave your details and we'll send you the full dossier: project overview, financial structure, and terms of participation.",
-    investorTypeLabel: 'Investor type (optional)',
-    investorTypePlaceholder: 'Select your profile',
-    investorTypeOptions: [
-      { value: 'individual', label: 'Individual investor' },
-      { value: 'family_office', label: 'Family office' },
-      { value: 'hnwi', label: 'Private investor (HNWI)' },
-      { value: 'fund', label: 'Investment fund' },
-      { value: 'other', label: 'Other' },
-    ],
     nameLabel: 'Full name',
     namePlaceholder: 'Your name',
     emailLabel: 'Email address',
     emailPlaceholder: 'name@company.com',
     mobileLabel: 'Mobile number',
     mobilePlaceholder: '+1 555 000 0000',
+    consentTerms: 'I accept the terms and conditions',
+    consentMarketing: 'I agree to receive commercial information.',
     submit: 'Send me the investment pack',
     submitting: 'Sending…',
     successTitle: 'On its way.',
@@ -208,6 +193,7 @@ export const COPY: Record<Locale, InvestCopy> = {
     errorGeneric: 'Something went wrong. Please try again.',
     errorRequired: 'Please fill in all fields.',
     errorEmail: 'Please enter a valid email address.',
+    errorConsent: 'You must accept the terms and conditions to continue.',
     privacyNote: 'Your details are used only to contact you about this investment opportunity.',
     footerLine: 'Grupo YAKGU — Real estate developer focused on the hotel and hospitality ecosystem, Spain.',
   },
@@ -222,7 +208,7 @@ export const COPY: Record<Locale, InvestCopy> = {
     eyebrow: 'Grupo YAKGU · יזם נדל"ן מלונאי · ספרד',
     headline: 'BDS36 — נרביון, סביליה',
     subheadline:
-      'אפרטהוטל בוטיק בנרביון, סביליה — היתרים מאושרים, שותפות פתוחה לקבוצה נבחרת של משקיעים.',
+      'הזדמנות לשותפות השקעה ישירה לצד היזם. אנחנו פותחים חלון נבחר למשקיעים רציניים. אפרטהוטל בוטיק בנרביון, סביליה — היתרים מאושרים, מוכן לבנייה. 18 יחידות. נכס אחד.',
     ctaPrimary: 'קבלו את חוברת ההשקעה',
     highlightsTitle: 'ההזדמנות',
     highlights: [
@@ -250,7 +236,6 @@ export const COPY: Record<Locale, InvestCopy> = {
       'עם BDS36 כבר עשינו את העבודה הקשה — מצאנו את הקרקע, ניווטנו את תהליך התכנון והשגנו את ההיתרים. מה שאנחנו מחפשים עכשיו הוא הקבוצה הנכונה של שותפי-השקעה שתלווה אותנו עד להשלמה. אנחנו שומרים על מעגל קטן בכוונה: פחות שותפים, יישור קו טוב יותר, תשואות שקופות יותר.',
     ],
     aboutStats: [
-      { value: 'שנים רבות', label: 'של פיתוח נכסי אירוח בספרד' },
       { value: '18', label: 'יחידות בוטיק — מיועדות לשוק השהות הקצרה' },
       { value: '100%', label: 'היתרים אושרו — אפס סיכון תכנוני' },
       { value: 'נרביון', label: 'מרכז האירוח המתפתח של סביליה' },
@@ -268,21 +253,14 @@ export const COPY: Record<Locale, InvestCopy> = {
     formTitle: 'בקשת גישה',
     formSubtitle:
       'השאירו פרטים ונשלח לכם את הדוסייה המלאה: סקירת הפרויקט, המבנה הפיננסי ותנאי ההשתתפות.',
-    investorTypeLabel: 'סוג משקיע (אופציונלי)',
-    investorTypePlaceholder: 'בחרו את הפרופיל שלכם',
-    investorTypeOptions: [
-      { value: 'individual', label: 'משקיע פרטי' },
-      { value: 'family_office', label: 'משרד משפחה' },
-      { value: 'hnwi', label: 'משקיע פרטי בעל הון גבוה (HNWI)' },
-      { value: 'fund', label: 'קרן השקעות' },
-      { value: 'other', label: 'אחר' },
-    ],
     nameLabel: 'שם מלא',
     namePlaceholder: 'השם שלך',
     emailLabel: 'כתובת אימייל',
     emailPlaceholder: 'name@company.com',
     mobileLabel: 'מספר נייד',
     mobilePlaceholder: '+972 50 000 0000',
+    consentTerms: 'אני מסכים/ה לתנאים ולהגבלות',
+    consentMarketing: 'אני מסכים/ה לקבל מידע מסחרי.',
     submit: 'שלחו לי את חבילת ההשקעה',
     submitting: 'שולח…',
     successTitle: 'בדרך אליכם.',
@@ -291,6 +269,7 @@ export const COPY: Record<Locale, InvestCopy> = {
     errorGeneric: 'משהו השתבש. נסו שוב.',
     errorRequired: 'נא למלא את כל השדות.',
     errorEmail: 'נא להזין כתובת אימייל תקינה.',
+    errorConsent: 'יש לאשר את התנאים וההגבלות כדי להמשיך.',
     privacyNote: 'הפרטים ישמשו אך ורק ליצירת קשר בנוגע להזדמנות השקעה זו.',
     footerLine: 'Grupo YAKGU — יזם נדל"ן המתמחה באקוסיסטם המלונאות והאירוח, ספרד.',
   },
