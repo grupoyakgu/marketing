@@ -4,20 +4,12 @@ import { useEffect, useState } from 'react';
 
 const SLIDES = [
   {
-    src: 'https://res.cloudinary.com/quupmn8b/image/upload/v1784294496/facada_day_light_2_yhprdz.jpg',
-    alt: 'BDS36 façade day',
+    src: 'https://res.cloudinary.com/quupmn8b/image/upload/v1784287887/terrace_pool_from_above_ulijqc.jpg',
+    alt: 'BDS36 terrace pool from above',
   },
   {
     src: 'https://res.cloudinary.com/quupmn8b/image/upload/v1784294494/ground_floor_patio_and_pool_f2ifyy.jpg',
     alt: 'BDS36 patio and pool',
-  },
-  {
-    src: 'https://res.cloudinary.com/quupmn8b/image/upload/v1784287887/terrace_pool_from_above_ulijqc.jpg',
-    alt: 'BDS36 terrace pool',
-  },
-  {
-    src: 'https://res.cloudinary.com/quupmn8b/image/upload/v1784294496/facada_night_2_gppwxx.jpg',
-    alt: 'BDS36 façade night',
   },
 ];
 
