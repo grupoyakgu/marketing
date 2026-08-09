@@ -58,9 +58,9 @@ export default async function InvestPage({ params }: { params: { locale: string 
         <img
           src={RENDER_IMAGES[0]}
           alt=""
-          className="absolute inset-0 h-full w-full object-cover opacity-30"
+          className="absolute inset-0 h-full w-full object-cover"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-neutral-950/20 via-neutral-950/60 to-neutral-950" />
+        <div className="absolute inset-0 bg-gradient-to-b from-neutral-950/30 via-neutral-950/50 to-neutral-950" />
         <div className="relative mx-auto max-w-5xl px-6 py-24 text-center sm:py-32">
           <p className="text-sm font-semibold uppercase tracking-widest text-amber-400">{copy.eyebrow}</p>
           <h1 className="mt-4 text-3xl font-bold tracking-tight sm:text-5xl">{copy.headline}</h1>
