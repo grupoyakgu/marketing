@@ -17,24 +17,30 @@ function getBaseUrl(): string {
   return process.env.NEXT_PUBLIC_APP_URL ?? 'https://marketing-grupo-yakgu.vercel.app';
 }
 
-// Anthropic's Vision API hard-caps any single image dimension at 8000px.
-// A full-page capture's height is whatever the page's total scroll height
-// happens to be -- unbounded -- while width stays fixed at the viewport
-// width set below, so only height realistically needs capping here, but
-// both are guarded for safety.
-const MAX_IMAGE_DIMENSION = 8000;
+// Anthropic's Vision API hard-caps any single image dimension at 8000px,
+// but chat_history keeps the last 40 messages, so a browsing session
+// routinely has more than one image live in context at once -- and the
+// *many-image* request path caps every dimension at 2000px, not 8000.
+// 2000 is therefore the real limit that matters here. A full-page
+// capture's height is whatever the page's total scroll height happens to
+// be -- unbounded -- while width stays fixed at the viewport width set
+// below, but both are guarded for safety.
+const MAX_IMAGE_DIMENSION = 2000;
 
-/** Caps a full-page screenshot to MAX_IMAGE_DIMENSION via `clip` instead of
- * capturing the true full page when it would exceed that. Confirmed in
- * production: a full-page screenshot of a long marketing page came back
- * taller than the cap, got saved to chat_history as part of a normal,
- * correctly-paired tool_result, and only got rejected on the *next*
- * messages.create call -- by which point it was already permanently stuck
- * in storage, poisoning every future turn the same way an orphaned
- * tool_use does (see lib/chat-history.ts's repair pass, which can't help
- * here since this pairing is well-formed; only the image content itself is
- * the problem). Capping at capture time is simpler than validating and
- * repairing it after the fact. */
+/** Scales a full-page screenshot down to fit MAX_IMAGE_DIMENSION instead of
+ * cropping it there. An earlier version used `clip` to crop at the cap,
+ * which silently threw away everything below the fold -- useless for
+ * judging a long landing page's design. `clip.scale` asks Chrome to render
+ * the same full-page region at a smaller pixel scale instead, so the
+ * output still shows the whole page, just downsized. Confirmed in
+ * production: a full-page screenshot taller than the cap got saved to
+ * chat_history as part of a normal, correctly-paired tool_result, and only
+ * got rejected on the *next* messages.create call -- by which point it was
+ * already permanently stuck in storage, poisoning every future turn the
+ * same way an orphaned tool_use does (see lib/chat-history.ts's repair
+ * pass, which can't help here since this pairing is well-formed; only the
+ * image content itself is the problem). Capping at capture time is simpler
+ * than validating and repairing it after the fact. */
 async function capturePageScreenshot(page: Page, fullPage: boolean): Promise<Buffer> {
   if (!fullPage) {
     return Buffer.from(await page.screenshot({ type: 'png' }));
@@ -43,12 +49,13 @@ async function capturePageScreenshot(page: Page, fullPage: boolean): Promise<Buf
     width: document.documentElement.scrollWidth,
     height: document.documentElement.scrollHeight,
   }));
-  if (width <= MAX_IMAGE_DIMENSION && height <= MAX_IMAGE_DIMENSION) {
+  const scale = Math.min(1, MAX_IMAGE_DIMENSION / Math.max(width, height));
+  if (scale >= 1) {
     return Buffer.from(await page.screenshot({ type: 'png', fullPage: true }));
   }
   return Buffer.from(await page.screenshot({
     type: 'png',
-    clip: { x: 0, y: 0, width: Math.min(width, MAX_IMAGE_DIMENSION), height: Math.min(height, MAX_IMAGE_DIMENSION) },
+    clip: { x: 0, y: 0, width, height, scale },
   }));
 }
 
