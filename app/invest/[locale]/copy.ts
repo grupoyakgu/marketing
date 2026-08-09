@@ -53,10 +53,10 @@ export const COPY: Record<Locale, InvestCopy> = {
       'Aparthotel boutique de 18 unidades con licencia concedida y listo para construir en Nervión, Sevilla. Co-inversión directa junto al promotor.',
     languageLabel: 'Idioma',
     languageNames: { es: 'Español', en: 'English', he: 'עברית' },
-    eyebrow: 'Una inversión real. Una dirección real. Sevilla, España.',
+    eyebrow: 'Grupo YAKGU · Promotor inmobiliario hotelero · España',
     headline: 'BDS36 — Nervión, Sevilla',
     subheadline:
-      'Llevamos muchos años desarrollando activos hoteleros en España. Sabemos lo que hace que un proyecto merezca la pena. BDS36 es uno de ellos: 18 apartamentos boutique en Nervión — el distrito emergente más interesante de Sevilla — con licencia concedida y listo para iniciar obra. Abrimos una ventana selecta para co-inversores.',
+      'Aparthotel boutique en Nervión, Sevilla — permisos concedidos, co-inversión abierta a un grupo selecto de inversores.',
     ctaPrimary: 'Solicitar el dossier de inversión',
     highlightsTitle: 'La oportunidad',
     highlights: [
@@ -98,9 +98,9 @@ export const COPY: Record<Locale, InvestCopy> = {
       'El distrito sumará más de 44 nuevas plazas de alojamiento turístico.',
     ],
     galleryTitle: 'El proyecto',
-    formTitle: 'Pídenos el dossier',
+    formTitle: 'SOLICITA ACCESO',
     formSubtitle:
-      'Déjenos sus datos. Le enviaremos el pack completo de inversión: resumen del proyecto, financiero, calendario y condiciones de participación. Sin spam, sin llamadas comerciales salvo que las quiera.',
+      'Déjanos tus datos y te enviamos el dossier completo: proyecto, estructura financiera y condiciones de participación.',
     investorTypeLabel: 'Perfil de inversor (opcional)',
     investorTypePlaceholder: 'Seleccione su perfil',
     investorTypeOptions: [
@@ -135,10 +135,10 @@ export const COPY: Record<Locale, InvestCopy> = {
       'A fully permitted, ready-to-build 18-unit boutique aparthotel in Nervión, Seville. A direct co-investment opportunity alongside the developer.',
     languageLabel: 'Language',
     languageNames: { es: 'Español', en: 'English', he: 'עברית' },
-    eyebrow: 'A real investment. A real address. Seville, Spain.',
+    eyebrow: 'Grupo YAKGU · Hospitality Real Estate Developer · Spain',
     headline: 'BDS36 — Nervión, Sevilla',
     subheadline:
-      "After many years building hospitality assets across Spain, we know what makes a project worth backing. BDS36 is one of them: 18 boutique apartments in Nervión — Seville's most exciting emerging district — fully permitted and ready to break ground. We're opening a select window for co-investors.",
+      'Boutique aparthotel in Nervión, Seville — fully permitted, co-investment open to a select group of investors.',
     ctaPrimary: 'Get the investment dossier',
     highlightsTitle: 'The opportunity',
     highlights: [
@@ -152,7 +152,7 @@ export const COPY: Record<Locale, InvestCopy> = {
       },
       {
         title: 'Zero permit risk',
-        body: "Building licence secured. No waiting, no uncertainty. Construction starts when we close.",
+        body: 'Building licence secured. No waiting, no uncertainty. Construction starts when we close.',
       },
       {
         title: 'A select co-investment',
@@ -162,7 +162,7 @@ export const COPY: Record<Locale, InvestCopy> = {
     aboutTitle: 'Who we are',
     aboutBody: [
       'We are a small, focused team of real estate developers who have spent many years building hotels and hospitality assets in Spain. Not a fund. Not a platform. We develop, we build, and we invite a small number of co-investors to participate alongside us in each project.',
-      "With BDS36 we have done the hard work already — sourced the site, navigated planning, secured the permits. What we are looking for now is the right group of co-investors to take this through to completion. We keep the circle small deliberately: fewer partners, better alignment, more transparent returns.",
+      'With BDS36 we have done the hard work already — sourced the site, navigated planning, secured the permits. What we are looking for now is the right group of co-investors to take this through to completion. We keep the circle small deliberately: fewer partners, better alignment, more transparent returns.',
     ],
     aboutStats: [
       { value: 'Many years', label: 'developing hospitality assets in Spain' },
@@ -180,9 +180,9 @@ export const COPY: Record<Locale, InvestCopy> = {
       'The district will add 44+ new tourist accommodation units.',
     ],
     galleryTitle: 'The project',
-    formTitle: 'Get the dossier',
+    formTitle: 'REQUEST ACCESS',
     formSubtitle:
-      "Send us your details. We'll send back the full investment pack — project overview, financials, timeline, and terms of participation. No spam, no sales calls unless you want one.",
+      "Leave your details and we'll send you the full dossier: project overview, financial structure, and terms of participation.",
     investorTypeLabel: 'Investor type (optional)',
     investorTypePlaceholder: 'Select your profile',
     investorTypeOptions: [
@@ -217,10 +217,10 @@ export const COPY: Record<Locale, InvestCopy> = {
       'אפרטהוטל בוטיק בן 18 יחידות עם היתרים מאושרים ומוכן לבנייה בנרביון, סביליה. הזדמנות לשותפות ישירה לצד היזם.',
     languageLabel: 'שפה',
     languageNames: { es: 'Español', en: 'English', he: 'עברית' },
-    eyebrow: 'השקעה אמיתית. כתובת אמיתית. סביליה, ספרד.',
+    eyebrow: 'Grupo YAKGU · יזם נדל"ן מלונאי · ספרד',
     headline: 'BDS36 — נרביון, סביליה',
     subheadline:
-      'שנים רבות של פיתוח נכסי אירוח בספרד לימדו אותנו מה הופך פרויקט לכזה שמצדיק השקעה. BDS36 הוא כזה: 18 דירות בוטיק בנרביון — השכונה המרגשת ביותר בסביליה — עם כל ההיתרים ומוכן לסגור. אנחנו פותחים חלון מצומצם לשותפי השקעה.',
+      'אפרטהוטל בוטיק בנרביון, סביליה — היתרים מאושרים, שותפות פתוחה לקבוצה נבחרת של משקיעים.',
     ctaPrimary: 'קבלו את חוברת ההשקעה',
     highlightsTitle: 'ההזדמנות',
     highlights: [
@@ -262,9 +262,9 @@ export const COPY: Record<Locale, InvestCopy> = {
       'השכונה תוסיף למעלה מ-44 יחידות אירוח נופש חדשות.',
     ],
     galleryTitle: 'הפרויקט',
-    formTitle: 'קבלו את החוברת',
+    formTitle: 'בקשת גישה',
     formSubtitle:
-      'השאירו פרטים ואנחנו נשלח את חבילת ההשקעה המלאה — סקירת הפרויקט, נתונים פיננסיים, לוח זמנים ותנאי השתתפות. ללא ספאם, ללא שיחות מכירה אלא אם רוצים.',
+      'השאירו פרטים ונשלח לכם את הדוסייה המלאה: סקירת הפרויקט, המבנה הפיננסי ותנאי ההשתתפות.',
     investorTypeLabel: 'סוג משקיע (אופציונלי)',
     investorTypePlaceholder: 'בחרו את הפרופיל שלכם',
     investorTypeOptions: [

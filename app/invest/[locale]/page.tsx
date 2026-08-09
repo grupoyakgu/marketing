@@ -46,10 +46,13 @@ export default async function InvestPage({ params }: { params: { locale: string 
             alt=""
             className="absolute inset-0 h-full w-full object-cover"
           />
-          {/* Bottom gradient for text legibility */}
-          <div className="absolute inset-x-0 bottom-0 h-[40%] bg-gradient-to-t from-black/70 to-transparent" />
-          {/* Project name anchored bottom-left */}
-          <div className="absolute bottom-0 left-0 p-8 lg:p-12">
+          {/* Subtle overlay — lets the photo breathe */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/20" />
+          {/* Title anchored top-left */}
+          <div className="absolute top-0 left-0 p-8 lg:p-12">
+            <p className="mb-3 text-xs font-medium uppercase tracking-widest text-white/60">
+              {copy.eyebrow}
+            </p>
             <p
               className="text-3xl font-black uppercase leading-tight tracking-wide text-white lg:text-5xl"
               style={{ textShadow: '0 2px 12px rgba(0,0,0,0.6)' }}
@@ -57,8 +60,8 @@ export default async function InvestPage({ params }: { params: { locale: string 
               {copy.headline}
             </p>
             <p
-              className="mt-2 max-w-sm text-sm font-light text-white/80 lg:text-base"
-              style={{ textShadow: '0 1px 6px rgba(0,0,0,0.6)' }}
+              className="mt-2 max-w-md text-base font-light leading-snug text-white/85 lg:text-lg"
+              style={{ textShadow: '0 1px 6px rgba(0,0,0,0.5)' }}
             >
               {copy.subheadline}
             </p>
@@ -77,7 +80,7 @@ export default async function InvestPage({ params }: { params: { locale: string 
             />
 
             {/* Form heading */}
-            <h2 className="mt-8 text-3xl font-black uppercase tracking-tight text-white sm:text-4xl">
+            <h2 className="mt-8 text-4xl font-black uppercase leading-none tracking-tight text-white sm:text-5xl">
               {copy.formTitle}
             </h2>
             <p className="mt-2 text-sm text-neutral-400">{copy.formSubtitle}</p>
