@@ -16,6 +16,11 @@ const LOGO_URL =
 
 const GALLERY_COUNT = 6;
 
+// Images to pin at the front of the gallery (case-insensitive name match).
+const GALLERY_PINNED = ['kitchen', 'terrace pool'];
+// Images to exclude from the gallery entirely (case-insensitive name match).
+const GALLERY_EXCLUDED = ['facade'];
+
 function isLocale(value: string): value is Locale {
   return (LOCALES as string[]).includes(value);
 }
@@ -37,7 +42,18 @@ export default async function InvestPage({ params }: { params: { locale: string 
     }),
   ]);
 
-  const gallery = galleryImages.slice(0, GALLERY_COUNT);
+  // Exclude any image whose name contains a term in GALLERY_EXCLUDED, then
+  // surface the pinned images first (in the order declared), followed by the
+  // remaining images in whatever order Cloudinary returns them.
+  const eligible = galleryImages.filter(
+    img => !GALLERY_EXCLUDED.some(term => img.name.toLowerCase().includes(term.toLowerCase()))
+  );
+  const pinned = GALLERY_PINNED
+    .map(term => eligible.find(img => img.name.toLowerCase().includes(term.toLowerCase())))
+    .filter((img): img is NonNullable<typeof img> => img !== undefined);
+  const pinnedIds = new Set(pinned.map(img => img.id));
+  const rest = eligible.filter(img => !pinnedIds.has(img.id));
+  const gallery = [...pinned, ...rest].slice(0, GALLERY_COUNT);
 
   return (
     <div dir={copy.dir} className="min-h-screen bg-neutral-950 text-white">
