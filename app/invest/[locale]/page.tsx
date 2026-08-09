@@ -21,6 +21,8 @@ const GALLERY_PINNED = ['kitchen', 'terrace pool'];
 // Images to exclude from the gallery entirely (case-insensitive name match).
 const GALLERY_EXCLUDED = ['facade'];
 
+const FOUNDER_IMAGE_NAME = 'founder_on_the_terrace_1';
+
 function isLocale(value: string): value is Locale {
   return (LOCALES as string[]).includes(value);
 }
@@ -34,10 +36,14 @@ export async function generateMetadata({ params }: { params: { locale: string } 
 export default async function InvestPage({ params }: { params: { locale: string } }) {
   if (!isLocale(params.locale)) notFound();
 
-  const [copy, galleryImages] = await Promise.all([
+  const [copy, galleryImages, founderImages] = await Promise.all([
     getLandingCopy(params.locale),
     listCloudinaryImagesInFolder('BDS 36').catch(err => {
       console.error('[invest] gallery fetch failed:', err);
+      return [];
+    }),
+    listCloudinaryImagesInFolder('founders').catch(err => {
+      console.error('[invest] founders fetch failed:', err);
       return [];
     }),
   ]);
@@ -54,6 +60,10 @@ export default async function InvestPage({ params }: { params: { locale: string 
   const pinnedIds = new Set(pinned.map(img => img.id));
   const rest = eligible.filter(img => !pinnedIds.has(img.id));
   const gallery = [...pinned, ...rest].slice(0, GALLERY_COUNT);
+
+  const founderImage = founderImages.find(img =>
+    img.name.toLowerCase().includes(FOUNDER_IMAGE_NAME.toLowerCase())
+  ) ?? null;
 
   return (
     <div dir={copy.dir} className="min-h-screen bg-neutral-950 text-white">
@@ -132,13 +142,26 @@ export default async function InvestPage({ params }: { params: { locale: string 
       <section className="border-y border-white/10 bg-white/5">
         <div className="mx-auto max-w-5xl px-6 py-16">
           <h2 className="text-2xl font-semibold sm:text-3xl">{copy.aboutTitle}</h2>
-          <div className="mt-6 max-w-2xl space-y-4">
-            {copy.aboutBody.map((para, i) => (
-              // aboutBody strings may contain trusted inline HTML (e.g. <a> links
-              // to our own pages) — content is hardcoded in copy.ts, never user input.
-              // eslint-disable-next-line react/no-danger
-              <p key={i} className="leading-relaxed text-neutral-300" dangerouslySetInnerHTML={{ __html: para }} />
-            ))}
+          <div className="mt-6 flex flex-col gap-10 lg:flex-row lg:items-start lg:gap-14">
+            {/* Text */}
+            <div className="max-w-2xl space-y-4 lg:flex-1">
+              {copy.aboutBody.map((para, i) => (
+                // aboutBody strings may contain trusted inline HTML (e.g. <a> links
+                // to our own pages) — content is hardcoded in copy.ts, never user input.
+                // eslint-disable-next-line react/no-danger
+                <p key={i} className="leading-relaxed text-neutral-300" dangerouslySetInnerHTML={{ __html: para }} />
+              ))}
+            </div>
+            {/* Founder image */}
+            {founderImage && (
+              <div className="lg:w-72 lg:shrink-0">
+                <img
+                  src={founderImage.url}
+                  alt={founderImage.name}
+                  className="h-80 w-full rounded-2xl object-cover lg:h-96"
+                />
+              </div>
+            )}
           </div>
           <div className="mt-10 grid grid-cols-2 gap-6 sm:grid-cols-4">
             {copy.aboutStats.map(stat => (
