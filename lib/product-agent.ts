@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { loadHistory, saveMessage, clearHistory as clearDb } from '@/lib/chat-history';
 import { readFile, listDirectory, searchCode } from '@/lib/github-dev';
-import { screenshotPage } from '@/lib/browser';
+import { screenshotPage, screenshotUrl } from '@/lib/browser';
 import { createDelegation } from '@/lib/santi-delegations';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -12,8 +12,9 @@ const BOT_NAME = 'angeles';
 // hard maxDuration, which SIGKILLs mid-await (skipping every catch) and
 // leaves that tool_use without a tool_result — permanently corrupting this
 // chat's history, since Claude's API then rejects every future message
-// referencing it. Higher than Pepe/Santi's since browse_page launches a
-// remote browser session (cold start plus login plus page render).
+// referencing it. Higher than Pepe/Santi's since browse_page/browse_url
+// launch a remote browser session (cold start plus, for browse_page, login
+// plus page render).
 // delegate_to_santi used to need this same elevated ceiling too — it ran
 // Santi's entire multi-step tool loop (read code, write files, open + merge
 // a PR) inline, sharing this route's 300s maxDuration with whatever Angeles
@@ -69,6 +70,8 @@ You're advising on \`grupoyakgu/marketing\` — this exact Next.js 14 (App Route
 
 You can also actually look at the live dashboard with \`browse_page\` — it screenshots a real page as it renders right now, logged in as your own dedicated read-only account, so you can judge real layout, spacing, and hierarchy instead of guessing from markup. Use it whenever a UX critique or a "does this screen work well" question is about something that actually exists — don't rely on \`read_file\` alone to imagine what a page looks like when you can just look at it.
 
+You can also browse the open web with \`browse_url\` — any public URL, including design references (Dribbble, Behance), competitor products, or live sites the user points you at. It takes a screenshot the same way \`browse_page\` does, just with no login and no domain restriction. Use it to ground a recommendation or comparison in what something actually looks like instead of describing it from memory or declining because you think you can't see it.
+
 Anyone in this group can address you, not just one specific person — you're a shared resource for product discussions, not gated to an owner the way Santi is (Santi can merge code changes on request, which is why he's restricted). Mentioning Pepe or Santi by name in your own reply doesn't ping them — the user has to address them directly for that.
 
 \`delegate_to_santi\` is the one exception: it hands a specific implementation task straight to Santi so he can build it — read the code, write the fix, open and merge a PR — without the user having to separately go address him themselves and repeat everything you already worked out. It only records the task; Santi actually works on it afterward and posts his own results directly in this chat once he's done, which can take a few minutes for a substantial change — tell the user it's been handed off rather than implying it's already done, and don't call it again for the same task just because you haven't seen his reply yet. Only use it when the user has clearly asked for something to actually be built or fixed, not just discussed (e.g. "can you get Santi to build this", "let's ship this change") — don't send Santi work off your own initiative just because you recommended something. Write the instructions like a clear, self-contained spec: what to change and why, not a transcript of your conversation — Santi doesn't see this chat's history, only what you send him. He only acts on requests from the one person who owns this bot setup, so if that check fails you'll get told rather than have it silently happen — just relay that to whoever asked.
@@ -122,6 +125,18 @@ const tools: Anthropic.Tool[] = [
         full_page: { type: 'boolean', description: 'Capture the full scrollable page instead of just the visible viewport. Defaults to false.' },
       },
       required: ['path'],
+    },
+  },
+  {
+    name: 'browse_url',
+    description: 'Takes a screenshot of any public webpage — design references (Dribbble, Behance), competitor products, articles, anything reachable by URL. Unlike browse_page (scoped to this app\'s own dashboard, auto-logged-in), this takes a full external URL with no authentication and no domain restriction.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        url: { type: 'string', description: 'Full URL to browse, including the scheme, e.g. "https://dribbble.com/shots/12345".' },
+        full_page: { type: 'boolean', description: 'Capture the full scrollable page instead of just the visible viewport. Defaults to false.' },
+      },
+      required: ['url'],
     },
   },
   {
@@ -242,6 +257,15 @@ export async function chat(chatId: number, userMessage: string, senderId?: numbe
               ];
             }
 
+            if (block.name === 'browse_url') {
+              const input = block.input as { url: string; full_page?: boolean };
+              const screenshot = await screenshotUrl(input.url, input.full_page ?? false);
+              resultContent = [
+                { type: 'text', text: `Screenshot of ${input.url}:` },
+                { type: 'image', source: { type: 'base64', media_type: 'image/png', data: screenshot.toString('base64') } },
+              ];
+            }
+
             if (block.name === 'delegate_to_santi') {
               const input = block.input as { instructions: string };
               const ownerId = process.env.SANTI_OWNER_TELEGRAM_ID;
@@ -259,9 +283,9 @@ export async function chat(chatId: number, userMessage: string, senderId?: numbe
                 // own investigation beforehand. Confirmed in production: a
                 // real multi-part edit request timed out at 180s with
                 // nothing delivered. Recording it instead and letting the
-                // process-santi-delegations cron (runs every minute) pick it
-                // up gives Santi his own full, undiminished budget, same as
-                // messaging him directly.
+                // process-santi-delegations cron (runs every 5 minutes)
+                // pick it up gives Santi his own full, undiminished budget,
+                // same as messaging him directly.
                 await createDelegation(chatId, input.instructions);
                 resultContent = 'Delegated to Santi. He\'ll post the result directly in this chat once it\'s done — usually within a few minutes, longer for larger changes.';
               }

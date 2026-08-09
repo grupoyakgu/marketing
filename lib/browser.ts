@@ -99,3 +99,33 @@ export async function screenshotPage(path: string, fullPage: boolean): Promise<B
     await browser.close();
   }
 }
+
+/** Screenshots any public URL — competitor products, design references
+ * (Dribbble, Behance, live SaaS products), articles, anything reachable on
+ * the open web. Unlike screenshotPage, this attaches no session cookie and
+ * isn't scoped to this app's own domain. Restricted to http(s) to rule out
+ * file://, chrome://, javascript: and similar non-navigational schemes. */
+export async function screenshotUrl(url: string, fullPage: boolean): Promise<Buffer> {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`"${url}" is not a valid URL.`);
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`Refusing to browse "${url}" — only http:// and https:// URLs are allowed.`);
+  }
+
+  const connectUrl = await createBrowserbaseSession();
+  const browser = await puppeteer.connect({ browserWSEndpoint: connectUrl });
+
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1440, height: 900 });
+    await page.goto(parsed.toString(), { waitUntil: 'networkidle0', timeout: 30_000 });
+    const screenshot = await page.screenshot({ type: 'png', fullPage });
+    return Buffer.from(screenshot);
+  } finally {
+    await browser.close();
+  }
+}
