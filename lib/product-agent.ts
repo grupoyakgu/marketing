@@ -24,6 +24,20 @@ const BOT_NAME = 'angeles';
 // process-santi-delegations cron, with his own full budget.
 const TOOL_TIMEOUT_MS = 180_000;
 
+// Confirmed in production: given browse_url, Angeles went on an unbounded
+// competitive-research spree -- 20 sequential screenshots in one turn.
+// Individually harmless (each already has its own 30s Puppeteer navigation
+// timeout, well inside TOOL_TIMEOUT_MS), but their *sum* has no ceiling of
+// its own, and blew straight through this route's hard 300s maxDuration.
+// Vercel SIGKILLs at that point same as always -- mid-await, skipping every
+// catch -- so the whole reply was lost and the user saw nothing at all,
+// not even an error. A cap on total browse_page/browse_url calls per turn
+// (shared, since both launch a Browserbase session and hit the same
+// account-level rate limit) guarantees the loop always leaves enough of
+// the budget for a final text reply, same purpose as the per-tool timeout
+// above but for the aggregate instead of a single call.
+const MAX_BROWSE_CALLS_PER_TURN = 6;
+
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`Tool "${label}" timed out after ${ms}ms`)), ms);
@@ -71,6 +85,8 @@ You're advising on \`grupoyakgu/marketing\` — this exact Next.js 14 (App Route
 You can also actually look at the live dashboard with \`browse_page\` — it screenshots a real page as it renders right now, logged in as your own dedicated read-only account, so you can judge real layout, spacing, and hierarchy instead of guessing from markup. Use it whenever a UX critique or a "does this screen work well" question is about something that actually exists — don't rely on \`read_file\` alone to imagine what a page looks like when you can just look at it.
 
 You can also browse the open web with \`browse_url\` — any public URL, including design references (Dribbble, Behance), competitor products, or live sites the user points you at. It takes a screenshot the same way \`browse_page\` does, just with no login and no domain restriction. Use it to ground a recommendation or comparison in what something actually looks like instead of describing it from memory or declining because you think you can't see it.
+
+\`browse_page\` and \`browse_url\` share a combined budget of a few screenshots per conversation turn — each one launches a real remote browser session that can take up to 30 seconds, and this route has a hard 300-second ceiling for the whole reply. Pick the handful of most relevant pages rather than surveying every possible reference; if you run out of budget mid-research, answer with what you've already seen and offer to look at more in a follow-up.
 
 Anyone in this group can address you, not just one specific person — you're a shared resource for product discussions, not gated to an owner the way Santi is (Santi can merge code changes on request, which is why he's restricted). Mentioning Pepe or Santi by name in your own reply doesn't ping them — the user has to address them directly for that.
 
@@ -161,6 +177,11 @@ export async function chat(chatId: number, userMessage: string, senderId?: numbe
   history.push({ role: 'user', content: userMessage });
   await saveMessage(chatId, BOT_NAME, 'user', userMessage);
 
+  // Persists across every internal turn of this single chat() call (one
+  // Telegram message), reset fresh on the next one -- see
+  // MAX_BROWSE_CALLS_PER_TURN above.
+  let browseCallCount = 0;
+
   while (true) {
     const turnStartedAt = Date.now();
     // Wrapped like every tool call below, for the same SIGKILL-avoidance
@@ -248,22 +269,25 @@ export async function chat(chatId: number, userMessage: string, senderId?: numbe
                 : matches.map(m => `${m.path}\n${m.snippet}`).join('\n\n');
             }
 
-            if (block.name === 'browse_page') {
-              const input = block.input as { path: string; full_page?: boolean };
-              const screenshot = await screenshotPage(input.path, input.full_page ?? false);
-              resultContent = [
-                { type: 'text', text: `Screenshot of ${input.path}:` },
-                { type: 'image', source: { type: 'base64', media_type: 'image/png', data: screenshot.toString('base64') } },
-              ];
-            }
-
-            if (block.name === 'browse_url') {
-              const input = block.input as { url: string; full_page?: boolean };
-              const screenshot = await screenshotUrl(input.url, input.full_page ?? false);
-              resultContent = [
-                { type: 'text', text: `Screenshot of ${input.url}:` },
-                { type: 'image', source: { type: 'base64', media_type: 'image/png', data: screenshot.toString('base64') } },
-              ];
+            if (block.name === 'browse_page' || block.name === 'browse_url') {
+              browseCallCount++;
+              if (browseCallCount > MAX_BROWSE_CALLS_PER_TURN) {
+                resultContent = `Browsing budget for this conversation turn is used up (max ${MAX_BROWSE_CALLS_PER_TURN} screenshots) — this route has a hard 300s ceiling and each remote browser session can take up to 30s. Answer with what you've already seen instead of browsing more; the user can ask you to look at specific other pages in a follow-up message.`;
+              } else if (block.name === 'browse_page') {
+                const input = block.input as { path: string; full_page?: boolean };
+                const screenshot = await screenshotPage(input.path, input.full_page ?? false);
+                resultContent = [
+                  { type: 'text', text: `Screenshot of ${input.path}:` },
+                  { type: 'image', source: { type: 'base64', media_type: 'image/png', data: screenshot.toString('base64') } },
+                ];
+              } else {
+                const input = block.input as { url: string; full_page?: boolean };
+                const screenshot = await screenshotUrl(input.url, input.full_page ?? false);
+                resultContent = [
+                  { type: 'text', text: `Screenshot of ${input.url}:` },
+                  { type: 'image', source: { type: 'base64', media_type: 'image/png', data: screenshot.toString('base64') } },
+                ];
+              }
             }
 
             if (block.name === 'delegate_to_santi') {
