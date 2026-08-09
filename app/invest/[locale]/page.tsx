@@ -17,7 +17,7 @@ const RENDER_IMAGES = [
 ];
 
 const LOGO_URL =
-  'https://res.cloudinary.com/quupmn8b/image/upload/v1749300436/GRUPO_YAKGU_BLANCO_qvfsjv.png';
+  'https://res.cloudinary.com/quupmn8b/image/upload/v1786266721/logo_3_qxkzbb.png';
 
 function isLocale(value: string): value is Locale {
   return (LOCALES as string[]).includes(value);
