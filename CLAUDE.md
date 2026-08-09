@@ -9,7 +9,7 @@
 - LinkedIn UGC Posts API
 
 ## Project Structure
-- /app/api/telegram/route.ts        → Pepe's webhook handler (maxDuration: 60s)
+- /app/api/telegram/route.ts        → Pepe's webhook handler (maxDuration: 300s)
 - /app/api/telegram-santi/route.ts  → Santi's webhook handler (maxDuration: 300s)
 - /app/api/telegram-angeles/route.ts → Angeles's webhook handler (maxDuration: 300s)
 - /app/api/linkedin/process/route.ts → background video processor (maxDuration: 300s)
