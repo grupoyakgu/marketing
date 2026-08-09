@@ -1,4 +1,4 @@
-import puppeteer from 'puppeteer-core';
+import puppeteer, { type Page } from 'puppeteer-core';
 
 // Four straight attempts at running Chromium *inside* the Vercel function
 // itself (bundled via @sparticuz/chromium, downloaded via
@@ -15,6 +15,41 @@ const BROWSERBASE_API = 'https://api.browserbase.com/v1';
 
 function getBaseUrl(): string {
   return process.env.NEXT_PUBLIC_APP_URL ?? 'https://marketing-grupo-yakgu.vercel.app';
+}
+
+// Anthropic's Vision API hard-caps any single image dimension at 8000px.
+// A full-page capture's height is whatever the page's total scroll height
+// happens to be -- unbounded -- while width stays fixed at the viewport
+// width set below, so only height realistically needs capping here, but
+// both are guarded for safety.
+const MAX_IMAGE_DIMENSION = 8000;
+
+/** Caps a full-page screenshot to MAX_IMAGE_DIMENSION via `clip` instead of
+ * capturing the true full page when it would exceed that. Confirmed in
+ * production: a full-page screenshot of a long marketing page came back
+ * taller than the cap, got saved to chat_history as part of a normal,
+ * correctly-paired tool_result, and only got rejected on the *next*
+ * messages.create call -- by which point it was already permanently stuck
+ * in storage, poisoning every future turn the same way an orphaned
+ * tool_use does (see lib/chat-history.ts's repair pass, which can't help
+ * here since this pairing is well-formed; only the image content itself is
+ * the problem). Capping at capture time is simpler than validating and
+ * repairing it after the fact. */
+async function capturePageScreenshot(page: Page, fullPage: boolean): Promise<Buffer> {
+  if (!fullPage) {
+    return Buffer.from(await page.screenshot({ type: 'png' }));
+  }
+  const { width, height } = await page.evaluate(() => ({
+    width: document.documentElement.scrollWidth,
+    height: document.documentElement.scrollHeight,
+  }));
+  if (width <= MAX_IMAGE_DIMENSION && height <= MAX_IMAGE_DIMENSION) {
+    return Buffer.from(await page.screenshot({ type: 'png', fullPage: true }));
+  }
+  return Buffer.from(await page.screenshot({
+    type: 'png',
+    clip: { x: 0, y: 0, width: Math.min(width, MAX_IMAGE_DIMENSION), height: Math.min(height, MAX_IMAGE_DIMENSION) },
+  }));
 }
 
 /** Logs in as Angeles's dedicated dashboard account and returns the signed
@@ -93,8 +128,7 @@ export async function screenshotPage(path: string, fullPage: boolean): Promise<B
       secure: true,
     });
     await page.goto(targetUrl, { waitUntil: 'networkidle0', timeout: 30_000 });
-    const screenshot = await page.screenshot({ type: 'png', fullPage });
-    return Buffer.from(screenshot);
+    return await capturePageScreenshot(page, fullPage);
   } finally {
     await browser.close();
   }
@@ -123,8 +157,7 @@ export async function screenshotUrl(url: string, fullPage: boolean): Promise<Buf
     const page = await browser.newPage();
     await page.setViewport({ width: 1440, height: 900 });
     await page.goto(parsed.toString(), { waitUntil: 'networkidle0', timeout: 30_000 });
-    const screenshot = await page.screenshot({ type: 'png', fullPage });
-    return Buffer.from(screenshot);
+    return await capturePageScreenshot(page, fullPage);
   } finally {
     await browser.close();
   }
