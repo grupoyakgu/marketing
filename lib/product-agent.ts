@@ -3,6 +3,7 @@ import { loadHistory, saveMessage, clearHistory as clearDb } from '@/lib/chat-hi
 import { readFile, listDirectory, searchCode } from '@/lib/github-dev';
 import { screenshotPage, screenshotUrl } from '@/lib/browser';
 import { createDelegation } from '@/lib/santi-delegations';
+import { createConsultation } from '@/lib/pepe-consultations';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BOT_NAME = 'angeles';
@@ -88,9 +89,13 @@ You can also browse the open web with \`browse_url\` — any public URL, includi
 
 \`browse_page\` and \`browse_url\` share a combined budget of a few screenshots per conversation turn — each one launches a real remote browser session that can take up to 30 seconds, and this route has a hard 300-second ceiling for the whole reply. Pick the handful of most relevant pages rather than surveying every possible reference; if you run out of budget mid-research, answer with what you've already seen and offer to look at more in a follow-up.
 
-Anyone in this group can address you, not just one specific person — you're a shared resource for product discussions, not gated to an owner the way Santi is (Santi can merge code changes on request, which is why he's restricted). Mentioning Pepe or Santi by name in your own reply doesn't ping them — the user has to address them directly for that.
+Anyone in this group can address you, not just one specific person — you're a shared resource for product discussions, not gated to an owner the way Santi is (Santi can merge code changes on request, which is why he's restricted). Mentioning Pepe or Santi by name in your own reply doesn't ping them — the user has to address them directly for that, except for the two tools below, which loop them in on your own initiative under the specific conditions each describes.
 
-\`delegate_to_santi\` is the one exception: it hands a specific implementation task straight to Santi so he can build it — read the code, write the fix, open and merge a PR — without the user having to separately go address him themselves and repeat everything you already worked out. It only records the task; Santi actually works on it afterward and posts his own results directly in this chat once he's done, which can take a few minutes for a substantial change — tell the user it's been handed off rather than implying it's already done, and don't call it again for the same task just because you haven't seen his reply yet. Only use it when the user has clearly asked for something to actually be built or fixed, not just discussed (e.g. "can you get Santi to build this", "let's ship this change") — don't send Santi work off your own initiative just because you recommended something. Write the instructions like a clear, self-contained spec: what to change and why, not a transcript of your conversation — Santi doesn't see this chat's history, only what you send him. He only acts on requests from the one person who owns this bot setup, so if that check fails you'll get told rather than have it silently happen — just relay that to whoever asked.
+\`consult_pepe\` and \`delegate_to_santi\` fire off work asynchronously — both just record something and return immediately, and the corresponding teammate posts his own reply directly in this chat once ready (typically a few minutes) rather than in this same turn. Don't wait for either reply before finishing your own response, and don't call either one again for the same thing just because you haven't seen a reply yet.
+
+\`consult_pepe\` hands Pepe a marketing-manager take on a product/design recommendation you just finished making — messaging, positioning, target-audience fit, conversion impact. Unlike \`delegate_to_santi\`, you don't need the user to ask for this first: call it on your own initiative right after a genuine product/design/UX recommendation that has real marketing stakes (e.g. landing page copy or layout, a new user-facing flow, anything touching how the offering is positioned) — not for routine questions with no marketing angle, and at most once per recommendation. Write the brief as a clear, self-contained spec of what you're proposing and why — Pepe doesn't see this chat's history, only what you send him.
+
+\`delegate_to_santi\` hands a specific implementation task straight to Santi so he can build it — read the code, write the fix, open and merge a PR — without the user having to separately go address him themselves and repeat everything you already worked out. Tell the user it's been handed off rather than implying it's already done. Only use it when the user has clearly asked for something to actually be built or fixed, not just discussed (e.g. "can you get Santi to build this", "let's ship this change") — don't send Santi work off your own initiative just because you recommended something; that's the key difference from \`consult_pepe\` above, which you can trigger yourself. Write the instructions like a clear, self-contained spec: what to change and why, not a transcript of your conversation — Santi doesn't see this chat's history, only what you send him. He only acts on requests from the one person who owns this bot setup, so if that check fails you'll get told rather than have it silently happen — just relay that to whoever asked.
 
 Speak English unless addressed in another language. No filler, no over-explaining, no emoji.`;
 }
@@ -164,6 +169,17 @@ const tools: Anthropic.Tool[] = [
         instructions: { type: 'string', description: 'A clear, self-contained spec of what to change and why — Santi does not see this conversation, only this text.' },
       },
       required: ['instructions'],
+    },
+  },
+  {
+    name: 'consult_pepe',
+    description: 'Loops Pepe (the CMO) in automatically for his marketing-manager take on a product/design recommendation you just made — no need for the user to separately go address him. This only records the brief and returns immediately; Pepe actually replies separately and posts his take directly into this chat as himself once ready (usually a few minutes) — don\'t wait for or expect his reply in this same turn, and don\'t consult him again for the same recommendation just because you haven\'t seen a reply yet. Use this whenever you finish a genuine product/design/UX recommendation with real marketing implications (landing page copy or layout, positioning, messaging, conversion funnel, audience targeting) — not for routine questions with no marketing angle.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        brief: { type: 'string', description: 'A clear, self-contained brief of what you\'re proposing and why, plus what kind of marketing input you want — Pepe does not see this conversation, only this text.' },
+      },
+      required: ['brief'],
     },
   },
 ];
@@ -313,6 +329,19 @@ export async function chat(chatId: number, userMessage: string, senderId?: numbe
                 await createDelegation(chatId, input.instructions);
                 resultContent = 'Delegated to Santi. He\'ll post the result directly in this chat once it\'s done — usually within a few minutes, longer for larger changes.';
               }
+            }
+
+            if (block.name === 'consult_pepe') {
+              const input = block.input as { brief: string };
+              // Not run inline: a single Pepe turn can legitimately take up
+              // to ~220s (lib/marketing-agent.ts), which combined with
+              // whatever Angeles already spent investigating beforehand
+              // risks blowing this route's 300s maxDuration — same reasoning
+              // as delegate_to_santi below. Recording it instead and letting
+              // the process-pepe-consultations cron (runs every 5 minutes)
+              // pick it up gives Pepe his own full, undiminished budget.
+              await createConsultation(chatId, input.brief);
+              resultContent = 'Consulted Pepe. He\'ll post his marketing take directly in this chat once it\'s ready — usually within a few minutes.';
             }
           })(), TOOL_TIMEOUT_MS, block.name);
         } catch (err) {
