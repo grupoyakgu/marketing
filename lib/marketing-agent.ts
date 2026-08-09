@@ -583,8 +583,6 @@ const tools: Anthropic.Tool[] = [
         eyebrow: { type: 'string', description: 'Small label above the headline, e.g. "Grupo YAKGU presents".' },
         headline: { type: 'string' },
         subheadline: { type: 'string' },
-        heroOpportunityTitle: { type: 'string', description: 'Short heading for the opportunity blurb on the right side of the hero.' },
-        heroOpportunityBody: { type: 'string', description: 'One or two sentences on the right side of the hero pitching the investment opportunity (yield, returns, etc).' },
         ctaPrimary: { type: 'string', description: 'Text on the main call-to-action button.' },
         highlightsTitle: { type: 'string', description: 'Heading above the "opportunity" cards.' },
         highlights: {
@@ -1072,8 +1070,6 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
               `eyebrow: ${copy.eyebrow}\n` +
               `headline: ${copy.headline}\n` +
               `subheadline: ${copy.subheadline}\n` +
-              `heroOpportunityTitle: ${copy.heroOpportunityTitle}\n` +
-              `heroOpportunityBody: ${copy.heroOpportunityBody}\n` +
               `ctaPrimary: ${copy.ctaPrimary}\n` +
               `highlightsTitle: ${copy.highlightsTitle}\n` +
               `highlights:\n${copy.highlights.map((h, i) => `  ${i + 1}. ${h.title} — ${h.body}`).join('\n')}\n` +

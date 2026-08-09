@@ -5,7 +5,13 @@ import type { InvestCopy, Locale } from './copy';
 
 type Status = 'idle' | 'submitting' | 'error';
 
-export function InvestorForm({ copy, locale }: { copy: InvestCopy; locale: Locale }) {
+interface Props {
+  copy: InvestCopy;
+  locale: Locale;
+  variant?: 'light' | 'dark';
+}
+
+export function InvestorForm({ copy, locale, variant = 'light' }: Props) {
   const [status, setStatus] = useState<Status>('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [name, setName] = useState('');
@@ -15,6 +21,20 @@ export function InvestorForm({ copy, locale }: { copy: InvestCopy; locale: Local
   // so a filled value means a bot filled the form programmatically.
   const [company, setCompany] = useState('');
   const [investorType, setInvestorType] = useState('');
+
+  const dark = variant === 'dark';
+
+  const labelCls = dark
+    ? 'block text-sm font-medium text-neutral-400'
+    : 'block text-sm font-medium text-neutral-700';
+
+  const inputCls = dark
+    ? 'mt-1.5 w-full rounded-lg border border-white/10 bg-neutral-800 px-4 py-3 text-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-amber-400'
+    : 'mt-1.5 w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 text-neutral-900 placeholder:text-neutral-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500';
+
+  const selectCls = dark
+    ? 'mt-1.5 w-full rounded-lg border border-white/10 bg-neutral-800 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-amber-400'
+    : 'mt-1.5 w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 text-neutral-900 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500';
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -59,9 +79,7 @@ export function InvestorForm({ copy, locale }: { copy: InvestCopy; locale: Local
       </div>
 
       <div>
-        <label htmlFor="name" className="block text-sm font-medium text-neutral-700 dark:text-neutral-300">
-          {copy.nameLabel}
-        </label>
+        <label htmlFor="name" className={labelCls}>{copy.nameLabel}</label>
         <input
           id="name"
           type="text"
@@ -69,14 +87,12 @@ export function InvestorForm({ copy, locale }: { copy: InvestCopy; locale: Local
           placeholder={copy.namePlaceholder}
           value={name}
           onChange={e => setName(e.target.value)}
-          className="mt-1.5 w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 text-neutral-900 placeholder:text-neutral-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-white"
+          className={inputCls}
         />
       </div>
 
       <div>
-        <label htmlFor="email" className="block text-sm font-medium text-neutral-700 dark:text-neutral-300">
-          {copy.emailLabel}
-        </label>
+        <label htmlFor="email" className={labelCls}>{copy.emailLabel}</label>
         <input
           id="email"
           type="email"
@@ -84,14 +100,12 @@ export function InvestorForm({ copy, locale }: { copy: InvestCopy; locale: Local
           placeholder={copy.emailPlaceholder}
           value={email}
           onChange={e => setEmail(e.target.value)}
-          className="mt-1.5 w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 text-neutral-900 placeholder:text-neutral-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-white"
+          className={inputCls}
         />
       </div>
 
       <div>
-        <label htmlFor="mobile" className="block text-sm font-medium text-neutral-700 dark:text-neutral-300">
-          {copy.mobileLabel}
-        </label>
+        <label htmlFor="mobile" className={labelCls}>{copy.mobileLabel}</label>
         <input
           id="mobile"
           type="tel"
@@ -99,19 +113,17 @@ export function InvestorForm({ copy, locale }: { copy: InvestCopy; locale: Local
           placeholder={copy.mobilePlaceholder}
           value={mobile}
           onChange={e => setMobile(e.target.value)}
-          className="mt-1.5 w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 text-neutral-900 placeholder:text-neutral-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-white"
+          className={inputCls}
         />
       </div>
 
       <div>
-        <label htmlFor="investorType" className="block text-sm font-medium text-neutral-700 dark:text-neutral-300">
-          {copy.investorTypeLabel}
-        </label>
+        <label htmlFor="investorType" className={labelCls}>{copy.investorTypeLabel}</label>
         <select
           id="investorType"
           value={investorType}
           onChange={e => setInvestorType(e.target.value)}
-          className="mt-1.5 w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 text-neutral-900 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+          className={selectCls}
         >
           <option value="">{copy.investorTypePlaceholder}</option>
           {copy.investorTypeOptions.map(o => (
@@ -120,7 +132,9 @@ export function InvestorForm({ copy, locale }: { copy: InvestCopy; locale: Local
         </select>
       </div>
 
-      {status === 'error' && <p className="text-sm text-red-600 dark:text-red-400">{errorMessage}</p>}
+      {status === 'error' && (
+        <p className="text-sm text-red-400">{errorMessage}</p>
+      )}
 
       <button
         type="submit"
@@ -130,7 +144,7 @@ export function InvestorForm({ copy, locale }: { copy: InvestCopy; locale: Local
         {status === 'submitting' ? copy.submitting : copy.submit}
       </button>
 
-      <p className="text-xs text-neutral-500 dark:text-neutral-400">{copy.privacyNote}</p>
+      <p className={`text-xs ${dark ? 'text-neutral-500' : 'text-neutral-500'}`}>{copy.privacyNote}</p>
     </form>
   );
 }
