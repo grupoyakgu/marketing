@@ -56,14 +56,14 @@ export default async function InvestPage({ params }: { params: { locale: string 
       {/* Hero */}
       <section className="relative overflow-hidden">
         <img
-          src={RENDER_IMAGES[0]}
+          src="https://res.cloudinary.com/quupmn8b/image/upload/v1784281629/patio_bnka0v.jpg"
           alt=""
           className="absolute inset-0 h-full w-full object-cover"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-neutral-950/30 via-neutral-950/50 to-neutral-950" />
-        <div className="relative mx-auto max-w-5xl px-6 py-24 text-center sm:py-32">
+        <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/40 to-neutral-950" />
+        <div className="relative mx-auto max-w-5xl px-6 py-32 text-center sm:py-44">
           <p className="text-sm font-semibold uppercase tracking-widest text-amber-400">{copy.eyebrow}</p>
-          <h1 className="mt-4 text-3xl font-bold tracking-tight sm:text-5xl">{copy.headline}</h1>
+          <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-6xl">{copy.headline}</h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-neutral-300">{copy.subheadline}</p>
           <a
             href="#form"
@@ -73,6 +73,28 @@ export default async function InvestPage({ params }: { params: { locale: string 
           </a>
         </div>
       </section>
+
+      {/* Trust strip */}
+      <div className="border-b border-white/10 bg-white/[0.03]">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-x-10 gap-y-4 px-6 py-5 text-center text-sm text-neutral-400">
+          <span className="flex items-center gap-2">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+            Licencia concedida · Permit secured
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+            18 unidades · 18 units
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+            Nervión, Sevilla
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+            Construcción lista · Ready to build
+          </span>
+        </div>
+      </div>
 
       {/* Highlights */}
       <section className="mx-auto max-w-5xl px-6 py-16">
@@ -110,9 +132,23 @@ export default async function InvestPage({ params }: { params: { locale: string 
       {/* Gallery */}
       <section className="mx-auto max-w-5xl px-6 py-16">
         <h2 className="text-2xl font-semibold sm:text-3xl">{copy.galleryTitle}</h2>
-        <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
-          {RENDER_IMAGES.map(src => (
-            <img key={src} src={src} alt="" className="aspect-square w-full rounded-xl object-cover" />
+        <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3 sm:grid-rows-2">
+          {/* Large featured image — spans 2 rows on the left */}
+          <div className="sm:col-span-2 sm:row-span-2">
+            <img
+              src={RENDER_IMAGES[3]}
+              alt=""
+              className="h-64 w-full rounded-2xl object-cover sm:h-full"
+            />
+          </div>
+          {/* Three smaller images on the right */}
+          {RENDER_IMAGES.slice(0, 3).map(src => (
+            <img
+              key={src}
+              src={src}
+              alt=""
+              className="h-40 w-full rounded-2xl object-cover sm:h-full"
+            />
           ))}
         </div>
       </section>
