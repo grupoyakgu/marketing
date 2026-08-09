@@ -81,6 +81,7 @@ export const COPY: Record<Locale, InvestCopy> = {
     aboutBody: [
       'Grupo YAKGU es uno de los promotores inmobiliarios más activos en el centro de Sevilla. En los últimos años hemos entregado más proyectos en este mercado que cualquier otro promotor de la región — en residencial, uso mixto y ahora en el sector hotelero. No gestionamos fondos ni operamos plataformas. Identificamos activos excepcionales, obtenemos los permisos, desarrollamos el proyecto e invitamos a un grupo selecto de co-inversores a participar con nosotros en cada operación.',
       'Nuestro proyecto más reciente: <a href="https://www.grupoyakgu.es/proyectos/peral-23" target="_blank" rel="noopener noreferrer" class="text-amber-400 underline underline-offset-2 hover:text-amber-300 transition-colors">Peral 23</a> — un desarrollo de referencia en el corazón de Sevilla.',
+      'Con BDS36 ya hemos hecho el trabajo duro — hemos encontrado el solar, navegado el proceso de planificación y obtenido los permisos. Lo que buscamos ahora es el grupo adecuado de co-inversores para llevarlo hasta la finalización. Mantenemos el círculo pequeño deliberadamente: menos socios, mejor alineación, retornos más transparentes.',
     ],
     aboutStats: [
       { value: 'Muchos años', label: 'desarrollando activos hoteleros en España' },
@@ -163,6 +164,7 @@ export const COPY: Record<Locale, InvestCopy> = {
     aboutBody: [
       'Grupo YAKGU is one of the most active real estate developers in Seville\'s city centre. Over the past several years we have delivered more projects in this market than any other developer in the region — across residential, mixed-use, and now hospitality. We don\'t manage funds or run platforms. We identify exceptional sites, secure the permits, develop the asset, and invite a select group of co-investors to participate alongside us in each project.',
       'Our most recent completed project: <a href="https://www.grupoyakgu.es/proyectos/peral-23" target="_blank" rel="noopener noreferrer" class="text-amber-400 underline underline-offset-2 hover:text-amber-300 transition-colors">Peral 23</a> — a benchmark development in the heart of Seville.',
+      'With BDS36 we have done the hard work already — sourced the site, navigated planning, secured the permits. What we are looking for now is the right group of co-investors to take this through to completion. We keep the circle small deliberately: fewer partners, better alignment, more transparent returns.',
     ],
     aboutStats: [
       { value: 'Many years', label: 'developing hospitality assets in Spain' },
@@ -245,6 +247,7 @@ export const COPY: Record<Locale, InvestCopy> = {
     aboutBody: [
       'Grupo YAKGU הוא אחד מיזמי הנדל"ן הפעילים ביותר במרכז העיר סביליה. בשנים האחרונות סיימנו יותר פרויקטים בשוק זה מכל יזם אחר באזור — בתחום המגורים, השימוש המעורב, וכעת גם המלונאות. איננו מנהלי קרנות ואיננו פלטפורמה. אנחנו מזהים נכסים יוצאי דופן, מקבלים את האישורים, מפתחים את הפרויקט ומזמינים קבוצה נבחרת של שותפים להשקיע לצדנו בכל עסקה.',
       'הפרויקט האחרון שלנו: <a href="https://www.grupoyakgu.es/proyectos/peral-23" target="_blank" rel="noopener noreferrer" class="text-amber-400 underline underline-offset-2 hover:text-amber-300 transition-colors">Peral 23</a> — פרויקט ייחוס בלב סביליה.',
+      'עם BDS36 כבר עשינו את העבודה הקשה — מצאנו את הקרקע, ניווטנו את תהליך התכנון והשגנו את ההיתרים. מה שאנחנו מחפשים עכשיו הוא הקבוצה הנכונה של שותפי-השקעה שתלווה אותנו עד להשלמה. אנחנו שומרים על מעגל קטן בכוונה: פחות שותפים, יישור קו טוב יותר, תשואות שקופות יותר.',
     ],
     aboutStats: [
       { value: 'שנים רבות', label: 'של פיתוח נכסי אירוח בספרד' },
