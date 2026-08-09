@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { LOCALES, type Locale } from './copy';
 import { getLandingCopy } from '@/lib/landing-copy';
 import { InvestorForm } from './InvestorForm';
+import { HeroSlider } from './HeroSlider';
 
 // Content is editable at runtime (Pepe's update_landing_page_copy tool), so
 // this can't be statically generated at build time — every request needs a
@@ -39,34 +40,12 @@ export default async function InvestPage({ params }: { params: { locale: string 
       {/* ── Split-screen hero ─────────────────────────────────────────── */}
       <section className="flex min-h-screen flex-col lg:flex-row">
 
-        {/* LEFT — image panel (60%) */}
-        <div className="relative h-[50vh] lg:h-auto lg:flex-[3]">
-          <img
-            src="https://res.cloudinary.com/quupmn8b/image/upload/v1784281629/patio_bnka0v.jpg"
-            alt=""
-            className="absolute inset-0 h-full w-full object-cover"
-          />
-          {/* Subtle overlay — lets the photo breathe */}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/20" />
-          {/* Title anchored top-left */}
-          <div className="absolute top-0 left-0 p-8 lg:p-12">
-            <p className="mb-3 text-xs font-medium uppercase tracking-widest text-white/60">
-              {copy.eyebrow}
-            </p>
-            <p
-              className="text-3xl font-black uppercase leading-tight tracking-wide text-white lg:text-5xl"
-              style={{ textShadow: '0 2px 12px rgba(0,0,0,0.6)' }}
-            >
-              {copy.headline}
-            </p>
-            <p
-              className="mt-2 max-w-md text-base font-light leading-snug text-white/85 lg:text-lg"
-              style={{ textShadow: '0 1px 6px rgba(0,0,0,0.5)' }}
-            >
-              {copy.subheadline}
-            </p>
-          </div>
-        </div>
+        {/* LEFT — image carousel panel (60%) */}
+        <HeroSlider
+          eyebrow={copy.eyebrow}
+          headline={copy.headline}
+          subheadline={copy.subheadline}
+        />
 
         {/* RIGHT — dark form panel (40%) */}
         <div className="flex flex-col bg-neutral-900 lg:flex-[2] lg:overflow-y-auto">
