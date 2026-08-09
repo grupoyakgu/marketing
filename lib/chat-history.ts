@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import Anthropic from '@anthropic-ai/sdk';
+import { allBots, BOT_LABELS, type BotName } from '@/lib/bot-addressing';
 
 type MessageParam = Anthropic.MessageParam;
 
@@ -114,4 +115,20 @@ export async function saveMessage(
 
 export async function clearHistory(chatId: number, botName: string): Promise<void> {
   await supabase.from('chat_history').delete().eq('chat_id', chatId).eq('bot', botName);
+}
+
+/** Telegram never delivers a bot's own outgoing message back out as a
+ * webhook update to the other bots in the group — confirmed empirically
+ * (zero deliveries across days of live bot-to-bot traffic) and consistent
+ * with Telegram's anti-loop behavior for bot-authored messages. So the only
+ * way for a teammate to learn what another bot just said in the shared
+ * chat is for the sender to push it directly into the others' history
+ * itself, right when it posts — not wait to passively "hear" it via the
+ * webhook, which never fires. Call this once per bot reply, right after
+ * it's sent to the group. */
+export async function broadcastToTeammates(chatId: number, fromBot: BotName, text: string): Promise<void> {
+  const others = allBots().filter(bot => bot.name !== fromBot);
+  await Promise.all(
+    others.map(bot => saveMessage(chatId, bot.name, 'user', `[${BOT_LABELS[fromBot]} posted in the group]\n\n${text}`))
+  );
 }

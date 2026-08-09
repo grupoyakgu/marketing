@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { TelegramClient } from '@/lib/telegram';
-import { clearHistory, chat, recordTeammateMessage } from '@/lib/product-agent';
+import { clearHistory, chat } from '@/lib/product-agent';
+import { broadcastToTeammates } from '@/lib/chat-history';
 import { claimTelegramUpdate } from '@/lib/telegram-dedup';
-import { resolveAddressee, allBots, identifyBotAuthor, BOT_LABELS } from '@/lib/bot-addressing';
+import { resolveAddressee, allBots } from '@/lib/bot-addressing';
 
 export const maxDuration = 300;
 
@@ -33,6 +34,11 @@ export async function POST(req: NextRequest) {
     chatId = message?.chat?.id;
     if (!chatId) return NextResponse.json({ ok: true });
 
+    // Angeles learns what a teammate posts via broadcastToTeammates at the
+    // moment they send it, not by processing their message here as if a
+    // human sent it.
+    if (message.from?.is_bot) return NextResponse.json({ ok: true });
+
     // Unlike Santi, Angeles has no write/posting ability at all — she only
     // advises — so any group member can address her, not just one owner.
     const text: string | undefined = message?.text?.trim();
@@ -47,20 +53,6 @@ export async function POST(req: NextRequest) {
     if (text === '/reset') {
       await clearHistory(chatId);
       await telegram.sendMessage(chatId, '🔄 Conversation reset.');
-      return NextResponse.json({ ok: true });
-    }
-
-    // Bot-authored messages never resolve as addressed to Angeles (see
-    // bot-addressing.ts — required to avoid a reply loop between bots), so
-    // without this she'd never learn what a teammate posts in the shared
-    // chat at all. Record it as passive context on her own history rather
-    // than running a full chat() turn — she should be aware of it, not
-    // react to every single thing they post.
-    const authorBot = identifyBotAuthor(message, allBots());
-    if (authorBot) {
-      if (authorBot !== 'angeles' && text) {
-        await recordTeammateMessage(chatId, BOT_LABELS[authorBot], text);
-      }
       return NextResponse.json({ ok: true });
     }
 
@@ -80,6 +72,7 @@ export async function POST(req: NextRequest) {
         for (const chunk of chunks) {
           await telegram.sendMessage(resolvedChatId, chunk);
         }
+        await broadcastToTeammates(resolvedChatId, 'angeles', reply);
       } catch (err) {
         console.error('[telegram-angeles] agent error:', err);
         await telegram.sendMessage(resolvedChatId, '❌ Something went wrong. Please try again.');

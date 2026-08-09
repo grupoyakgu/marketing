@@ -90,20 +90,3 @@ export function resolveAddressee(message: TelegramMessageLike, bots: BotIdentity
 
   return null;
 }
-
-/** Which teammate bot authored this message, or null if it wasn't sent by
- * any of them (a human, or a bot not in this list). Unlike
- * resolveAddressee — which deliberately never resolves a bot-authored
- * message as "addressed" to anyone, to avoid a reply loop — this exists so
- * each bot's route can still passively record what a teammate posted as
- * context on its own history, without treating it as something to respond
- * to. See recordTeammateMessage in each of marketing-agent.ts, dev-agent.ts,
- * and product-agent.ts. */
-export function identifyBotAuthor(message: TelegramMessageLike, bots: BotIdentity[]): BotName | null {
-  if (!message.from?.is_bot) return null;
-  const fromId = message.from.id;
-  for (const bot of bots) {
-    if (botIdFromToken(bot.token) === fromId) return bot.name;
-  }
-  return null;
-}
