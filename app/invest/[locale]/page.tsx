@@ -46,9 +46,9 @@ export default async function InvestPage({ params }: { params: { locale: string 
             alt=""
             className="absolute inset-0 h-full w-full object-cover"
           />
-          {/* Minimal overlay — just enough contrast for top-left text without killing the photo */}
+          {/* Subtle overlay — lets the photo breathe */}
           <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/20" />
-          {/* Project name anchored top-left */}
+          {/* Title anchored top-left */}
           <div className="absolute top-0 left-0 p-8 lg:p-12">
             <p className="mb-3 text-xs font-medium uppercase tracking-widest text-white/60">
               {copy.eyebrow}
