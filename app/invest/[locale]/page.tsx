@@ -17,6 +17,9 @@ const RENDER_IMAGES = [
   'https://res.cloudinary.com/quupmn8b/image/upload/v1784281629/patio_bnka0v.jpg',
 ];
 
+const LOGO_URL =
+  'https://res.cloudinary.com/quupmn8b/image/upload/v1749300436/GRUPO_YAKGU_BLANCO_qvfsjv.png';
+
 function isLocale(value: string): value is Locale {
   return (LOCALES as string[]).includes(value);
 }
@@ -33,48 +36,80 @@ export default async function InvestPage({ params }: { params: { locale: string 
 
   return (
     <div dir={copy.dir} className="min-h-screen bg-neutral-950 text-white">
-      {/* Language switcher */}
-      <div className="border-b border-white/10 bg-neutral-950/80 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-end gap-1 px-6 py-3 text-sm">
-          <span className="sr-only">{copy.languageLabel}:</span>
-          {LOCALES.map(l => (
-            <Link
-              key={l}
-              href={`/invest/${l}`}
-              className={
-                l === params.locale
-                  ? 'rounded-full bg-white/10 px-3 py-1 font-medium text-white'
-                  : 'rounded-full px-3 py-1 text-white/60 hover:text-white'
-              }
-            >
-              {COPY[l].languageNames[l]}
-            </Link>
-          ))}
-        </div>
-      </div>
 
-      {/* Hero */}
-      <section className="relative overflow-hidden">
-        <img
-          src="https://res.cloudinary.com/quupmn8b/image/upload/v1784281629/patio_bnka0v.jpg"
-          alt=""
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/40 to-neutral-950" />
-        <div className="relative mx-auto max-w-5xl px-6 py-32 text-center sm:py-44">
-          <p className="text-sm font-semibold uppercase tracking-widest text-amber-400">{copy.eyebrow}</p>
-          <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-6xl">{copy.headline}</h1>
-          <p className="mx-auto mt-6 max-w-2xl text-lg text-neutral-300">{copy.subheadline}</p>
-          <a
-            href="#form"
-            className="mt-10 inline-block rounded-lg bg-amber-500 px-8 py-3.5 font-semibold text-neutral-900 transition-colors hover:bg-amber-400"
-          >
-            {copy.ctaPrimary}
-          </a>
+      {/* ── Split-screen hero ─────────────────────────────────────────── */}
+      <section className="flex min-h-screen flex-col lg:flex-row">
+
+        {/* LEFT — image panel (60%) */}
+        <div className="relative h-[50vh] lg:h-auto lg:flex-[3]">
+          <img
+            src="https://res.cloudinary.com/quupmn8b/image/upload/v1784281629/patio_bnka0v.jpg"
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+          {/* Bottom gradient for text legibility */}
+          <div className="absolute inset-x-0 bottom-0 h-[40%] bg-gradient-to-t from-black/70 to-transparent" />
+          {/* Project name anchored bottom-left */}
+          <div className="absolute bottom-0 left-0 p-8 lg:p-12">
+            <p
+              className="text-3xl font-black uppercase leading-tight tracking-wide text-white lg:text-5xl"
+              style={{ textShadow: '0 2px 12px rgba(0,0,0,0.6)' }}
+            >
+              {copy.headline}
+            </p>
+            <p
+              className="mt-2 max-w-sm text-sm font-light text-white/80 lg:text-base"
+              style={{ textShadow: '0 1px 6px rgba(0,0,0,0.6)' }}
+            >
+              {copy.subheadline}
+            </p>
+          </div>
+        </div>
+
+        {/* RIGHT — dark form panel (40%) */}
+        <div className="flex flex-col bg-neutral-900 lg:flex-[2] lg:overflow-y-auto">
+          <div className="flex flex-1 flex-col justify-center px-8 py-10 lg:px-12 lg:py-12">
+
+            {/* Logo */}
+            <img
+              src={LOGO_URL}
+              alt="Grupo YAKGU"
+              className="h-12 w-auto object-contain"
+            />
+
+            {/* Language switcher */}
+            <div className="mt-4 flex items-center gap-1 text-sm">
+              <span className="sr-only">{copy.languageLabel}:</span>
+              {LOCALES.map(l => (
+                <Link
+                  key={l}
+                  href={`/invest/${l}`}
+                  className={
+                    l === params.locale
+                      ? 'rounded-full bg-white/10 px-3 py-1 font-medium text-white'
+                      : 'rounded-full px-3 py-1 text-white/40 hover:text-white/70'
+                  }
+                >
+                  {COPY[l].languageNames[l]}
+                </Link>
+              ))}
+            </div>
+
+            {/* Form heading */}
+            <h2 className="mt-8 text-3xl font-black uppercase tracking-tight text-white sm:text-4xl">
+              {copy.formTitle}
+            </h2>
+            <p className="mt-2 text-sm text-neutral-400">{copy.formSubtitle}</p>
+
+            {/* Form — dark variant, no white card wrapper */}
+            <div className="mt-6">
+              <InvestorForm copy={copy} locale={params.locale} variant="dark" />
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* Trust strip */}
+      {/* ── Trust strip ───────────────────────────────────────────────── */}
       <div className="border-b border-white/10 bg-white/[0.03]">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-center gap-x-10 gap-y-4 px-6 py-5 text-center text-sm text-neutral-400">
           <span className="flex items-center gap-2">
@@ -96,7 +131,7 @@ export default async function InvestPage({ params }: { params: { locale: string 
         </div>
       </div>
 
-      {/* Highlights */}
+      {/* ── Highlights ────────────────────────────────────────────────── */}
       <section className="mx-auto max-w-5xl px-6 py-16">
         <h2 className="text-2xl font-semibold sm:text-3xl">{copy.highlightsTitle}</h2>
         <div className="mt-8 grid gap-6 sm:grid-cols-2">
@@ -109,7 +144,7 @@ export default async function InvestPage({ params }: { params: { locale: string 
         </div>
       </section>
 
-      {/* About */}
+      {/* ── About ─────────────────────────────────────────────────────── */}
       <section className="border-y border-white/10 bg-white/5">
         <div className="mx-auto max-w-5xl px-6 py-16">
           <h2 className="text-2xl font-semibold sm:text-3xl">{copy.aboutTitle}</h2>
@@ -129,31 +164,34 @@ export default async function InvestPage({ params }: { params: { locale: string 
         </div>
       </section>
 
-      {/* Gallery */}
+      {/* ── Gallery ───────────────────────────────────────────────────── */}
       <section className="mx-auto max-w-5xl px-6 py-16">
         <h2 className="text-2xl font-semibold sm:text-3xl">{copy.galleryTitle}</h2>
-        <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3 sm:grid-rows-2">
-          {/* Large featured image — spans 2 rows on the left */}
+        <div
+          className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3"
+          style={{ gridTemplateRows: '280px 280px' }}
+        >
+          {/* Large featured image — patio, spans 2 cols × 2 rows */}
           <div className="sm:col-span-2 sm:row-span-2">
             <img
               src={RENDER_IMAGES[3]}
               alt=""
-              className="h-64 w-full rounded-2xl object-cover sm:h-full"
+              className="h-[300px] w-full rounded-2xl object-cover sm:h-full"
             />
           </div>
-          {/* Three smaller images on the right */}
+          {/* Three smaller interior renders */}
           {RENDER_IMAGES.slice(0, 3).map(src => (
             <img
               key={src}
               src={src}
               alt=""
-              className="h-40 w-full rounded-2xl object-cover sm:h-full"
+              className="h-[200px] w-full rounded-2xl object-cover sm:h-full"
             />
           ))}
         </div>
       </section>
 
-      {/* Market intelligence */}
+      {/* ── Market intelligence ───────────────────────────────────────── */}
       <section className="border-y border-white/10 bg-white/5">
         <div className="mx-auto max-w-5xl px-6 py-16">
           <h2 className="text-2xl font-semibold sm:text-3xl">{copy.marketTitle}</h2>
@@ -169,16 +207,13 @@ export default async function InvestPage({ params }: { params: { locale: string 
         </div>
       </section>
 
-      {/* Form */}
-      <section id="form" className="mx-auto max-w-xl px-6 py-20">
-        <h2 className="text-2xl font-semibold sm:text-3xl">{copy.formTitle}</h2>
-        <p className="mt-3 text-neutral-300">{copy.formSubtitle}</p>
-        <div className="mt-8 rounded-2xl bg-white p-6 sm:p-8">
-          <InvestorForm copy={copy} locale={params.locale} />
-        </div>
-      </section>
-
+      {/* ── Footer ────────────────────────────────────────────────────── */}
       <footer className="border-t border-white/10 px-6 py-10 text-center text-sm text-neutral-400">
+        <img
+          src={LOGO_URL}
+          alt="Grupo YAKGU"
+          className="mx-auto mb-4 h-8 w-auto opacity-60"
+        />
         {copy.footerLine}
       </footer>
     </div>
