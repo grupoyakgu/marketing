@@ -114,7 +114,7 @@ export function HeroSlider({ eyebrow, headline, subheadline }: HeroSliderProps) 
           {headline}
         </p>
         <p
-          className="mt-3 max-w-lg text-xl font-light leading-snug text-white lg:text-2xl"
+          className="mt-3 max-w-lg whitespace-pre-line text-xl font-light leading-snug text-white lg:text-2xl"
           style={{ textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}
         >
           {subheadline}

@@ -56,7 +56,7 @@ export const COPY: Record<Locale, InvestCopy> = {
     eyebrow: 'Grupo YAKGU · Promotor inmobiliario hotelero · España',
     headline: 'BDS36 — Nervión, Sevilla',
     subheadline:
-      'Co-inversión directa junto al promotor. Abrimos una ventana selecta para inversores serios. Aparthotel boutique en Nervión, Sevilla — permisos concedidos, listo para construir.',
+      'Co-inversión directa junto al promotor. Abrimos una ventana selecta para inversores serios.\n\nAparthotel boutique en Nervión, Sevilla — permisos concedidos, listo para construir.',
     ctaPrimary: 'Solicitar el dossier de inversión',
     highlightsTitle: 'La oportunidad',
     highlights: [
@@ -132,7 +132,7 @@ export const COPY: Record<Locale, InvestCopy> = {
     eyebrow: 'Grupo YAKGU · Hospitality Real Estate Developer · Spain',
     headline: 'BDS36 — Nervión, Sevilla',
     subheadline:
-      'A direct co-investment opportunity alongside the developer. We are opening a select window for serious investors. A fully permitted, construction-ready boutique aparthotel in Nervión — Seville\'s fastest-growing hospitality district. 18 units. One asset.',
+      'A direct co-investment opportunity alongside the developer. We are opening a select window for serious investors.\n\nA fully permitted, construction-ready boutique aparthotel in Nervión — Seville\'s fastest-growing hospitality district. 18 units. One asset.',
     ctaPrimary: 'Get the investment dossier',
     highlightsTitle: 'The opportunity',
     highlights: [
@@ -208,7 +208,7 @@ export const COPY: Record<Locale, InvestCopy> = {
     eyebrow: 'Grupo YAKGU · יזם נדל"ן מלונאי · ספרד',
     headline: 'BDS36 — נרביון, סביליה',
     subheadline:
-      'הזדמנות לשותפות השקעה ישירה לצד היזם. אנחנו פותחים חלון נבחר למשקיעים רציניים. אפרטהוטל בוטיק בנרביון, סביליה — היתרים מאושרים, מוכן לבנייה. 18 יחידות. נכס אחד.',
+      'הזדמנות לשותפות השקעה ישירה לצד היזם. אנחנו פותחים חלון נבחר למשקיעים רציניים.\n\nאפרטהוטל בוטיק בנרביון, סביליה — היתרים מאושרים, מוכן לבנייה. 18 יחידות. נכס אחד.',
     ctaPrimary: 'קבלו את חוברת ההשקעה',
     highlightsTitle: 'ההזדמנות',
     highlights: [
