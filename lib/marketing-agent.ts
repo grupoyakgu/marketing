@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { postToLinkedIn } from '@/lib/linkedin-poster';
 import { postToFacebook, postToInstagram, postInstagramStory, postFacebookStory } from '@/lib/meta-poster';
-import { loadHistory, saveMessage, clearHistory as clearDb } from '@/lib/chat-history';
+import { loadHistory, saveMessage, clearHistory as clearDb, drainBroadcasts } from '@/lib/chat-history';
 import { listCloudinaryImages, listCloudinaryImagesInFolder } from '@/lib/cloudinary';
 import { findUploadsByName } from '@/lib/cloudinary-uploads';
 import {
@@ -681,6 +681,7 @@ export async function clearHistory(chatId: number): Promise<void> {
 }
 
 export async function chat(chatId: number, userMessage: string): Promise<string> {
+  await drainBroadcasts(chatId, BOT_NAME);
   const history = await loadHistory(chatId, BOT_NAME);
   history.push({ role: 'user', content: userMessage });
   await saveMessage(chatId, BOT_NAME, 'user', userMessage);

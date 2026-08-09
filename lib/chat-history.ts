@@ -122,13 +122,50 @@ export async function clearHistory(chatId: number, botName: string): Promise<voi
  * (zero deliveries across days of live bot-to-bot traffic) and consistent
  * with Telegram's anti-loop behavior for bot-authored messages. So the only
  * way for a teammate to learn what another bot just said in the shared
- * chat is for the sender to push it directly into the others' history
- * itself, right when it posts — not wait to passively "hear" it via the
- * webhook, which never fires. Call this once per bot reply, right after
- * it's sent to the group. */
+ * chat is for the sender to push it to them itself, right when it posts —
+ * not wait to passively "hear" it via the webhook, which never fires.
+ *
+ * This writes to a separate bot_broadcasts queue rather than straight into
+ * chat_history: a first version did that directly, and it corrupted a live
+ * conversation in production — the target bot can be mid-turn (mid tool
+ * loop) in its own concurrent request when a broadcast lands, and an insert
+ * racing in between that bot's own tool_use save and its matching
+ * tool_result save breaks the strict adjacency Anthropic's API requires,
+ * with no way to repair it after the fact (repairOrphanedToolUse only
+ * patches a tool_use with nothing after it, not one with an unrelated
+ * message wedged in front of its real result). Queueing defers delivery to
+ * drainBroadcasts, which the recipient runs itself at the start of its own
+ * next turn — a point only it controls, so it can only ever append safely
+ * after its own last complete exchange. Call this once per bot reply,
+ * right after it's sent to the group. */
 export async function broadcastToTeammates(chatId: number, fromBot: BotName, text: string): Promise<void> {
   const others = allBots().filter(bot => bot.name !== fromBot);
-  await Promise.all(
-    others.map(bot => saveMessage(chatId, bot.name, 'user', `[${BOT_LABELS[fromBot]} posted in the group]\n\n${text}`))
-  );
+  const { error } = await supabase
+    .from('bot_broadcasts')
+    .insert(others.map(bot => ({ chat_id: chatId, from_bot: fromBot, to_bot: bot.name, text })));
+  if (error) console.error('[chat-history] broadcastToTeammates failed:', error.message);
+}
+
+/** Delivers any broadcasts queued for this bot in this chat into its own
+ * history, in order, as plain-text user turns — safe to call because it
+ * only ever runs at the very start of chat(), before that turn's own new
+ * message or any tool_use/tool_result pair exists yet, so there's nothing
+ * for it to land in the middle of. The delete()+select() is a single atomic
+ * DELETE ... RETURNING, so two overlapping invocations for the same bot can
+ * never both deliver the same queued broadcast. */
+export async function drainBroadcasts(chatId: number, botName: BotName): Promise<void> {
+  const { data, error } = await supabase
+    .from('bot_broadcasts')
+    .delete()
+    .eq('chat_id', chatId)
+    .eq('to_bot', botName)
+    .select('from_bot, text, created_at');
+  if (error) {
+    console.error('[chat-history] drainBroadcasts failed:', error.message);
+    return;
+  }
+  const rows = (data ?? []).sort((a, b) => a.created_at.localeCompare(b.created_at));
+  for (const row of rows) {
+    await saveMessage(chatId, botName, 'user', `[${BOT_LABELS[row.from_bot as BotName]} posted in the group]\n\n${row.text}`);
+  }
 }
