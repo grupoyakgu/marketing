@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { LOCALES, type Locale } from './copy';
 import { getLandingCopy } from '@/lib/landing-copy';
+import { listCloudinaryImagesInFolder } from '@/lib/cloudinary';
 import { InvestorForm } from './InvestorForm';
 import { HeroSlider } from './HeroSlider';
 
@@ -10,15 +11,10 @@ import { HeroSlider } from './HeroSlider';
 // fresh read to reflect the latest edit.
 export const dynamic = 'force-dynamic';
 
-const RENDER_IMAGES = [
-  'https://res.cloudinary.com/quupmn8b/image/upload/v1784710353/YK-_AP1_03_moex2b.jpg',
-  'https://res.cloudinary.com/quupmn8b/image/upload/v1784710353/YK-_AP1_04_jgljqg.jpg',
-  'https://res.cloudinary.com/quupmn8b/image/upload/v1784710354/YK-_AP1_08_d80uk3.jpg',
-  'https://res.cloudinary.com/quupmn8b/image/upload/v1784281629/patio_bnka0v.jpg',
-];
-
 const LOGO_URL =
   'https://res.cloudinary.com/quupmn8b/image/upload/v1786266721/logo_3_qxkzbb.png';
+
+const GALLERY_COUNT = 6;
 
 function isLocale(value: string): value is Locale {
   return (LOCALES as string[]).includes(value);
@@ -32,7 +28,16 @@ export async function generateMetadata({ params }: { params: { locale: string } 
 
 export default async function InvestPage({ params }: { params: { locale: string } }) {
   if (!isLocale(params.locale)) notFound();
-  const copy = await getLandingCopy(params.locale);
+
+  const [copy, galleryImages] = await Promise.all([
+    getLandingCopy(params.locale),
+    listCloudinaryImagesInFolder('BDS 36').catch(err => {
+      console.error('[invest] gallery fetch failed:', err);
+      return [];
+    }),
+  ]);
+
+  const gallery = galleryImages.slice(0, GALLERY_COUNT);
 
   return (
     <div dir={copy.dir} className="min-h-screen bg-neutral-950 text-white">
@@ -131,31 +136,21 @@ export default async function InvestPage({ params }: { params: { locale: string 
       </section>
 
       {/* ── Gallery ───────────────────────────────────────────────────── */}
-      <section className="mx-auto max-w-5xl px-6 py-16">
-        <h2 className="text-2xl font-semibold sm:text-3xl">{copy.galleryTitle}</h2>
-        <div
-          className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3"
-          style={{ gridTemplateRows: '280px 280px' }}
-        >
-          {/* Large featured image — patio, spans 2 cols × 2 rows */}
-          <div className="sm:col-span-2 sm:row-span-2">
-            <img
-              src={RENDER_IMAGES[3]}
-              alt=""
-              className="h-[300px] w-full rounded-2xl object-cover sm:h-full"
-            />
+      {gallery.length > 0 && (
+        <section className="mx-auto max-w-5xl px-6 py-16">
+          <h2 className="text-2xl font-semibold sm:text-3xl">{copy.galleryTitle}</h2>
+          <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {gallery.map(img => (
+              <img
+                key={img.id}
+                src={img.url}
+                alt={img.name}
+                className="h-52 w-full rounded-2xl object-cover sm:h-64"
+              />
+            ))}
           </div>
-          {/* Three smaller interior renders */}
-          {RENDER_IMAGES.slice(0, 3).map(src => (
-            <img
-              key={src}
-              src={src}
-              alt=""
-              className="h-[200px] w-full rounded-2xl object-cover sm:h-full"
-            />
-          ))}
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* ── Market intelligence ───────────────────────────────────────── */}
       <section className="border-y border-white/10 bg-white/5">
