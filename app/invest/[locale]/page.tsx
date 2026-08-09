@@ -113,7 +113,10 @@ export default async function InvestPage({ params }: { params: { locale: string 
           <h2 className="text-2xl font-semibold sm:text-3xl">{copy.aboutTitle}</h2>
           <div className="mt-6 max-w-2xl space-y-4">
             {copy.aboutBody.map((para, i) => (
-              <p key={i} className="leading-relaxed text-neutral-300">{para}</p>
+              // aboutBody strings may contain trusted inline HTML (e.g. <a> links
+              // to our own pages) — content is hardcoded in copy.ts, never user input.
+              // eslint-disable-next-line react/no-danger
+              <p key={i} className="leading-relaxed text-neutral-300" dangerouslySetInnerHTML={{ __html: para }} />
             ))}
           </div>
           <div className="mt-10 grid grid-cols-2 gap-6 sm:grid-cols-4">
