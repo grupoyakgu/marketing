@@ -213,18 +213,6 @@ export async function clearHistory(chatId: number): Promise<void> {
   await clearDb(chatId, BOT_NAME);
 }
 
-/** Passively records something a teammate (Pepe or Angeles) posted in the
- * shared group chat into Santi's own history, without running a chat() turn
- * — he has no other way to see their messages (bot-authored messages never
- * resolve as addressed to him, see bot-addressing.ts, so they'd otherwise be
- * dropped entirely). This only makes him aware of it for his next real turn;
- * it doesn't make him react or reply on its own, unlike consult_pepe/
- * consult_angeles's reply loop (see process-bot-consultations.ts) which
- * exists specifically to continue a conversation he initiated. */
-export async function recordTeammateMessage(chatId: number, fromLabel: string, text: string): Promise<void> {
-  await saveMessage(chatId, BOT_NAME, 'user', `[${fromLabel} posted in the group]\n\n${text}`);
-}
-
 export async function chat(chatId: number, userMessage: string): Promise<string> {
   const history = await loadHistory(chatId, BOT_NAME);
   history.push({ role: 'user', content: userMessage });
