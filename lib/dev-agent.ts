@@ -12,6 +12,7 @@ import {
   mergePullRequest,
 } from '@/lib/github-dev';
 import { listDeployments, getDeploymentLogs } from '@/lib/vercel-dev';
+import { createConsultation } from '@/lib/bot-consultations';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BOT_NAME = 'santi';
@@ -40,7 +41,11 @@ You work in the same group chat as two other bots — you're the technical count
 - **Pepe** — marketing bot. Drafts and posts LinkedIn/Facebook/Instagram content. Not your job to touch marketing copy.
 - **Angeles** — CPO. Advises on product strategy and UX (PRDs, user flows, prioritization), with read-only access to this same repo — no write access, she can't ship anything herself. If a request is really about product direction rather than implementation, that's her call to weigh in on, not yours to decide alone.
 
-Only the owner of this chat can be messaging you — enforced before you ever see a message, whether it comes in directly or gets relayed to you by Angeles (she has a way to hand you a task straight from a product conversation, gated by that same owner check on her end) — so you don't need to gate anything on who's asking. A relayed request is just the instructions themselves, not a transcript of whatever conversation led to it — treat it like any other task. Mentioning Pepe or Angeles by name in your own reply doesn't ping them — the user has to address them directly for that.
+Only the owner of this chat can be messaging you — enforced before you ever see a message, whether it comes in directly, gets relayed to you by Angeles (she has a way to hand you a task straight from a product conversation, gated by that same owner check on her end), or arrives as a consultation from Pepe or Angeles (see below) — so you don't need to gate anything on who's asking. A relayed request or consultation is just the instructions themselves, not a transcript of whatever conversation led to it — treat it like any other task. Mentioning Pepe or Angeles by name in your own reply doesn't ping them — the user has to address them directly for that, except for \`consult_pepe\`/\`consult_angeles\` below, which loop them in on your own initiative.
+
+You also passively see what Pepe and Angeles post in this shared chat, even when it's not addressed to you — it arrives as a message prefixed **"[Pepe posted in the group]"** or **"[Angeles posted in the group]"**. That's context, not a request — don't reply to it or treat it as something you need to act on.
+
+\`consult_pepe\` and \`consult_angeles\` ask a teammate for their read on something — a marketing angle from Pepe, a product/UX angle from Angeles — when it's genuinely relevant to a task you're working (e.g. you're about to change something user-facing and want Angeles's UX read first, or a copy/messaging change has a marketing angle worth Pepe's take). Don't call one just because a message mentions their name in passing. Both just record a brief and return immediately; the teammate replies separately and posts their own take directly into this chat once ready (usually a few minutes) — don't wait for it before finishing your own turn. Their reply arrives later as a fresh incoming message prefixed **"[Reply from Pepe — CMO, re: your consultation]"** or **"[Reply from Angeles — CPO, re: your consultation]"** (or **"[System]"** if it failed) — treat that as their real answer, fold it in, and don't loop more than a couple of rounds if it's not converging.
 
 ## THE CODEBASE
 You have direct read/write access to the \`grupoyakgu/marketing\` GitHub repository — this exact Next.js 14 (App Router) app, deployed on Vercel. It's a marketing agent: a Telegram bot (Pepe) that posts to LinkedIn/Facebook/Instagram, backed by Supabase for a job queue and post-scheduling data, Cloudinary for images, and HeyGen for video. The default branch is \`main\`.
@@ -50,7 +55,7 @@ This codebase already has its own working conventions (see \`CLAUDE.md\` in the 
 ## HOW YOU WORK
 1. Read before you write. Use \`read_file\`/\`list_directory\`/\`search_code\` to actually look at the relevant code first — don't guess at a file's contents or assume how something is wired up.
 2. Make the smallest change that correctly fixes the actual problem. Don't refactor unrelated things while you're in there.
-3. To ship a change: \`create_branch\`, \`write_file\` for each file you're changing (one call per file, with a clear commit message), then \`create_pull_request\`. Once you're confident it's correct, \`merge_pull_request\` it yourself — you don't need to ask permission first, that's the point of you having this access. Only hold off on merging if something about the change is genuinely uncertain (e.g. you couldn't verify a related piece of the system, or the fix depends on information you don't have) — say so and explain what you'd need to be sure.
+3. To ship a change: \`create_branch\`, \`write_file\` for each file you're changing (one call per file, with a clear commit message), then \`create_pull_request\`. Do not merge it yourself. Post the PR link and a short summary of what changed and why, and explicitly ask the user for the go-ahead to merge — e.g. "Ready to merge whenever you say go." Only call \`merge_pull_request\` once the user has clearly approved *this* PR in a later message (e.g. "approved", "merge it", "go ahead", "ship it") — a vague acknowledgment, a reply about something else, or silence doesn't count. If they ask for changes instead, make them, update the PR (new commits on the same branch, or a fresh one if that's cleaner), and ask again before merging. This applies the same way whether you're replying directly or working a task delegated or consulted-in via Angeles or Pepe — either way, wait for the user's own words before merging.
 3a. When a change touches multiple files, or one file needs a lot of new code, don't compose it all in one turn — call \`write_file\` for a single file, let that turn finish, then continue with the next one. Composing several large files' worth of content plus your reasoning in a single response makes that one turn slow enough to risk timing out before it ever reaches you as a tool call — pacing one substantial file per turn keeps each turn fast and means partial progress is never lost even if something interrupts a later step. When the files you're touching are very different sizes, write the smaller ones first — that way if the largest file's write ever fails or runs out of room, the easier files are already safely committed instead of everything riding on the hardest one going first.
 4. You can't run the app or run tests directly — there's no CI configured on this repo — but you can check what actually happened in production with \`list_deployments\`/\`get_deployment_logs\`: build failures, runtime errors, console output. Use these before guessing at what production is doing whenever a bug report is vague — check the actual logs first, then read the code.
 5. \`search_code\` uses GitHub's code search index, which lags a few minutes behind pushes — if you just merged something, don't trust a search that contradicts what you just wrote; re-read the file directly instead.
@@ -150,11 +155,33 @@ const tools: Anthropic.Tool[] = [
   },
   {
     name: 'merge_pull_request',
-    description: 'Merges a pull request (squash merge) into main.',
+    description: 'Merges a pull request (squash merge) into main. Only call this after the user has explicitly approved merging this specific PR in a message of their own — never on your own initiative just because the change looks correct.',
     input_schema: {
       type: 'object' as const,
       properties: { pr_number: { type: 'integer' } },
       required: ['pr_number'],
+    },
+  },
+  {
+    name: 'consult_pepe',
+    description: 'Asks Pepe (the CMO) for his marketing-manager take on something — messaging, positioning, or copy implications of a change you\'re working on. This only records the brief and returns immediately; Pepe replies separately and posts his take directly into this chat as himself once ready (usually a few minutes) — don\'t wait for or expect his reply in this same turn. Only call this when a task genuinely has a marketing angle worth his input, not for every passing mention of him.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        brief: { type: 'string', description: 'A clear, self-contained question or context for Pepe — he does not see this conversation, only this text.' },
+      },
+      required: ['brief'],
+    },
+  },
+  {
+    name: 'consult_angeles',
+    description: 'Asks Angeles (the CPO) for her product/UX take on something — whether an approach is the right user experience, not just whether it\'s technically correct. This only records the brief and returns immediately; Angeles replies separately and posts her take directly into this chat as herself once ready (usually a few minutes) — don\'t wait for or expect her reply in this same turn. Only call this when a task genuinely has a product/UX angle worth her input, not for every passing mention of her.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        brief: { type: 'string', description: 'A clear, self-contained question or context for Angeles — she does not see this conversation, only this text.' },
+      },
+      required: ['brief'],
     },
   },
   {
@@ -184,6 +211,18 @@ const tools: Anthropic.Tool[] = [
 
 export async function clearHistory(chatId: number): Promise<void> {
   await clearDb(chatId, BOT_NAME);
+}
+
+/** Passively records something a teammate (Pepe or Angeles) posted in the
+ * shared group chat into Santi's own history, without running a chat() turn
+ * — he has no other way to see their messages (bot-authored messages never
+ * resolve as addressed to him, see bot-addressing.ts, so they'd otherwise be
+ * dropped entirely). This only makes him aware of it for his next real turn;
+ * it doesn't make him react or reply on its own, unlike consult_pepe/
+ * consult_angeles's reply loop (see process-bot-consultations.ts) which
+ * exists specifically to continue a conversation he initiated. */
+export async function recordTeammateMessage(chatId: number, fromLabel: string, text: string): Promise<void> {
+  await saveMessage(chatId, BOT_NAME, 'user', `[${fromLabel} posted in the group]\n\n${text}`);
 }
 
 export async function chat(chatId: number, userMessage: string): Promise<string> {
@@ -331,6 +370,23 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
               const input = block.input as { pr_number: number };
               const result = await mergePullRequest(input.pr_number);
               resultContent = result.merged ? `Merged PR #${input.pr_number}.` : `Not merged: ${result.message}`;
+            }
+
+            if (block.name === 'consult_pepe') {
+              const input = block.input as { brief: string };
+              // Not run inline — same reasoning as every other consult/
+              // delegate hop in this codebase (see lib/bot-consultations.ts):
+              // Pepe's own turn gets his full, undiminished budget via the
+              // process-bot-consultations cron instead of sharing this
+              // route's 300s maxDuration.
+              await createConsultation(chatId, 'santi', 'pepe', input.brief);
+              resultContent = 'Consulted Pepe. He\'ll post his marketing take directly in this chat once it\'s ready — usually within a few minutes.';
+            }
+
+            if (block.name === 'consult_angeles') {
+              const input = block.input as { brief: string };
+              await createConsultation(chatId, 'santi', 'angeles', input.brief);
+              resultContent = 'Consulted Angeles. She\'ll post her product take directly in this chat once it\'s ready — usually within a few minutes.';
             }
 
             if (block.name === 'list_deployments') {

@@ -1,8 +1,11 @@
 import { supabase } from './supabase';
+import type { BotName } from './bot-addressing';
 
-export interface PepeConsultation {
+export interface BotConsultation {
   id: string;
   chat_id: number;
+  from_bot: BotName;
+  to_bot: BotName;
   brief: string;
   status: 'pending' | 'processing' | 'done' | 'failed';
   error: string | null;
@@ -10,10 +13,15 @@ export interface PepeConsultation {
   completed_at: string | null;
 }
 
-export async function createConsultation(chatId: number, brief: string): Promise<PepeConsultation> {
+export async function createConsultation(
+  chatId: number,
+  fromBot: BotName,
+  toBot: BotName,
+  brief: string
+): Promise<BotConsultation> {
   const { data, error } = await supabase
-    .from('pepe_consultations')
-    .insert({ chat_id: chatId, brief })
+    .from('bot_consultations')
+    .insert({ chat_id: chatId, from_bot: fromBot, to_bot: toBot, brief })
     .select()
     .single();
   if (error) throw new Error(error.message);
@@ -22,7 +30,7 @@ export async function createConsultation(chatId: number, brief: string): Promise
 
 export async function getPendingConsultationIds(): Promise<string[]> {
   const { data, error } = await supabase
-    .from('pepe_consultations')
+    .from('bot_consultations')
     .select('id')
     .eq('status', 'pending')
     .order('created_at', { ascending: true });
@@ -35,9 +43,9 @@ export async function getPendingConsultationIds(): Promise<string[]> {
  * (this cron runs every 5 minutes; a single consultation can legitimately
  * take longer) can never both pick up and run the same one. Returns null if
  * it was already claimed. */
-export async function claimConsultation(id: string): Promise<PepeConsultation | null> {
+export async function claimConsultation(id: string): Promise<BotConsultation | null> {
   const { data, error } = await supabase
-    .from('pepe_consultations')
+    .from('bot_consultations')
     .update({ status: 'processing' })
     .eq('id', id)
     .eq('status', 'pending')
@@ -48,12 +56,12 @@ export async function claimConsultation(id: string): Promise<PepeConsultation | 
 }
 
 export async function markConsultationDone(id: string): Promise<void> {
-  await supabase.from('pepe_consultations').update({ status: 'done', completed_at: new Date().toISOString() }).eq('id', id);
+  await supabase.from('bot_consultations').update({ status: 'done', completed_at: new Date().toISOString() }).eq('id', id);
 }
 
 export async function markConsultationFailed(id: string, errorMessage: string): Promise<void> {
   await supabase
-    .from('pepe_consultations')
+    .from('bot_consultations')
     .update({ status: 'failed', error: errorMessage, completed_at: new Date().toISOString() })
     .eq('id', id);
 }

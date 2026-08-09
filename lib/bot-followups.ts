@@ -1,8 +1,10 @@
 import { supabase } from './supabase';
+import type { BotName } from './bot-addressing';
 
-export interface AngelesFollowup {
+export interface BotFollowup {
   id: string;
   chat_id: number;
+  bot: BotName;
   message: string;
   status: 'pending' | 'processing' | 'done' | 'failed';
   error: string | null;
@@ -10,10 +12,10 @@ export interface AngelesFollowup {
   completed_at: string | null;
 }
 
-export async function createFollowup(chatId: number, message: string): Promise<AngelesFollowup> {
+export async function createFollowup(chatId: number, bot: BotName, message: string): Promise<BotFollowup> {
   const { data, error } = await supabase
-    .from('angeles_followups')
-    .insert({ chat_id: chatId, message })
+    .from('bot_followups')
+    .insert({ chat_id: chatId, bot, message })
     .select()
     .single();
   if (error) throw new Error(error.message);
@@ -22,7 +24,7 @@ export async function createFollowup(chatId: number, message: string): Promise<A
 
 export async function getPendingFollowupIds(): Promise<string[]> {
   const { data, error } = await supabase
-    .from('angeles_followups')
+    .from('bot_followups')
     .select('id')
     .eq('status', 'pending')
     .order('created_at', { ascending: true });
@@ -31,13 +33,13 @@ export async function getPendingFollowupIds(): Promise<string[]> {
 }
 
 /** Atomically transitions a pending followup to 'processing' — mirrors
- * pepe-consultations.ts's claimConsultation() so two overlapping cron ticks
+ * bot-consultations.ts's claimConsultation() so two overlapping cron ticks
  * (this cron runs every 5 minutes; a single followup can legitimately take
  * longer) can never both pick up and run the same one. Returns null if it
  * was already claimed. */
-export async function claimFollowup(id: string): Promise<AngelesFollowup | null> {
+export async function claimFollowup(id: string): Promise<BotFollowup | null> {
   const { data, error } = await supabase
-    .from('angeles_followups')
+    .from('bot_followups')
     .update({ status: 'processing' })
     .eq('id', id)
     .eq('status', 'pending')
@@ -48,12 +50,12 @@ export async function claimFollowup(id: string): Promise<AngelesFollowup | null>
 }
 
 export async function markFollowupDone(id: string): Promise<void> {
-  await supabase.from('angeles_followups').update({ status: 'done', completed_at: new Date().toISOString() }).eq('id', id);
+  await supabase.from('bot_followups').update({ status: 'done', completed_at: new Date().toISOString() }).eq('id', id);
 }
 
 export async function markFollowupFailed(id: string, errorMessage: string): Promise<void> {
   await supabase
-    .from('angeles_followups')
+    .from('bot_followups')
     .update({ status: 'failed', error: errorMessage, completed_at: new Date().toISOString() })
     .eq('id', id);
 }

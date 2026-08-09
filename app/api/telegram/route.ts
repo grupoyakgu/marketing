@@ -4,10 +4,10 @@ import { postToLinkedIn } from '@/lib/linkedin-poster';
 import { enqueueLinkedInPost } from '@/lib/linkedin-queue';
 import { uploadImageBuffer } from '@/lib/cloudinary';
 import { recordUpload, getPendingUpload, nameUpload } from '@/lib/cloudinary-uploads';
-import { clearHistory, chat } from '@/lib/marketing-agent';
+import { clearHistory, chat, recordTeammateMessage } from '@/lib/marketing-agent';
 import { trackDirectPost } from '@/lib/marketing-plan';
 import { claimTelegramUpdate } from '@/lib/telegram-dedup';
-import { resolveAddressee, allBots } from '@/lib/bot-addressing';
+import { resolveAddressee, allBots, identifyBotAuthor, BOT_LABELS } from '@/lib/bot-addressing';
 
 export const maxDuration = 300;
 
@@ -64,6 +64,19 @@ export async function POST(req: NextRequest) {
     const message = body?.message;
     chatId = message?.chat?.id;
     if (!chatId) return NextResponse.json({ ok: true });
+
+    // Checked before addressing resolution below: bot-authored messages
+    // never resolve as addressed to Pepe (see resolveAddressee), so without
+    // this he'd never learn what a teammate posts. Recorded as context on
+    // his own history, not run through chat() (no reply, no reaction to
+    // every single thing posted).
+    const authorBot = identifyBotAuthor(message, allBots());
+    if (authorBot) {
+      if (authorBot !== 'pepe' && message.text) {
+        await recordTeammateMessage(chatId, BOT_LABELS[authorBot], message.text);
+      }
+      return NextResponse.json({ ok: true });
+    }
 
     // Santi and Angeles share this group chat and only respond when
     // explicitly addressed — Pepe is the default for anything not clearly
