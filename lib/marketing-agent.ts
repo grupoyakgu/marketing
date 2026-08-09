@@ -46,6 +46,7 @@ import { createVideo, listAvatars, listVoices } from '@/lib/heygen';
 import { createVideoJob } from '@/lib/video-jobs';
 import { getLandingCopyOrThrow, updateLandingCopy, type EditableLandingCopy } from '@/lib/landing-copy';
 import type { Locale } from '@/app/invest/[locale]/copy';
+import { screenshotUrl } from '@/lib/browser';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BOT_NAME = 'pepe';
@@ -59,7 +60,21 @@ const BOT_NAME = 'pepe';
 // tool dispatch against this timeout guarantees SOME result — even a timeout
 // error — is always produced well before that hard limit, regardless of what
 // hangs inside.
-const TOOL_TIMEOUT_MS = 45_000;
+//
+// Sized for browse_url, same as Angeles's (lib/product-agent.ts) — it
+// launches a real remote Browserbase session that can take up to 30s for
+// navigation alone, plus cold-start overhead, well past what the fast API
+// calls below actually need. Still comfortably under this route's 300s
+// maxDuration.
+const TOOL_TIMEOUT_MS = 90_000;
+
+// Confirmed in production on Angeles's identical browse_url: given no cap,
+// she went on an unbounded competitive-research spree in one turn -- 20
+// sequential screenshots, each harmless alone but summing to blow straight
+// through the route's maxDuration with nothing delivered. A cap on total
+// browse_url calls per turn guarantees the loop always leaves enough budget
+// for a final text reply.
+const MAX_BROWSE_CALLS_PER_TURN = 6;
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -244,6 +259,7 @@ For "which post got the most likes", "top 5 posts by impressions", "what's our b
 - get_tracked_hashtags — see the user's tracked hashtag list with cached stats (same as the /hashtags dashboard)
 - add_tracked_hashtag — add a hashtag you've found worth tracking to that list, so the user sees it in the dashboard too
 - get_landing_page_copy, update_landing_page_copy — read and edit the content of the investor landing page (/invest/es, /invest/en, /invest/he — headline, highlights, market intel bullets, form section text, etc.). Edits are live immediately, no deploy needed. Always call get_landing_page_copy first so you're editing from the actual current wording, not guessing. Ask which language(s) to apply a change to if it's not obvious from context — an edit only applies to the locale you pass, it doesn't propagate to the others automatically, since each language's copy is an independent, deliberately localized translation rather than a mechanical mirror of the others.
+- browse_url — take a screenshot of any public webpage (a competitor, a reference site, an article the user points you at) so you can judge it from what it actually looks like instead of guessing from memory. Each call launches a real remote browser session that can take up to 30s; you have a budget of a few per conversation turn — pick the handful most worth looking at rather than surveying everything, and if you run out mid-research, answer with what you've already seen and offer to look at more in a follow-up.
 
 You speak with authority and warmth. You are direct, strategic, and deeply passionate about the intersection of hospitality and real estate.`;
 }
@@ -612,6 +628,18 @@ const tools: Anthropic.Tool[] = [
       required: ['locale'],
     },
   },
+  {
+    name: 'browse_url',
+    description: 'Takes a screenshot of any public webpage — a competitor site, a landing page the user asks about, a design reference, an article. Use this whenever the user asks about a specific URL, instead of guessing at what it looks like or declining because you think you can\'t see it.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        url: { type: 'string', description: 'Full URL to browse, including the scheme, e.g. "https://example.com/page".' },
+        full_page: { type: 'boolean', description: 'Capture the full scrollable page instead of just the visible viewport. Defaults to false.' },
+      },
+      required: ['url'],
+    },
+  },
 ];
 
 export async function clearHistory(chatId: number): Promise<void> {
@@ -622,6 +650,11 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
   const history = await loadHistory(chatId, BOT_NAME);
   history.push({ role: 'user', content: userMessage });
   await saveMessage(chatId, BOT_NAME, 'user', userMessage);
+
+  // Persists across every internal turn of this single chat() call (one
+  // Telegram message), reset fresh on the next one -- see
+  // MAX_BROWSE_CALLS_PER_TURN above.
+  let browseCallCount = 0;
 
   while (true) {
     const turnStartedAt = Date.now();
@@ -674,7 +707,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
 
       for (const block of response.content) {
         if (block.type !== 'tool_use') continue;
-        let resultContent = '';
+        let resultContent: Anthropic.ToolResultBlockParam['content'] = '';
 
         // Outer safety net: every tool_use block MUST get a matching
         // tool_result, or Claude's API rejects every later message in this
@@ -1098,6 +1131,24 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
             }
           } catch (err) {
             resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        }
+
+        if (block.name === 'browse_url') {
+          browseCallCount++;
+          if (browseCallCount > MAX_BROWSE_CALLS_PER_TURN) {
+            resultContent = `Browsing budget for this conversation turn is used up (max ${MAX_BROWSE_CALLS_PER_TURN} screenshots) — answer with what you've already seen instead of browsing more; the user can ask you to look at specific other pages in a follow-up message.`;
+          } else {
+            const input = block.input as { url: string; full_page?: boolean };
+            try {
+              const screenshot = await screenshotUrl(input.url, input.full_page ?? false);
+              resultContent = [
+                { type: 'text', text: `Screenshot of ${input.url}:` },
+                { type: 'image', source: { type: 'base64', media_type: 'image/png', data: screenshot.toString('base64') } },
+              ];
+            } catch (err) {
+              resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
+            }
           }
         }
           })(), TOOL_TIMEOUT_MS, block.name);
