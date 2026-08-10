@@ -17,12 +17,26 @@ const LOGO_URL =
 
 const GALLERY_COUNT = 6;
 
-// Images to pin at the front of the gallery (case-insensitive name match).
-const GALLERY_PINNED = ['kitchen', 'terrace pool'];
-// Images to exclude from the gallery entirely (case-insensitive name match).
-const GALLERY_EXCLUDED = ['facade'];
+// Images to pin at the front of the gallery (case-insensitive, separator-insensitive name match).
+const GALLERY_PINNED = ['kitchen', 'terrace pool', 'pool from above'];
+// Facade shots (both spellings — Cloudinary's uploaded filenames for this project use "facada",
+// see HeroSlider's SLIDES, not the English "facade") are capped at one in the gallery rather than
+// excluded outright, since the project photoshoot has more than one and only the duplicates
+// should be dropped.
+const GALLERY_FACADE_TERMS = ['facade', 'facada'];
+const GALLERY_FACADE_MAX = 1;
 
-const FOUNDER_IMAGE_NAME = 'founder_on_the_terrace_1';
+// Cloudinary's folder/name-based lookup for this repeatedly failed to match the real asset
+// (tried a "founders" folder search, then a name match on "founder_on_the_terrace_1" — neither
+// found it), so this is hardcoded directly, the same way LOGO_URL is above.
+const FOUNDER_IMAGE_URL =
+  'https://res.cloudinary.com/quupmn8b/image/upload/v1784890661/20221111_192434_stacv1.jpg';
+
+// Cloudinary filenames separate words with underscores/hyphens while the terms above use plain
+// spaces, so normalize both sides before comparing.
+function normalizeImageName(name: string): string {
+  return name.toLowerCase().replace(/[_-]+/g, ' ');
+}
 
 function isLocale(value: string): value is Locale {
   return (LOCALES as string[]).includes(value);
@@ -37,34 +51,30 @@ export async function generateMetadata({ params }: { params: { locale: string } 
 export default async function InvestPage({ params }: { params: { locale: string } }) {
   if (!isLocale(params.locale)) notFound();
 
-  const [copy, galleryImages, founderImages] = await Promise.all([
+  const [copy, galleryImages] = await Promise.all([
     getLandingCopy(params.locale),
     listCloudinaryImagesInFolder('BDS 36').catch(err => {
       console.error('[invest] gallery fetch failed:', err);
       return [];
     }),
-    listCloudinaryImagesInFolder('founders').catch(err => {
-      console.error('[invest] founders fetch failed:', err);
-      return [];
-    }),
   ]);
 
-  // Exclude any image whose name contains a term in GALLERY_EXCLUDED, then
+  // Cap facade shots to GALLERY_FACADE_MAX (drop only the extras), then
   // surface the pinned images first (in the order declared), followed by the
   // remaining images in whatever order Cloudinary returns them.
-  const eligible = galleryImages.filter(
-    img => !GALLERY_EXCLUDED.some(term => img.name.toLowerCase().includes(term.toLowerCase()))
-  );
+  let facadeCount = 0;
+  const eligible = galleryImages.filter(img => {
+    const isFacade = GALLERY_FACADE_TERMS.some(term => normalizeImageName(img.name).includes(normalizeImageName(term)));
+    if (!isFacade) return true;
+    facadeCount += 1;
+    return facadeCount <= GALLERY_FACADE_MAX;
+  });
   const pinned = GALLERY_PINNED
-    .map(term => eligible.find(img => img.name.toLowerCase().includes(term.toLowerCase())))
+    .map(term => eligible.find(img => normalizeImageName(img.name).includes(normalizeImageName(term))))
     .filter((img): img is NonNullable<typeof img> => img !== undefined);
   const pinnedIds = new Set(pinned.map(img => img.id));
   const rest = eligible.filter(img => !pinnedIds.has(img.id));
   const gallery = [...pinned, ...rest].slice(0, GALLERY_COUNT);
-
-  const founderImage = founderImages.find(img =>
-    img.name.toLowerCase().includes(FOUNDER_IMAGE_NAME.toLowerCase())
-  ) ?? null;
 
   return (
     <div dir={copy.dir} className="min-h-screen bg-neutral-950 text-white">
@@ -159,15 +169,13 @@ export default async function InvestPage({ params }: { params: { locale: string 
               ))}
             </div>
             {/* Founder image */}
-            {founderImage && (
-              <div className="lg:w-72 lg:shrink-0">
-                <img
-                  src={founderImage.url}
-                  alt={founderImage.name}
-                  className="h-80 w-full rounded-2xl object-cover lg:h-96"
-                />
-              </div>
-            )}
+            <div className="lg:w-72 lg:shrink-0">
+              <img
+                src={FOUNDER_IMAGE_URL}
+                alt="Grupo YAKGU founders"
+                className="h-80 w-full rounded-2xl object-cover lg:h-96"
+              />
+            </div>
           </div>
           <div className="mt-10 grid grid-cols-2 gap-6 sm:grid-cols-4">
             {copy.aboutStats.map(stat => (
