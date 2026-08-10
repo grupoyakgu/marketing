@@ -9,6 +9,12 @@ interface PageEvent {
   utm_source: string | null;
 }
 
+interface LinkClick {
+  created_at: string;
+  locale: string;
+  utm_source: string | null;
+}
+
 interface LeadRow {
   id: string;
   created_at: string;
@@ -53,6 +59,21 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to load page events' }, { status: 500 });
   }
   const events: PageEvent[] = eventsRaw ?? [];
+
+  // Fetch link_clicks — logged by /go/[locale] before it redirects into the page
+  let clicksQuery = supabase
+    .from('link_clicks')
+    .select('created_at, locale, utm_source')
+    .eq('landing_page', landing_page)
+    .gte('created_at', sinceTs)
+    .lte('created_at', untilTs);
+  if (utmSourceFilter) clicksQuery = clicksQuery.eq('utm_source', utmSourceFilter);
+  const { data: clicksRaw, error: clicksError } = await clicksQuery;
+  if (clicksError) {
+    console.error('[api/dashboard/landing-performance] link_clicks query failed:', clicksError.message);
+    return NextResponse.json({ error: 'Failed to load link clicks' }, { status: 500 });
+  }
+  const clicks: LinkClick[] = clicksRaw ?? [];
 
   // Fetch leads — include all leads in range (pre-tracking leads will have null utm_source)
   let leadsQuery = supabase
@@ -125,7 +146,7 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => a.date.localeCompare(b.date));
 
   return NextResponse.json({
-    clicks: 0,
+    clicks: clicks.length,
     views,
     submissions,
     conversionRate,
