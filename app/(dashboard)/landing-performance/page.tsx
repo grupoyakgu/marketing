@@ -282,9 +282,9 @@ export default function LandingPerformancePage() {
       <section className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <KpiCard
           label="Link Clicks"
-          value="—"
+          value={data?.clicks ?? '—'}
           icon={MousePointerClick}
-          tooltip="Click tracking requires UTM-tagged links — data will appear here once posts go live with UTM parameters."
+          tooltip="Clicks on tracked /go links (e.g. in a LinkedIn or Instagram post) before they redirect into the landing page."
         />
         <KpiCard
           label="Page Views"
@@ -307,15 +307,19 @@ export default function LandingPerformancePage() {
       <Card className="space-y-4">
         <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">Funnel</h3>
         <div className="flex items-center gap-0">
-          {/* Step 1 — Clicks (always empty for now) */}
-          <div className="flex flex-1 flex-col items-center gap-1 rounded-xl bg-neutral-100 px-4 py-5 dark:bg-neutral-800">
+          {/* Step 1 — Clicks */}
+          <div className="flex flex-1 flex-col items-center gap-1 rounded-xl bg-blue-50 px-4 py-5 dark:bg-blue-900/20">
             <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Link Clicks</span>
-            <span className="text-2xl font-bold text-neutral-400">—</span>
+            <span className="text-2xl font-bold text-blue-500">{data?.clicks ?? '—'}</span>
           </div>
-          {/* Chevron */}
+          {/* Chevron with drop-off */}
           <div className="flex flex-col items-center px-2 text-center">
             <span className="text-lg text-neutral-300 dark:text-neutral-600">›</span>
-            <span className="text-xs text-neutral-400">—</span>
+            <span className="text-xs text-neutral-400">
+              {data && data.clicks > 0
+                ? `${(((data.clicks - data.views) / data.clicks) * 100).toFixed(0)}% drop`
+                : '—'}
+            </span>
           </div>
           {/* Step 2 — Views */}
           <div className="flex flex-1 flex-col items-center gap-1 rounded-xl bg-amber-50 px-4 py-5 dark:bg-amber-900/20">
