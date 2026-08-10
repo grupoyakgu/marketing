@@ -1,9 +1,15 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import type { InvestCopy, Locale } from './copy';
 
 type Status = 'idle' | 'submitting' | 'error';
+
+interface UtmParams {
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+}
 
 interface Props {
   copy: InvestCopy;
@@ -22,6 +28,16 @@ export function InvestorForm({ copy, locale, variant = 'light' }: Props) {
   const [company, setCompany] = useState('');
   const [consentTerms, setConsentTerms] = useState(false);
   const [consentMarketing, setConsentMarketing] = useState(false);
+  const [utms, setUtms] = useState<UtmParams>({ utm_source: null, utm_medium: null, utm_campaign: null });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setUtms({
+      utm_source: params.get('utm_source'),
+      utm_medium: params.get('utm_medium'),
+      utm_campaign: params.get('utm_campaign'),
+    });
+  }, []);
 
   const dark = variant === 'dark';
 
@@ -54,7 +70,15 @@ export function InvestorForm({ copy, locale, variant = 'light' }: Props) {
       const res = await fetch('/api/leads/investor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, mobile, locale, company, consentMarketing }),
+        body: JSON.stringify({
+          name,
+          email,
+          mobile,
+          locale,
+          company,
+          consentMarketing,
+          ...utms,
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));

@@ -1,0 +1,146 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { supabase } from '@/lib/supabase';
+
+export const dynamic = 'force-dynamic';
+
+interface PageEvent {
+  created_at: string;
+  locale: string;
+  utm_source: string | null;
+}
+
+interface LeadRow {
+  id: string;
+  created_at: string;
+  name: string;
+  email: string;
+  mobile: string;
+  locale: string;
+  utm_source: string | null;
+  consent_marketing: boolean;
+}
+
+function isoDate(d: Date): string {
+  return d.toISOString().split('T')[0];
+}
+
+export async function GET(req: NextRequest) {
+  const { searchParams } = req.nextUrl;
+  const since = searchParams.get('since');
+  const until = searchParams.get('until');
+  if (!since || !until) {
+    return NextResponse.json({ error: 'since and until are required' }, { status: 400 });
+  }
+
+  const landing_page = searchParams.get('landing_page') ?? 'bds36';
+  const utmSourceFilter = searchParams.get('utm_source');
+
+  // Date bounds: since = start of day, until = end of day
+  const sinceTs = `${since}T00:00:00.000Z`;
+  const untilTs = `${until}T23:59:59.999Z`;
+
+  // Fetch page_events
+  let eventsQuery = supabase
+    .from('page_events')
+    .select('created_at, locale, utm_source')
+    .eq('landing_page', landing_page)
+    .gte('created_at', sinceTs)
+    .lte('created_at', untilTs);
+  if (utmSourceFilter) eventsQuery = eventsQuery.eq('utm_source', utmSourceFilter);
+  const { data: eventsRaw, error: eventsError } = await eventsQuery;
+  if (eventsError) {
+    console.error('[api/dashboard/landing-performance] page_events query failed:', eventsError.message);
+    return NextResponse.json({ error: 'Failed to load page events' }, { status: 500 });
+  }
+  const events: PageEvent[] = eventsRaw ?? [];
+
+  // Fetch leads — include all leads in range (pre-tracking leads will have null utm_source)
+  let leadsQuery = supabase
+    .from('investor_leads')
+    .select('id, created_at, name, email, mobile, locale, utm_source, consent_marketing')
+    .gte('created_at', sinceTs)
+    .lte('created_at', untilTs)
+    .order('created_at', { ascending: false });
+  if (utmSourceFilter) leadsQuery = leadsQuery.eq('utm_source', utmSourceFilter);
+  const { data: leadsRaw, error: leadsError } = await leadsQuery;
+  if (leadsError) {
+    console.error('[api/dashboard/landing-performance] investor_leads query failed:', leadsError.message);
+    return NextResponse.json({ error: 'Failed to load leads' }, { status: 500 });
+  }
+  const leads: LeadRow[] = leadsRaw ?? [];
+
+  const views = events.length;
+  // Submissions for funnel/conversion: only UTM-attributed leads (post-tracking)
+  const attributedLeads = leads.filter(l => l.utm_source !== null);
+  const submissions = attributedLeads.length;
+  const conversionRate = views > 0 ? submissions / views : 0;
+
+  // By network — group events and attributed leads by utm_source
+  const networkSources = Array.from(new Set([
+    ...events.map(e => e.utm_source ?? 'direct'),
+    ...attributedLeads.map(l => l.utm_source ?? 'direct'),
+  ]));
+
+  const byNetwork = networkSources.map(source => {
+    const networkViews = events.filter(e => (e.utm_source ?? 'direct') === source).length;
+    const networkSubs = attributedLeads.filter(l => (l.utm_source ?? 'direct') === source).length;
+    return {
+      source,
+      views: networkViews,
+      submissions: networkSubs,
+      conversionRate: networkViews > 0 ? networkSubs / networkViews : 0,
+    };
+  }).sort((a, b) => b.views - a.views);
+
+  // By locale
+  const locales = Array.from(new Set([
+    ...events.map(e => e.locale),
+    ...leads.map(l => l.locale),
+  ]));
+  const byLocale = locales.map(locale => {
+    const localeViews = events.filter(e => e.locale === locale).length;
+    const localeSubs = leads.filter(l => l.locale === locale).length;
+    return {
+      locale,
+      views: localeViews,
+      submissions: localeSubs,
+      conversionRate: localeViews > 0 ? localeSubs / localeViews : 0,
+    };
+  }).sort((a, b) => b.submissions - a.submissions);
+
+  // Time series — group by date
+  const dateMap = new Map<string, { views: number; submissions: number }>();
+  for (const e of events) {
+    const date = isoDate(new Date(e.created_at));
+    const existing = dateMap.get(date) ?? { views: 0, submissions: 0 };
+    dateMap.set(date, { ...existing, views: existing.views + 1 });
+  }
+  for (const l of attributedLeads) {
+    const date = isoDate(new Date(l.created_at));
+    const existing = dateMap.get(date) ?? { views: 0, submissions: 0 };
+    dateMap.set(date, { ...existing, submissions: existing.submissions + 1 });
+  }
+  const timeSeries = Array.from(dateMap.entries())
+    .map(([date, counts]) => ({ date, ...counts }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  return NextResponse.json({
+    clicks: 0,
+    views,
+    submissions,
+    conversionRate,
+    byNetwork,
+    byLocale,
+    timeSeries,
+    leads: leads.map(l => ({
+      id: l.id,
+      created_at: l.created_at,
+      name: l.name,
+      email: l.email,
+      mobile: l.mobile,
+      locale: l.locale,
+      utm_source: l.utm_source,
+      consent_marketing: l.consent_marketing,
+    })),
+  });
+}

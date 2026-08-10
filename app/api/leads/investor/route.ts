@@ -4,6 +4,12 @@ import { recordInvestorLead, notifyNewInvestorLead } from '@/lib/investor-leads'
 const VALID_LOCALES = ['es', 'en', 'he'];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+function safeUtm(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim().slice(0, 100);
+  return trimmed || null;
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
@@ -30,8 +36,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid locale' }, { status: 400 });
   }
 
+  const utm_source = safeUtm(body.utm_source);
+  const utm_medium = safeUtm(body.utm_medium);
+  const utm_campaign = safeUtm(body.utm_campaign);
+
   try {
-    const lead = await recordInvestorLead({ name, email, mobile, locale });
+    const lead = await recordInvestorLead({ name, email, mobile, locale, utm_source, utm_medium, utm_campaign });
     await notifyNewInvestorLead(lead);
     return NextResponse.json({ ok: true });
   } catch (err) {

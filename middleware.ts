@@ -12,6 +12,8 @@ export const config = {
     '/comments/:path*',
     '/ads/:path*',
     '/hashtags/:path*',
+    '/landing-performance/:path*',
+    '/landing-performance',
     '/api/dashboard/:path*',
     '/api/admin/:path*',
   ],
