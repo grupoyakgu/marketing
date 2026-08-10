@@ -16,12 +16,20 @@ const LOGO_URL =
 
 const GALLERY_COUNT = 6;
 
-// Images to pin at the front of the gallery (case-insensitive name match).
+// Images to pin at the front of the gallery (case-insensitive, separator-insensitive name match).
 const GALLERY_PINNED = ['kitchen', 'terrace pool'];
-// Images to exclude from the gallery entirely (case-insensitive name match).
-const GALLERY_EXCLUDED = ['facade'];
+// Images to exclude from the gallery entirely (case-insensitive, separator-insensitive name
+// match). Both spellings are listed since Cloudinary's uploaded filenames for this project use
+// "facada" (see HeroSlider's SLIDES), not the English "facade".
+const GALLERY_EXCLUDED = ['facade', 'facada'];
 
 const FOUNDER_IMAGE_NAME = 'founder_on_the_terrace_1';
+
+// Cloudinary filenames separate words with underscores/hyphens while the terms above use plain
+// spaces, so normalize both sides before comparing.
+function normalizeImageName(name: string): string {
+  return name.toLowerCase().replace(/[_-]+/g, ' ');
+}
 
 function isLocale(value: string): value is Locale {
   return (LOCALES as string[]).includes(value);
@@ -52,18 +60,21 @@ export default async function InvestPage({ params }: { params: { locale: string 
   // surface the pinned images first (in the order declared), followed by the
   // remaining images in whatever order Cloudinary returns them.
   const eligible = galleryImages.filter(
-    img => !GALLERY_EXCLUDED.some(term => img.name.toLowerCase().includes(term.toLowerCase()))
+    img => !GALLERY_EXCLUDED.some(term => normalizeImageName(img.name).includes(normalizeImageName(term)))
   );
   const pinned = GALLERY_PINNED
-    .map(term => eligible.find(img => img.name.toLowerCase().includes(term.toLowerCase())))
+    .map(term => eligible.find(img => normalizeImageName(img.name).includes(normalizeImageName(term))))
     .filter((img): img is NonNullable<typeof img> => img !== undefined);
   const pinnedIds = new Set(pinned.map(img => img.id));
   const rest = eligible.filter(img => !pinnedIds.has(img.id));
   const gallery = [...pinned, ...rest].slice(0, GALLERY_COUNT);
 
-  const founderImage = founderImages.find(img =>
-    img.name.toLowerCase().includes(FOUNDER_IMAGE_NAME.toLowerCase())
-  ) ?? null;
+  // Prefer the specifically named founder photo, but fall back to any image
+  // in the folder rather than silently rendering nothing if the name drifts.
+  const founderImage =
+    founderImages.find(img => normalizeImageName(img.name).includes(normalizeImageName(FOUNDER_IMAGE_NAME))) ??
+    founderImages[0] ??
+    null;
 
   return (
     <div dir={copy.dir} className="min-h-screen bg-neutral-950 text-white">
