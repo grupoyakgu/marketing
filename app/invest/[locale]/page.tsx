@@ -72,6 +72,19 @@ export default async function InvestPage({ params }: { params: { locale: string 
       {/* Fires a pageview event on mount — renders nothing visible */}
       <PageViewTracker locale={params.locale} />
 
+      {/* ── Mobile-only logo bar ───────────────────────────────────────
+          On desktop (lg+) the form panel renders its own logo inline.
+          On mobile the layout stacks: slider first, form below — so
+          without this the visitor scrolls past the entire hero before
+          seeing any branding. Hidden on lg and up. */}
+      <div className="flex items-center bg-neutral-900 px-6 py-4 lg:hidden">
+        <img
+          src={LOGO_URL}
+          alt="Grupo YAKGU"
+          className="h-10 w-auto object-contain"
+        />
+      </div>
+
       {/* ── Split-screen hero ─────────────────────────────────────────── */}
       <section className="flex min-h-screen flex-col lg:flex-row">
 
@@ -86,11 +99,11 @@ export default async function InvestPage({ params }: { params: { locale: string 
         <div className="flex flex-col bg-neutral-900 lg:flex-[2] lg:overflow-y-auto">
           <div className="flex flex-1 flex-col justify-center px-8 py-10 lg:px-12 lg:py-12">
 
-            {/* Logo */}
+            {/* Logo — desktop only; mobile logo is in the bar above the hero */}
             <img
               src={LOGO_URL}
               alt="Grupo YAKGU"
-              className="h-12 w-auto object-contain"
+              className="hidden h-12 w-auto object-contain lg:block"
             />
 
             {/* Form heading */}
