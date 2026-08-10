@@ -23,6 +23,17 @@ const SLIDES = [
 
 const INTERVAL_MS = 4000;
 
+// The mobile hero panel (h-[50vh], full viewport width) is narrower relative
+// to its height than these landscape photos are, so object-cover only ever
+// crops the sides there — the full image height always stays visible, which
+// means object-position can't move the brand stamp baked into these shots
+// vertically (there's no vertical crop margin for it to redistribute). To
+// actually keep the stamp near the top on mobile we crop a portrait version
+// server-side via Cloudinary (fill to a 4:5 ratio, gravity north) instead.
+function mobileTopCrop(url: string): string {
+  return url.replace('/upload/', '/upload/c_fill,g_north,ar_4:5/');
+}
+
 interface HeroSliderProps {
   eyebrow: string;
   headline: string;
@@ -61,13 +72,27 @@ export function HeroSlider({ eyebrow, headline, subheadline }: HeroSliderProps) 
         }
       `}</style>
 
-      {/* Preload hints for all slides */}
+      {/* Preload hints for all slides — split by the same media query the
+          <picture> sources below use, so mobile preloads only the cropped
+          variant and desktop only the original. */}
       {SLIDES.map((slide, i) => (
         <link
-          key={slide.src}
+          key={`${slide.src}-mobile`}
+          rel="preload"
+          as="image"
+          href={mobileTopCrop(slide.src)}
+          media="(max-width: 1023px)"
+          // eslint-disable-next-line react/no-unknown-property
+          fetchPriority={i === 0 ? 'high' : 'low'}
+        />
+      ))}
+      {SLIDES.map((slide, i) => (
+        <link
+          key={`${slide.src}-desktop`}
           rel="preload"
           as="image"
           href={slide.src}
+          media="(min-width: 1024px)"
           // eslint-disable-next-line react/no-unknown-property
           fetchPriority={i === 0 ? 'high' : 'low'}
         />
@@ -89,18 +114,14 @@ export function HeroSlider({ eyebrow, headline, subheadline }: HeroSliderProps) 
               restarting the CSS animation from its `from` value every time
               this slide comes into view.
             */}
-            <img
-              key={isActive ? cycleCount : i}
-              src={slide.src}
-              alt={slide.alt}
-              // object-top on mobile keeps the top of each photo (where the
-              // brand stamp baked into these shots sits) in frame — the
-              // container's 50vh height on mobile is much shorter relative to
-              // width than the desktop split-screen panel, so a center crop
-              // there was cutting off the top and centering the stamp lower
-              // than intended. Desktop reverts to a center crop.
-              className={`absolute inset-0 h-full w-full object-cover object-top lg:object-center ${kbClass}`}
-            />
+            <picture key={isActive ? cycleCount : i}>
+              <source media="(max-width: 1023px)" srcSet={mobileTopCrop(slide.src)} />
+              <img
+                src={slide.src}
+                alt={slide.alt}
+                className={`absolute inset-0 h-full w-full object-cover ${kbClass}`}
+              />
+            </picture>
           </div>
         );
       })}
