@@ -38,9 +38,11 @@ interface HeroSliderProps {
   eyebrow: string;
   headline: string;
   subheadline: string;
+  /** Shown as an overlay in the top-left corner on mobile only. */
+  logoUrl: string;
 }
 
-export function HeroSlider({ eyebrow, headline, subheadline }: HeroSliderProps) {
+export function HeroSlider({ eyebrow, headline, subheadline, logoUrl }: HeroSliderProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [cycleCount, setCycleCount] = useState(0);
 
@@ -129,12 +131,23 @@ export function HeroSlider({ eyebrow, headline, subheadline }: HeroSliderProps) 
         );
       })}
 
-      {/* Overlay */}
+      {/* Overlay gradient */}
       <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/20" />
 
+      {/* Mobile logo — overlaid top-left on the hero image.
+          Hidden on desktop where the form panel renders its own logo. */}
+      <div className="absolute left-0 top-0 p-5 lg:hidden">
+        <img
+          src={logoUrl}
+          alt="Grupo YAKGU"
+          className="h-10 w-auto object-contain drop-shadow-lg"
+        />
+      </div>
+
       {/* Text — anchored to all four edges so it can't overflow the panel.
-          overflow-hidden on the container above acts as the hard clip. */}
-      <div className="absolute inset-0 flex flex-col justify-start overflow-hidden p-8 lg:p-12">
+          overflow-hidden on the container above acts as the hard clip.
+          Pushed down on mobile (pt-24) to clear the logo overlay. */}
+      <div className="absolute inset-0 flex flex-col justify-start overflow-hidden p-8 pt-24 lg:p-12 lg:pt-12">
         <p className="mb-3 text-xs font-medium uppercase tracking-widest text-white/60">
           {eyebrow}
         </p>
