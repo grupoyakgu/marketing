@@ -13,6 +13,7 @@ import {
   Settings,
   ChevronsLeft,
   ChevronsRight,
+  LayoutTemplate,
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
@@ -43,8 +44,9 @@ export function Sidebar({ buildVersion }: { buildVersion: string }) {
     { href: '/', label: 'Overview', icon: LayoutDashboard },
     { href: '/planner', label: 'Planner', icon: CalendarDays },
     { href: '/performance', label: 'Performance', icon: Trophy },
-    { href: '/comments', label: 'Comments', icon: MessageSquare },
+    { href: '/landing-performance', label: 'Landing Pages', icon: LayoutTemplate },
     { href: '/ads', label: 'Ads', icon: Megaphone },
+    { href: '/comments', label: 'Comments', icon: MessageSquare },
     { href: '/hashtags', label: 'Hashtags', icon: Hash },
     { href: '/settings', label: 'Settings', icon: Settings },
   ];
