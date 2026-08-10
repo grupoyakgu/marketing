@@ -93,7 +93,13 @@ export function HeroSlider({ eyebrow, headline, subheadline }: HeroSliderProps) 
               key={isActive ? cycleCount : i}
               src={slide.src}
               alt={slide.alt}
-              className={`absolute inset-0 h-full w-full object-cover ${kbClass}`}
+              // object-top on mobile keeps the top of each photo (where the
+              // brand stamp baked into these shots sits) in frame — the
+              // container's 50vh height on mobile is much shorter relative to
+              // width than the desktop split-screen panel, so a center crop
+              // there was cutting off the top and centering the stamp lower
+              // than intended. Desktop reverts to a center crop.
+              className={`absolute inset-0 h-full w-full object-cover object-top lg:object-center ${kbClass}`}
             />
           </div>
         );
