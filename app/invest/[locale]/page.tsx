@@ -18,7 +18,7 @@ const LOGO_URL =
 const GALLERY_COUNT = 6;
 
 // Images to pin at the front of the gallery (case-insensitive, separator-insensitive name match).
-const GALLERY_PINNED = ['kitchen', 'terrace pool', 'pool from above'];
+const GALLERY_PINNED = ['kitchen', 'terrace pool', 'bedroom'];
 // Facade shots (both spellings — Cloudinary's uploaded filenames for this project use "facada",
 // see HeroSlider's SLIDES, not the English "facade") are capped at one in the gallery rather than
 // excluded outright, since the project photoshoot has more than one and only the duplicates
@@ -69,10 +69,17 @@ export default async function InvestPage({ params }: { params: { locale: string 
     facadeCount += 1;
     return facadeCount <= GALLERY_FACADE_MAX;
   });
-  const pinned = GALLERY_PINNED
-    .map(term => eligible.find(img => normalizeImageName(img.name).includes(normalizeImageName(term))))
-    .filter((img): img is NonNullable<typeof img> => img !== undefined);
-  const pinnedIds = new Set(pinned.map(img => img.id));
+  // Two pin terms can both match the same image (e.g. an image name containing
+  // both "terrace" and "pool"), so dedupe by id — otherwise it gets pinned twice.
+  const pinnedIds = new Set<string>();
+  const pinned: typeof eligible = [];
+  for (const term of GALLERY_PINNED) {
+    const match = eligible.find(img => normalizeImageName(img.name).includes(normalizeImageName(term)));
+    if (match && !pinnedIds.has(match.id)) {
+      pinnedIds.add(match.id);
+      pinned.push(match);
+    }
+  }
   const rest = eligible.filter(img => !pinnedIds.has(img.id));
   const gallery = [...pinned, ...rest].slice(0, GALLERY_COUNT);
 
