@@ -23,7 +23,7 @@ const SLIDES = [
 
 const INTERVAL_MS = 4000;
 
-// The mobile hero panel (h-[50vh], full viewport width) is narrower relative
+// The mobile hero panel (h-[60vh], full viewport width) is narrower relative
 // to its height than these landscape photos are, so object-cover only ever
 // crops the sides there — the full image height always stays visible, which
 // means object-position can't move the brand stamp baked into these shots
@@ -53,7 +53,10 @@ export function HeroSlider({ eyebrow, headline, subheadline }: HeroSliderProps) 
   }, []);
 
   return (
-    <div className="relative h-[50vh] lg:h-auto lg:flex-[3]">
+    // h-[60vh] on mobile gives the text enough room to breathe without
+    // overflowing into the form panel below. min-h-[420px] prevents the
+    // panel from collapsing too much on very short landscape phones.
+    <div className="relative h-[60vh] min-h-[420px] lg:h-auto lg:min-h-0 lg:flex-[3]">
       {/* Ken Burns keyframes — even indices zoom in, odd zoom out */}
       <style>{`
         @keyframes kenburns-in {
@@ -129,8 +132,9 @@ export function HeroSlider({ eyebrow, headline, subheadline }: HeroSliderProps) 
       {/* Overlay */}
       <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/20" />
 
-      {/* Text — anchored top-left, above overlay */}
-      <div className="absolute top-0 left-0 p-8 lg:p-12">
+      {/* Text — anchored to all four edges so it can't overflow the panel.
+          overflow-hidden on the container above acts as the hard clip. */}
+      <div className="absolute inset-0 flex flex-col justify-start overflow-hidden p-8 lg:p-12">
         <p className="mb-3 text-xs font-medium uppercase tracking-widest text-white/60">
           {eyebrow}
         </p>
