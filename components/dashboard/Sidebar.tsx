@@ -44,7 +44,7 @@ export function Sidebar({ buildVersion }: { buildVersion: string }) {
     { href: '/', label: 'Overview', icon: LayoutDashboard },
     { href: '/planner', label: 'Planner', icon: CalendarDays },
     { href: '/performance', label: 'Performance', icon: Trophy },
-    { href: '/landing-performance', label: 'Landing Pages', icon: LayoutTemplate },
+    { href: '/landing-performance', label: 'Leads', icon: LayoutTemplate },
     { href: '/ads', label: 'Ads', icon: Megaphone },
     { href: '/comments', label: 'Comments', icon: MessageSquare },
     { href: '/hashtags', label: 'Hashtags', icon: Hash },
