@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { CheckCommentsCard } from '@/components/dashboard/CheckCommentsCard';
 import { getServerSession } from '@/lib/server-session';
-import { RefreshCw, Users, ArrowRight } from 'lucide-react';
+import { RefreshCw, Users, Timer, ArrowRight } from 'lucide-react';
 
 export default async function SettingsPage() {
   const session = await getServerSession();
@@ -45,6 +45,22 @@ export default async function SettingsPage() {
                   <p className="text-sm font-medium text-neutral-900 dark:text-white">Users</p>
                   <p className="text-xs text-neutral-500 dark:text-neutral-400">
                     Manage who can access this dashboard
+                  </p>
+                </div>
+              </div>
+              <ArrowRight className="h-4 w-4 shrink-0 text-neutral-300" />
+            </Card>
+          </Link>
+        )}
+        {isAdmin && (
+          <Link href="/settings/crons" className="block">
+            <Card className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Timer className="h-4 w-4 text-neutral-400" />
+                <div>
+                  <p className="text-sm font-medium text-neutral-900 dark:text-white">Crons</p>
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                    See every scheduled job and enable or disable them
                   </p>
                 </div>
               </div>

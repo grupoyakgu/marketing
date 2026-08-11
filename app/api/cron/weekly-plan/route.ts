@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { chat } from '@/lib/marketing-agent';
 import { getMostRecentPepeChatId, getNextMonday } from '@/lib/marketing-plan';
+import { isCronEnabled } from '@/lib/cron-settings';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -11,6 +12,9 @@ export async function GET(req: Request) {
     req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`
   ) {
     return new NextResponse('Unauthorized', { status: 401 });
+  }
+  if (!(await isCronEnabled('weekly-plan'))) {
+    return NextResponse.json({ skipped: 'disabled' });
   }
 
   const chatId = await getMostRecentPepeChatId();

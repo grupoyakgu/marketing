@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { processSantiDelegations } from '@/lib/process-santi-delegations';
+import { isCronEnabled } from '@/lib/cron-settings';
 
 export const dynamic = 'force-dynamic';
 // Matches Santi's own direct-message route (/api/telegram-santi) — a
@@ -16,6 +17,9 @@ export async function GET(req: Request) {
     req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`
   ) {
     return new NextResponse('Unauthorized', { status: 401 });
+  }
+  if (!(await isCronEnabled('process-santi-delegations'))) {
+    return NextResponse.json({ skipped: 'disabled' });
   }
 
   const result = await processSantiDelegations();
