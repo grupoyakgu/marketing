@@ -265,13 +265,39 @@ export function PostEditor({
         )}
 
         {imageUrls.length === 1 ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={imageUrls[0]} alt="Selected" className="mb-4 h-40 w-full rounded-xl object-cover" />
+          <div className="relative mb-4">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={imageUrls[0]} alt="Selected" className="h-40 w-full rounded-xl object-cover" />
+            {editable && (
+              <button
+                type="button"
+                onClick={() => toggleImage(imageUrls[0])}
+                disabled={savingImage}
+                title="Remove image"
+                className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-white transition hover:bg-red-700 disabled:opacity-60"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         ) : imageUrls.length > 1 ? (
           <div className="mb-4 grid grid-cols-4 gap-1.5">
             {imageUrls.map(url => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img key={url} src={url} alt="Selected" className="aspect-square rounded-lg object-cover" />
+              <div key={url} className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={url} alt="Selected" className="aspect-square w-full rounded-lg object-cover" />
+                {editable && (
+                  <button
+                    type="button"
+                    onClick={() => toggleImage(url)}
+                    disabled={savingImage}
+                    title="Remove image"
+                    className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-white transition hover:bg-red-700 disabled:opacity-60"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
             ))}
           </div>
         ) : (
