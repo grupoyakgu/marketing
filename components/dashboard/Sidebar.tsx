@@ -15,6 +15,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   LayoutTemplate,
+  DollarSign,
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
@@ -50,6 +51,7 @@ export function Sidebar({ buildVersion }: { buildVersion: string }) {
     { href: '/comments', label: 'Comments', icon: MessageSquare },
     { href: '/interactions', label: 'Interactions', icon: MessagesSquare },
     { href: '/hashtags', label: 'Hashtags', icon: Hash },
+    { href: '/costs', label: 'Costs', icon: DollarSign },
     { href: '/settings', label: 'Settings', icon: Settings },
   ];
 

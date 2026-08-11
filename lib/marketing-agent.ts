@@ -58,6 +58,7 @@ import {
   looksLikePostUrl,
   type InteractionPlatform,
 } from '@/lib/interactions';
+import { recordUsage } from '@/lib/token-usage';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BOT_NAME = 'pepe';
@@ -803,6 +804,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
       'anthropic messages.create'
     );
     console.log(`[marketing-agent] anthropic turn (${Date.now() - turnStartedAt}ms), stop_reason: ${response.stop_reason}`);
+    await recordUsage('pepe', response.model, response.usage, chatId);
 
     // Gate on the presence of a tool_use block, not on stop_reason === 'tool_use'
     // — a turn that runs out of max_tokens mid-generation reports stop_reason

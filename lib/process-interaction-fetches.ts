@@ -4,7 +4,7 @@ import {
   markFetchRequestDone,
   markFetchRequestFailed,
 } from './interaction-fetch-queue';
-import { listTopics, listRecentUrls, countPosts, type InteractionPlatform } from './interactions';
+import { listTopics, listRecentUrls, countPosts, getDailyCount, type InteractionPlatform } from './interactions';
 import { getMostRecentPepeChatId } from './marketing-plan';
 import { chat } from './marketing-agent';
 import { TelegramClient } from './telegram';
@@ -55,6 +55,18 @@ export async function processInteractionFetches(): Promise<{ processed: number }
     if (!request) continue;
     processed++;
 
+    // The request may have been queued before another request (or another
+    // delete's immediate backfill) already filled the platform's last open
+    // slot — over-queueing is expected under races, see queueBackfillIfNeeded.
+    // Checking the target here before spending an LLM turn + browse call
+    // avoids both the wasted work and, more importantly, treats "already at
+    // target" as the no-op it is rather than a search failure.
+    const [before, target] = await Promise.all([countPosts(request.platform), getDailyCount(request.platform)]);
+    if (before >= target) {
+      await markFetchRequestDone(request.id);
+      continue;
+    }
+
     const chatId = await getMostRecentPepeChatId();
     if (!chatId) {
       await markFetchRequestFailed(request.id, 'No Pepe chat history yet to run this through.');
@@ -65,15 +77,21 @@ export async function processInteractionFetches(): Promise<{ processed: number }
       // chat() completing without throwing only means Pepe's turn finished
       // cleanly — it says nothing about whether he actually called
       // add_interaction_post (e.g. every browse attempt could have failed
-      // and he just explained that instead). Comparing the post count
-      // before/after is the only reliable signal that this request actually
-      // produced something, so a silent no-op doesn't get recorded as done.
-      const before = await countPosts(request.platform);
+      // and he just explained that instead, or add_interaction_post_capped
+      // rejected it because another request filled the slot first). Comparing
+      // the post count before/after is the only reliable signal that this
+      // request actually produced something, so a silent no-op doesn't get
+      // recorded as done.
       const instructions = await buildInstructions(request.platform);
       const reply = await chat(chatId, instructions);
       const after = await countPosts(request.platform);
 
       if (after > before) {
+        await markFetchRequestDone(request.id);
+      } else if (after >= (await getDailyCount(request.platform))) {
+        // Cap was reached by something else while this request was in
+        // flight (e.g. an overlapping request for the same platform) — not
+        // a genuine discovery failure, so no warning.
         await markFetchRequestDone(request.id);
       } else {
         await markFetchRequestFailed(request.id, reply);

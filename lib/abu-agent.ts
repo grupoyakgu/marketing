@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { loadHistory, saveMessage, clearHistory as clearDb } from '@/lib/chat-history';
+import { recordUsage } from '@/lib/token-usage';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BOT_NAME = 'abu';
@@ -41,6 +42,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
     system: SYSTEM_PROMPT,
     messages: history,
   });
+  await recordUsage('abu', response.model, response.usage, chatId);
 
   const block = response.content[0];
   if (block.type !== 'text') throw new Error('Unexpected response type');
