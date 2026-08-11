@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { recordUsage } from '@/lib/token-usage';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -22,6 +23,7 @@ export async function extractLeadsFromHtml(html: string, source: string): Promis
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: `Source: ${source}\n\n${html.slice(0, 40000)}` }],
   });
+  await recordUsage('leads', response.model, response.usage);
 
   const block = response.content[0];
   if (block.type !== 'text') return [];

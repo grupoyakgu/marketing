@@ -4,6 +4,7 @@ import { readFile, listDirectory, searchCode } from '@/lib/github-dev';
 import { screenshotPage, screenshotUrl } from '@/lib/browser';
 import { createDelegation } from '@/lib/santi-delegations';
 import { createConsultation } from '@/lib/bot-consultations';
+import { recordUsage } from '@/lib/token-usage';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BOT_NAME = 'angeles';
@@ -253,6 +254,7 @@ export async function chat(chatId: number, userMessage: string, senderId?: numbe
       'anthropic messages.create'
     );
     console.log(`[product-agent] anthropic turn (${Date.now() - turnStartedAt}ms), stop_reason: ${response.stop_reason}`);
+    await recordUsage('angeles', response.model, response.usage, chatId);
 
     // Gate on the presence of a tool_use block, not on stop_reason === 'tool_use'
     // — a turn that runs out of max_tokens mid-generation reports stop_reason
