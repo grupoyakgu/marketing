@@ -29,6 +29,7 @@
 - /lib/meta-poster.ts               → Facebook/Instagram posting
 - /lib/interactions.ts              → "Interactions" feature — topics/settings/posts CRUD, per-platform daily-target backfill trigger (app/(dashboard)/interactions)
 - /lib/interaction-fetch-queue.ts + /lib/process-interaction-fetches.ts → queue of "find one more post" requests Pepe fulfills via browse_social_search, drained by /api/cron/process-interaction-fetches every 5 minutes
+- /lib/social-login.ts              → logs a Puppeteer page into LinkedIn/Instagram/Facebook (SOCIAL_LOGIN_USERNAME/PASSWORD) and persists the session's cookies in social_login_sessions, reusing them across calls instead of logging in fresh each time — used by browse_social_search, since these platforms show a login wall to anonymous sessions
 - /supabase/migrations/             → SQL migrations
 
 ## Environment Variables
@@ -59,6 +60,8 @@
 - BROWSERLESS_API_KEY       # 2nd remote-browser provider — connectRemoteBrowser() in lib/browser.ts tries Browserbase first, falls back through Browserless then Steel on failure (e.g. quota exhausted); optional, each unconfigured provider is just skipped
 - BROWSERLESS_WS_URL        # optional override if the account's Browserless endpoint isn't wss://chrome.browserless.io (e.g. a region-specific or dedicated cluster)
 - STEEL_API_KEY             # 3rd remote-browser provider (steel.dev), same fallback chain as above — optional
+- SOCIAL_LOGIN_USERNAME     # shared login for the LinkedIn/Instagram/Facebook accounts browse_social_search authenticates as (see lib/social-login.ts) — same credentials across all three
+- SOCIAL_LOGIN_PASSWORD     # password for that same shared login
 - SANTI_VERCEL_TOKEN        # Vercel Access Token scoped to this team, used by list_deployments/get_deployment_logs
 
 ## Telegram Commands

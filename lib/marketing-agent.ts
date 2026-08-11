@@ -664,7 +664,7 @@ const tools: Anthropic.Tool[] = [
   },
   {
     name: 'browse_social_search',
-    description: 'Like browse_url, but for finding commentable posts (the Interactions feature): screenshots a search/hashtag/topic results page on LinkedIn, Instagram, or Facebook, AND returns the actual post permalink links found on the page — a screenshot alone never exposes a post\'s real link, only its visible caption/author. Use this instead of browse_url specifically when fulfilling an Interactions discovery request.',
+    description: 'Like browse_url, but for finding commentable posts (the Interactions feature): browses a search/hashtag/topic results page on LinkedIn, Instagram, or Facebook using a logged-in session (these platforms show a login wall to anonymous visitors), and returns both a screenshot and the actual post permalink links found on the page — a screenshot alone never exposes a post\'s real link, only its visible caption/author. Use this instead of browse_url specifically when fulfilling an Interactions discovery request.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -1275,7 +1275,7 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
           } else {
             const input = block.input as { url: string; platform: InteractionPlatform };
             try {
-              const { screenshot, links } = await screenshotUrlWithLinks(input.url, false);
+              const { screenshot, links } = await screenshotUrlWithLinks(input.url, false, input.platform);
               const candidates = Array.from(new Set(
                 links.filter(l => looksLikePostUrl(input.platform, l.href)).map(l => l.href)
               ));
