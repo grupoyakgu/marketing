@@ -52,7 +52,7 @@ import {
   listTopics as listInteractionTopics,
   addTopic as addInteractionTopicRow,
   removeTopic as removeInteractionTopicRow,
-  getDailyCount as getInteractionDailyCount,
+  getDailyCounts as getInteractionDailyCounts,
   setDailyCount as setInteractionDailyCount,
   addPost as addInteractionPostRow,
   looksLikePostUrl,
@@ -699,13 +699,14 @@ const tools: Anthropic.Tool[] = [
   },
   {
     name: 'set_interaction_daily_count',
-    description: 'Changes how many posts per platform the Interactions page keeps active at once.',
+    description: 'Changes how many posts the Interactions page keeps active at once for one platform. Each platform has its own target — this only changes the one specified.',
     input_schema: {
       type: 'object' as const,
       properties: {
-        count: { type: 'number', description: 'New daily target per platform, e.g. 3.' },
+        platform: { type: 'string', enum: ['linkedin', 'facebook', 'instagram'] },
+        count: { type: 'number', description: 'New daily target for that platform, e.g. 3.' },
       },
-      required: ['count'],
+      required: ['platform', 'count'],
     },
   },
   {
@@ -1314,20 +1315,21 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
 
         if (block.name === 'get_interaction_settings') {
           try {
-            const [dailyCount, topics] = await Promise.all([getInteractionDailyCount(), listInteractionTopics()]);
+            const [dailyCounts, topics] = await Promise.all([getInteractionDailyCounts(), listInteractionTopics()]);
+            const countsText = `Daily targets — linkedin: ${dailyCounts.linkedin}, facebook: ${dailyCounts.facebook}, instagram: ${dailyCounts.instagram}.`;
             resultContent = topics.length > 0
-              ? `Daily target: ${dailyCount} posts per platform.\n\nTopics:\n${topics.map(t => `- ${t.topic} (added by ${t.added_by}, id: ${t.id})`).join('\n')}`
-              : `Daily target: ${dailyCount} posts per platform.\n\nNo topics configured yet.`;
+              ? `${countsText}\n\nTopics:\n${topics.map(t => `- ${t.topic} (added by ${t.added_by}, id: ${t.id})`).join('\n')}`
+              : `${countsText}\n\nNo topics configured yet.`;
           } catch (err) {
             resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
           }
         }
 
         if (block.name === 'set_interaction_daily_count') {
-          const input = block.input as { count: number };
+          const input = block.input as { platform: InteractionPlatform; count: number };
           try {
-            const count = await setInteractionDailyCount(input.count);
-            resultContent = `Daily target is now ${count} posts per platform.`;
+            const count = await setInteractionDailyCount(input.platform, input.count);
+            resultContent = `Daily target for ${input.platform} is now ${count} posts.`;
           } catch (err) {
             resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
           }

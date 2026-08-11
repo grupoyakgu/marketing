@@ -6,6 +6,9 @@ import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { PlatformBadge } from '@/components/ui/PlatformBadge';
+
+type Platform = 'linkedin' | 'facebook' | 'instagram';
 
 interface Topic {
   id: string;
@@ -14,13 +17,19 @@ interface Topic {
   created_at: string;
 }
 
+const PLATFORMS: { value: Platform; label: string }[] = [
+  { value: 'linkedin', label: 'LinkedIn' },
+  { value: 'facebook', label: 'Facebook' },
+  { value: 'instagram', label: 'Instagram' },
+];
+
 export default function InteractionsSettingsPage() {
-  const [dailyCount, setDailyCount] = useState<number | null>(null);
-  const [countInput, setCountInput] = useState('');
+  const [dailyCounts, setDailyCounts] = useState<Record<Platform, number> | null>(null);
+  const [countInputs, setCountInputs] = useState<Record<Platform, string>>({ linkedin: '', facebook: '', instagram: '' });
   const [topics, setTopics] = useState<Topic[] | null>(null);
   const [newTopic, setNewTopic] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [savingCount, setSavingCount] = useState(false);
+  const [savingPlatform, setSavingPlatform] = useState<Platform | null>(null);
   const [addingTopic, setAddingTopic] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
 
@@ -30,8 +39,12 @@ export default function InteractionsSettingsPage() {
       const res = await fetch('/api/dashboard/interactions/settings');
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? 'Failed to load settings');
-      setDailyCount(body.dailyCount);
-      setCountInput(String(body.dailyCount));
+      setDailyCounts(body.dailyCounts);
+      setCountInputs({
+        linkedin: String(body.dailyCounts.linkedin),
+        facebook: String(body.dailyCounts.facebook),
+        instagram: String(body.dailyCounts.instagram),
+      });
       setTopics(body.topics);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load settings');
@@ -40,27 +53,27 @@ export default function InteractionsSettingsPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  async function saveDailyCount() {
-    const count = Number(countInput);
+  async function saveDailyCount(platform: Platform) {
+    const count = Number(countInputs[platform]);
     if (!Number.isInteger(count) || count < 1 || count > 10) {
       setError('Daily count must be a whole number between 1 and 10.');
       return;
     }
-    setSavingCount(true);
+    setSavingPlatform(platform);
     setError(null);
     try {
       const res = await fetch('/api/dashboard/interactions/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dailyCount: count }),
+        body: JSON.stringify({ platform, dailyCount: count }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? 'Failed to update daily count');
-      setDailyCount(body.dailyCount);
+      setDailyCounts(prev => prev && { ...prev, [platform]: body.dailyCount });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update daily count');
     } finally {
-      setSavingCount(false);
+      setSavingPlatform(null);
     }
   }
 
@@ -122,26 +135,38 @@ export default function InteractionsSettingsPage() {
       <Card className="space-y-3">
         <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">Daily count per platform</h2>
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          How many active posts LinkedIn, Facebook, and Instagram each keep on the Interactions page.
-          Removing a post below this number gets a replacement found automatically.
+          How many active posts each platform keeps on the Interactions page. Removing a post below
+          this number gets a replacement found automatically.
         </p>
-        <div className="flex items-center gap-2">
-          <input
-            type="number"
-            min={1}
-            max={10}
-            value={countInput}
-            onChange={e => setCountInput(e.target.value)}
-            disabled={dailyCount === null || savingCount}
-            className="w-24 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm outline-none focus:border-neutral-400 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-800 dark:text-white"
-          />
-          <Button
-            variant="secondary"
-            onClick={saveDailyCount}
-            disabled={dailyCount === null || savingCount || countInput === String(dailyCount)}
-          >
-            {savingCount ? 'Saving…' : 'Save'}
-          </Button>
+        <div className="space-y-2">
+          {PLATFORMS.map(({ value, label }) => (
+            <div key={value} className="flex items-center gap-3">
+              <div className="flex w-28 shrink-0 items-center gap-2">
+                <PlatformBadge platform={value} size="md" />
+                <span className="text-sm text-neutral-900 dark:text-white">{label}</span>
+              </div>
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={countInputs[value]}
+                onChange={e => setCountInputs(prev => ({ ...prev, [value]: e.target.value }))}
+                disabled={dailyCounts === null || savingPlatform === value}
+                className="w-20 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm outline-none focus:border-neutral-400 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-800 dark:text-white"
+              />
+              <Button
+                variant="secondary"
+                onClick={() => saveDailyCount(value)}
+                disabled={
+                  dailyCounts === null ||
+                  savingPlatform === value ||
+                  countInputs[value] === String(dailyCounts?.[value])
+                }
+              >
+                {savingPlatform === value ? 'Saving…' : 'Save'}
+              </Button>
+            </div>
+          ))}
         </div>
       </Card>
 

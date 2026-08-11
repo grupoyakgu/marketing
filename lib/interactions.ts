@@ -68,22 +68,36 @@ export async function removeTopic(id: string): Promise<void> {
 }
 
 // ─── Settings ───────────────────────────────────────────────────────────────
+//
+// Per platform, not a single shared count — discovery success rate differs a
+// lot by platform (login walls, how much content is actually reachable), so
+// the target is tuned per platform rather than one number for all three.
 
-export async function getDailyCount(): Promise<number> {
+export async function getDailyCount(platform: InteractionPlatform): Promise<number> {
   const { data, error } = await supabase
-    .from('interaction_settings')
+    .from('interaction_platform_settings')
     .select('daily_count')
-    .eq('id', 'singleton')
+    .eq('platform', platform)
     .single();
   if (error) throw new Error(error.message);
   return data.daily_count;
 }
 
-export async function setDailyCount(count: number): Promise<number> {
+export async function getDailyCounts(): Promise<Record<InteractionPlatform, number>> {
   const { data, error } = await supabase
-    .from('interaction_settings')
+    .from('interaction_platform_settings')
+    .select('platform, daily_count');
+  if (error) throw new Error(error.message);
+  const result = {} as Record<InteractionPlatform, number>;
+  for (const row of data ?? []) result[row.platform as InteractionPlatform] = row.daily_count;
+  return result;
+}
+
+export async function setDailyCount(platform: InteractionPlatform, count: number): Promise<number> {
+  const { data, error } = await supabase
+    .from('interaction_platform_settings')
     .update({ daily_count: count, updated_at: new Date().toISOString() })
-    .eq('id', 'singleton')
+    .eq('platform', platform)
     .select('daily_count')
     .single();
   if (error) throw new Error(error.message);
@@ -193,7 +207,7 @@ export async function countPosts(platform: InteractionPlatform): Promise<number>
  * earlier requests finish never over-queues. */
 export async function queueBackfillIfNeeded(platform: InteractionPlatform): Promise<number> {
   const [target, existing, open] = await Promise.all([
-    getDailyCount(),
+    getDailyCount(platform),
     countPosts(platform),
     countOpenFetchRequests(platform),
   ]);
