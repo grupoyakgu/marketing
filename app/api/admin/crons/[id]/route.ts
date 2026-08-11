@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { setCronEnabled } from '@/lib/cron-settings';
 
 // middleware.ts already restricts /api/admin/* to authenticated admins.
+export const dynamic = 'force-dynamic';
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   const body = await req.json();
