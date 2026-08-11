@@ -143,21 +143,26 @@ export interface NewInteractionPost {
   shares?: number | null;
 }
 
+/** The only insert path into interaction_posts. Goes through the
+ * add_interaction_post_capped DB function rather than a plain insert so the
+ * platform's daily_count is a hard ceiling even under races — e.g. two
+ * queueBackfillIfNeeded calls (from a delete and an overlapping daily-refresh
+ * cron) each queueing a fetch request for what looks like the same open
+ * slot. Throws with a message starting "DAILY_LIMIT_REACHED" when the
+ * platform is already at (or, from such a race, over) its target; callers
+ * that fulfill queued fetch requests (see process-interaction-fetches.ts)
+ * treat that as an expected no-op rather than a real failure. */
 export async function addPost(fields: NewInteractionPost): Promise<InteractionPost> {
-  const { data, error } = await supabase
-    .from('interaction_posts')
-    .insert({
-      platform: fields.platform,
-      url: fields.url,
-      author: fields.author ?? null,
-      content_preview: fields.content_preview ?? null,
-      topic: fields.topic ?? null,
-      likes: fields.likes ?? null,
-      comments: fields.comments ?? null,
-      shares: fields.shares ?? null,
-    })
-    .select()
-    .single();
+  const { data, error } = await supabase.rpc('add_interaction_post_capped', {
+    p_platform: fields.platform,
+    p_url: fields.url,
+    p_author: fields.author ?? null,
+    p_content_preview: fields.content_preview ?? null,
+    p_topic: fields.topic ?? null,
+    p_likes: fields.likes ?? null,
+    p_comments: fields.comments ?? null,
+    p_shares: fields.shares ?? null,
+  });
   if (error) throw new Error(error.message);
   return data;
 }
