@@ -1,4 +1,5 @@
 import puppeteer, { type Browser, type Page } from 'puppeteer-core';
+import { getAuthenticatedPage, type SocialPlatform } from './social-login';
 
 // Four straight attempts at running Chromium *inside* the Vercel function
 // itself (bundled via @sparticuz/chromium, downloaded via
@@ -277,13 +278,22 @@ export interface PageLink {
 // discovering commentable posts (the Interactions feature) needs the real
 // anchor hrefs alongside the image. Capped at 200 raw links (before the
 // caller's own pattern filtering) as a sanity limit against link-farm pages.
-export async function screenshotUrlWithLinks(url: string, fullPage: boolean): Promise<{ screenshot: Buffer; links: PageLink[] }> {
+export async function screenshotUrlWithLinks(
+  url: string,
+  fullPage: boolean,
+  socialPlatform?: SocialPlatform
+): Promise<{ screenshot: Buffer; links: PageLink[] }> {
   const parsed = assertBrowsableUrl(url);
   const browser = await connectRemoteBrowser();
 
   try {
-    const page = await browser.newPage();
-    await page.setViewport({ width: 1440, height: 900 });
+    // LinkedIn/Instagram/Facebook show a login wall to an anonymous browser
+    // session, so search results on those platforms need an authenticated
+    // page — see lib/social-login.ts for the login-and-reuse-session logic.
+    const page = socialPlatform
+      ? await getAuthenticatedPage(browser, socialPlatform)
+      : await browser.newPage();
+    if (!socialPlatform) await page.setViewport({ width: 1440, height: 900 });
     await page.goto(parsed.toString(), { waitUntil: 'networkidle0', timeout: 30_000 });
     const [screenshot, links] = await Promise.all([
       capturePageScreenshot(page, fullPage),

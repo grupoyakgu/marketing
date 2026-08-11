@@ -42,8 +42,8 @@ export default function InteractionsSettingsPage() {
 
   async function saveDailyCount() {
     const count = Number(countInput);
-    if (!Number.isInteger(count) || count < 1 || count > 20) {
-      setError('Daily count must be a whole number between 1 and 20.');
+    if (!Number.isInteger(count) || count < 1 || count > 10) {
+      setError('Daily count must be a whole number between 1 and 10.');
       return;
     }
     setSavingCount(true);
@@ -129,7 +129,7 @@ export default function InteractionsSettingsPage() {
           <input
             type="number"
             min={1}
-            max={20}
+            max={10}
             value={countInput}
             onChange={e => setCountInput(e.target.value)}
             disabled={dailyCount === null || savingCount}
