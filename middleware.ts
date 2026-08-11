@@ -10,6 +10,8 @@ export const config = {
     '/settings/:path*',
     '/planner/:path*',
     '/comments/:path*',
+    '/interactions',
+    '/interactions/:path*',
     '/ads/:path*',
     '/hashtags/:path*',
     '/landing-performance/:path*',

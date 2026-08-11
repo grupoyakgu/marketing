@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   CalendarDays,
   MessageSquare,
+  MessagesSquare,
   Megaphone,
   Hash,
   Trophy,
@@ -47,6 +48,7 @@ export function Sidebar({ buildVersion }: { buildVersion: string }) {
     { href: '/landing-performance', label: 'Leads', icon: LayoutTemplate },
     { href: '/ads', label: 'Ads', icon: Megaphone },
     { href: '/comments', label: 'Comments', icon: MessageSquare },
+    { href: '/interactions', label: 'Interactions', icon: MessagesSquare },
     { href: '/hashtags', label: 'Hashtags', icon: Hash },
     { href: '/settings', label: 'Settings', icon: Settings },
   ];
@@ -69,10 +71,14 @@ export function Sidebar({ buildVersion }: { buildVersion: string }) {
 
       <nav className="flex flex-col gap-1">
         {links.map(({ href, label, icon: Icon }) => {
-          // Settings owns every page nested under /settings that doesn't have
-          // its own sidebar entry (Data Sync, Users), so it stays highlighted
-          // there too instead of showing no active item at all.
-          const active = href === '/settings' ? pathname.startsWith('/settings') : pathname === href;
+          // Settings and Interactions each own pages nested under them that
+          // don't have their own sidebar entry (Data Sync/Users; Interactions
+          // settings), so they stay highlighted there too instead of showing
+          // no active item at all.
+          const active =
+            href === '/settings' || href === '/interactions'
+              ? pathname === href || pathname.startsWith(`${href}/`)
+              : pathname === href;
           return (
             <Link
               key={href}
