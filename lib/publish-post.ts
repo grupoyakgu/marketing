@@ -13,11 +13,24 @@ export interface PublishResult {
  * content/image/platform is already saved on it — shared by the hourly
  * cron, the dashboard's manual "Retry" action, and Pepe's retry_post tool,
  * so all three publish exactly the same way instead of duplicating this
- * per-platform dispatch three times. */
+ * per-platform dispatch three times.
+ *
+ * Only 'approved' or 'failed' posts can go out. The hourly cron only ever
+ * calls this with already-approved posts, and the dashboard's Retry button
+ * only renders for 'failed' ones, but neither of those is enforcement --
+ * the dashboard route and Pepe's retry_post tool both call this directly
+ * with a bare post_id, so a draft could otherwise be published without
+ * ever being approved. */
 export async function publishPost(postId: string): Promise<PublishResult> {
   const post = await getPostById(postId);
   if (!post) return { success: false, error: 'Post not found.' };
   if (post.status === 'posted') return { success: false, error: 'This post has already been posted.' };
+  if (post.status !== 'approved' && post.status !== 'failed') {
+    return {
+      success: false,
+      error: `This post is still '${post.status}' -- only approved or previously-failed posts can be published. Approve it first.`,
+    };
+  }
 
   let imageUrls = (post.image_urls ?? []).filter(Boolean);
   if (imageUrls.length === 0 && post.image_url) imageUrls = [post.image_url];

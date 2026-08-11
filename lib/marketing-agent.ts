@@ -464,7 +464,7 @@ const tools: Anthropic.Tool[] = [
   {
     name: 'retry_post',
     description:
-      'Publishes an existing marketing plan post right now, using whatever content, image, and platform are already saved on it — use this when a scheduled post failed to publish and the user wants it retried or posted immediately, without redrafting it. Refuses if the post has already been posted.',
+      'Publishes an existing marketing plan post right now, using whatever content, image, and platform are already saved on it — use this when a previously-approved post failed to publish and the user wants it retried, or when an already-approved post should go out immediately instead of waiting for its scheduled time. Only works on posts with status approved or failed. Refuses a post that is still a draft (approve it first with approve_posts) and refuses one that has already been posted.',
     input_schema: {
       type: 'object' as const,
       properties: { post_id: { type: 'string' } },
