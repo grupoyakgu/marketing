@@ -111,12 +111,9 @@ async function createBrowserbaseSession(): Promise<string> {
 
 // Browserless's CDP endpoint takes the token directly in the WebSocket URL —
 // no separate "create a session" call like Browserbase's, so there's nothing
-// to fail before puppeteer.connect() itself. Confirmed live: Browserbase's
-// free plan ran out of browser minutes (402 on every session create), so
-// this is a second provider to fall back to rather than a replacement — one
-// exhausting its quota doesn't take browsing down entirely. Override
-// BROWSERLESS_WS_URL if the account's endpoint differs (e.g. a
-// region-specific or dedicated Browserless cluster).
+// to fail before puppeteer.connect() itself. Override BROWSERLESS_WS_URL if
+// the account's endpoint differs (e.g. a region-specific or dedicated
+// Browserless cluster).
 function browserlessConnectUrl(): string {
   const apiKey = process.env.BROWSERLESS_API_KEY;
   if (!apiKey) throw new Error('BROWSERLESS_API_KEY not configured');
@@ -124,19 +121,87 @@ function browserlessConnectUrl(): string {
   return `${base}?token=${apiKey}`;
 }
 
-/** Connects to a remote browser, trying Browserbase first and falling back
- * to Browserless if that fails for any reason (exhausted quota, an outage,
- * misconfiguration) — as long as BROWSERLESS_API_KEY is set. With no
- * fallback configured, the original Browserbase error is what surfaces. */
-async function connectRemoteBrowser(): Promise<Browser> {
-  try {
-    const connectUrl = await createBrowserbaseSession();
-    return await puppeteer.connect({ browserWSEndpoint: connectUrl });
-  } catch (browserbaseErr) {
-    if (!process.env.BROWSERLESS_API_KEY) throw browserbaseErr;
-    console.error('[browser] Browserbase failed, falling back to Browserless:', browserbaseErr);
-    return await puppeteer.connect({ browserWSEndpoint: browserlessConnectUrl() });
+const STEEL_API = 'https://api.steel.dev/v1';
+
+/** Starts a remote browser session on Steel.dev and returns its CDP
+ * WebSocket URL — same two-step shape as Browserbase (create a session via
+ * REST, then connect puppeteer-core to the URL it returns). NOTE: the
+ * `websocketUrl` response field below is Steel's documented CDP-connect
+ * field as of this writing but is unverified against a live call — this
+ * sandbox's network egress is restricted and can't reach steel.dev to
+ * confirm. If Steel changes their response shape, this is the line to fix. */
+async function createSteelSession(): Promise<string> {
+  const apiKey = process.env.STEEL_API_KEY;
+  if (!apiKey) throw new Error('STEEL_API_KEY not configured');
+
+  const res = await fetch(`${STEEL_API}/sessions`, {
+    method: 'POST',
+    headers: { 'Steel-Api-Key': apiKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Steel session create failed (${res.status}): ${body}`);
   }
+  const session = await res.json();
+  return session.websocketUrl as string;
+}
+
+interface BrowserProvider {
+  name: string;
+  configured: () => boolean;
+  connect: () => Promise<Browser>;
+}
+
+// Tried in this order — each entry only runs if its own env vars are set, so
+// an unconfigured provider is silently skipped rather than counted as a
+// failure. Confirmed live: Browserbase's free plan ran out of browser
+// minutes (402 on every session create), which is exactly the scenario this
+// exists for — one provider exhausting its quota no longer takes browsing
+// down entirely as long as at least one more is configured. Add a provider
+// here (session-creator + configured() check) to extend the chain further.
+const BROWSER_PROVIDERS: BrowserProvider[] = [
+  {
+    name: 'Browserbase',
+    configured: () => Boolean(process.env.BROWSERBASE_API_KEY && process.env.BROWSERBASE_PROJECT_ID),
+    connect: async () => puppeteer.connect({ browserWSEndpoint: await createBrowserbaseSession() }),
+  },
+  {
+    name: 'Browserless',
+    configured: () => Boolean(process.env.BROWSERLESS_API_KEY),
+    connect: async () => puppeteer.connect({ browserWSEndpoint: browserlessConnectUrl() }),
+  },
+  {
+    name: 'Steel',
+    configured: () => Boolean(process.env.STEEL_API_KEY),
+    connect: async () => puppeteer.connect({ browserWSEndpoint: await createSteelSession() }),
+  },
+];
+
+/** Connects to a remote browser, trying each configured provider above in
+ * order and falling through to the next on any failure (exhausted quota, an
+ * outage, misconfiguration). Throws if none are configured, or the last
+ * provider's error if every configured one failed. */
+async function connectRemoteBrowser(): Promise<Browser> {
+  const providers = BROWSER_PROVIDERS.filter(p => p.configured());
+  if (providers.length === 0) {
+    throw new Error(
+      'No remote browser provider configured — set at least one of ' +
+      'BROWSERBASE_API_KEY/BROWSERBASE_PROJECT_ID, BROWSERLESS_API_KEY, or STEEL_API_KEY.'
+    );
+  }
+
+  let lastError: unknown;
+  for (const [i, provider] of providers.entries()) {
+    try {
+      return await provider.connect();
+    } catch (err) {
+      lastError = err;
+      const next = providers[i + 1];
+      console.error(`[browser] ${provider.name} failed${next ? `, falling back to ${next.name}` : ''}:`, err);
+    }
+  }
+  throw lastError;
 }
 
 /** Screenshots a live dashboard page as Angeles's read-only account, so she
