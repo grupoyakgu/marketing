@@ -37,10 +37,14 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
   await saveMessage(chatId, BOT_NAME, 'user', userMessage);
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: 'claude-sonnet-5',
     max_tokens: 1024,
     system: SYSTEM_PROMPT,
     messages: history,
+    // Auto-caches the last cacheable block (system prompt + prior turns of
+    // `history`), so a growing conversation only pays full price for what
+    // was appended since the last call.
+    cache_control: { type: 'ephemeral' },
   });
   await recordUsage('abu', response.model, response.usage, chatId);
 

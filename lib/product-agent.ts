@@ -242,11 +242,17 @@ export async function chat(chatId: number, userMessage: string, senderId?: numbe
     const response = await withTimeout(
       client.messages.create(
         {
-          model: 'claude-sonnet-4-6',
+          model: 'claude-sonnet-5',
           max_tokens: 8192,
           system: buildSystemPrompt(),
           tools,
           messages: history,
+          // Auto-caches the last cacheable block of the rendered prompt --
+          // system prompt, tools, and all prior turns of `history` -- so
+          // each new turn only pays full price for what it appended since
+          // the last call, instead of reprocessing the whole growing
+          // conversation from scratch every message.
+          cache_control: { type: 'ephemeral' },
         },
         { timeout: 200_000, maxRetries: 1 }
       ),

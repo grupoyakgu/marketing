@@ -4,7 +4,7 @@
 - Next.js 14 (App Router)
 - Vercel serverless functions
 - Telegram Bot API (webhook mode)
-- Anthropic SDK (claude-sonnet-4-6)
+- Anthropic SDK (claude-sonnet-5 for Pepe/Santi/Angeles/Abu, claude-haiku-4-5 for lead extraction)
 - Supabase (job queue)
 - LinkedIn UGC Posts API
 
