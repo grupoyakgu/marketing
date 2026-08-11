@@ -46,8 +46,18 @@ import { createVideo, listAvatars, listVoices } from '@/lib/heygen';
 import { createVideoJob } from '@/lib/video-jobs';
 import { getLandingCopyOrThrow, updateLandingCopy, type EditableLandingCopy } from '@/lib/landing-copy';
 import type { Locale } from '@/app/invest/[locale]/copy';
-import { screenshotUrl } from '@/lib/browser';
+import { screenshotUrl, screenshotUrlWithLinks } from '@/lib/browser';
 import { createConsultation } from '@/lib/bot-consultations';
+import {
+  listTopics as listInteractionTopics,
+  addTopic as addInteractionTopicRow,
+  removeTopic as removeInteractionTopicRow,
+  getDailyCount as getInteractionDailyCount,
+  setDailyCount as setInteractionDailyCount,
+  addPost as addInteractionPostRow,
+  looksLikePostUrl,
+  type InteractionPlatform,
+} from '@/lib/interactions';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BOT_NAME = 'pepe';
@@ -653,6 +663,74 @@ const tools: Anthropic.Tool[] = [
     },
   },
   {
+    name: 'browse_social_search',
+    description: 'Like browse_url, but for finding commentable posts (the Interactions feature): screenshots a search/hashtag/topic results page on LinkedIn, Instagram, or Facebook, AND returns the actual post permalink links found on the page — a screenshot alone never exposes a post\'s real link, only its visible caption/author. Use this instead of browse_url specifically when fulfilling an Interactions discovery request.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        url: { type: 'string', description: 'Full URL of a search/hashtag/topic results page on linkedin.com, instagram.com, or facebook.com.' },
+        platform: { type: 'string', enum: ['linkedin', 'facebook', 'instagram'], description: 'Which platform this page is on — used to filter the extracted links down to ones that actually look like post permalinks.' },
+      },
+      required: ['url', 'platform'],
+    },
+  },
+  {
+    name: 'add_interaction_post',
+    description: 'Adds a discovered post to the Interactions list (the dashboard page tracking outside posts worth commenting on). Only call this with a real post permalink you found via browse_social_search\'s extracted links — never a profile URL, a hashtag page URL, or a guessed/constructed link.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        platform: { type: 'string', enum: ['linkedin', 'facebook', 'instagram'] },
+        url: { type: 'string', description: 'The post\'s actual permalink, as found in browse_social_search\'s extracted links list.' },
+        topic: { type: 'string', description: 'Which of the configured interaction topics this post relates to.' },
+        author: { type: 'string', description: 'The post author\'s visible name, if shown.' },
+        content_preview: { type: 'string', description: 'A short excerpt of the post\'s visible text/caption.' },
+        likes: { type: 'number', description: 'Visible like count, if shown on the page.' },
+        comments: { type: 'number', description: 'Visible comment count, if shown on the page.' },
+        shares: { type: 'number', description: 'Visible share/repost count, if shown on the page.' },
+      },
+      required: ['platform', 'url', 'topic'],
+    },
+  },
+  {
+    name: 'get_interaction_settings',
+    description: 'Gets the current Interactions feature configuration: the daily per-platform post target, and the list of topics (and who added each — you or the user) that posts are discovered for.',
+    input_schema: { type: 'object' as const, properties: {}, required: [] },
+  },
+  {
+    name: 'set_interaction_daily_count',
+    description: 'Changes how many posts per platform the Interactions page keeps active at once.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        count: { type: 'number', description: 'New daily target per platform, e.g. 3.' },
+      },
+      required: ['count'],
+    },
+  },
+  {
+    name: 'add_interaction_topic',
+    description: 'Adds a topic to look for commentable posts about, for the Interactions feature.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        topic: { type: 'string', description: 'The topic to add, e.g. "Sevilla real estate market" or "AT license regulations".' },
+      },
+      required: ['topic'],
+    },
+  },
+  {
+    name: 'remove_interaction_topic',
+    description: 'Removes a topic from the Interactions feature\'s list — use get_interaction_settings first to find its exact id.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        id: { type: 'string', description: 'The topic\'s id, from get_interaction_settings.' },
+      },
+      required: ['id'],
+    },
+  },
+  {
     name: 'consult_santi',
     description: 'Asks Santi (the CTO) for a technical-feasibility opinion on something you\'re drafting or considering — e.g. before promising a feature or capability in copy. This only records the brief and returns immediately; Santi replies separately and posts his take directly into this chat as himself once ready (usually a few minutes) — don\'t wait for or expect his reply in this same turn. Only call this when a task genuinely needs his input, not for every passing mention of him.',
     input_schema: {
@@ -1187,6 +1265,91 @@ export async function chat(chatId: number, userMessage: string): Promise<string>
             } catch (err) {
               resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
             }
+          }
+        }
+
+        if (block.name === 'browse_social_search') {
+          browseCallCount++;
+          if (browseCallCount > MAX_BROWSE_CALLS_PER_TURN) {
+            resultContent = `Browsing budget for this conversation turn is used up (max ${MAX_BROWSE_CALLS_PER_TURN} screenshots) — answer with what you've already seen instead of browsing more; the user can ask you to look at specific other pages in a follow-up message.`;
+          } else {
+            const input = block.input as { url: string; platform: InteractionPlatform };
+            try {
+              const { screenshot, links } = await screenshotUrlWithLinks(input.url, false);
+              const candidates = Array.from(new Set(
+                links.filter(l => looksLikePostUrl(input.platform, l.href)).map(l => l.href)
+              ));
+              const linksText = candidates.length > 0
+                ? `Candidate post links found on the page (pick one that matches something relevant in the screenshot, then call add_interaction_post):\n${candidates.slice(0, 25).map(h => `- ${h}`).join('\n')}`
+                : 'No post-permalink-shaped links were found on this page — it may require being logged in, may have blocked/limited the request, or the URL may need adjusting. Do not guess or construct a link yourself.';
+              resultContent = [
+                { type: 'text', text: `Screenshot of ${input.url}:` },
+                { type: 'image', source: { type: 'base64', media_type: 'image/png', data: screenshot.toString('base64') } },
+                { type: 'text', text: linksText },
+              ];
+            } catch (err) {
+              resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
+            }
+          }
+        }
+
+        if (block.name === 'add_interaction_post') {
+          const input = block.input as {
+            platform: InteractionPlatform;
+            url: string;
+            topic: string;
+            author?: string;
+            content_preview?: string;
+            likes?: number;
+            comments?: number;
+            shares?: number;
+          };
+          try {
+            const post = await addInteractionPostRow(input);
+            resultContent = `Added ${input.platform} post to Interactions: ${post.url}`;
+          } catch (err) {
+            resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        }
+
+        if (block.name === 'get_interaction_settings') {
+          try {
+            const [dailyCount, topics] = await Promise.all([getInteractionDailyCount(), listInteractionTopics()]);
+            resultContent = topics.length > 0
+              ? `Daily target: ${dailyCount} posts per platform.\n\nTopics:\n${topics.map(t => `- ${t.topic} (added by ${t.added_by}, id: ${t.id})`).join('\n')}`
+              : `Daily target: ${dailyCount} posts per platform.\n\nNo topics configured yet.`;
+          } catch (err) {
+            resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        }
+
+        if (block.name === 'set_interaction_daily_count') {
+          const input = block.input as { count: number };
+          try {
+            const count = await setInteractionDailyCount(input.count);
+            resultContent = `Daily target is now ${count} posts per platform.`;
+          } catch (err) {
+            resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        }
+
+        if (block.name === 'add_interaction_topic') {
+          const input = block.input as { topic: string };
+          try {
+            const topic = await addInteractionTopicRow(input.topic, 'pepe');
+            resultContent = `Added topic "${topic.topic}" (id: ${topic.id}).`;
+          } catch (err) {
+            resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        }
+
+        if (block.name === 'remove_interaction_topic') {
+          const input = block.input as { id: string };
+          try {
+            await removeInteractionTopicRow(input.id);
+            resultContent = 'Topic removed.';
+          } catch (err) {
+            resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
           }
         }
 

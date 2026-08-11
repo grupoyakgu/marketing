@@ -6,9 +6,11 @@
     { "path": "/api/cron/weekly-engagement", "schedule": "0 13 * * 5" },
     { "path": "/api/cron/refresh-dashboard-data", "schedule": "0 5 * * *" },
     { "path": "/api/cron/refresh-hashtags", "schedule": "0 6 * * 1" },
+    { "path": "/api/cron/refresh-interactions", "schedule": "0 8 * * *" },
     { "path": "/api/cron/process-video-jobs", "schedule": "*/5 * * * *" },
     { "path": "/api/cron/process-santi-delegations", "schedule": "*/5 * * * *" },
     { "path": "/api/cron/process-bot-consultations", "schedule": "*/5 * * * *" },
-    { "path": "/api/cron/process-bot-followups", "schedule": "*/5 * * * *" }
+    { "path": "/api/cron/process-bot-followups", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/process-interaction-fetches", "schedule": "*/5 * * * *" }
   ]
 }

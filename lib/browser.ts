@@ -141,12 +141,7 @@ export async function screenshotPage(path: string, fullPage: boolean): Promise<B
   }
 }
 
-/** Screenshots any public URL — competitor products, design references
- * (Dribbble, Behance, live SaaS products), articles, anything reachable on
- * the open web. Unlike screenshotPage, this attaches no session cookie and
- * isn't scoped to this app's own domain. Restricted to http(s) to rule out
- * file://, chrome://, javascript: and similar non-navigational schemes. */
-export async function screenshotUrl(url: string, fullPage: boolean): Promise<Buffer> {
+function assertBrowsableUrl(url: string): URL {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -156,6 +151,16 @@ export async function screenshotUrl(url: string, fullPage: boolean): Promise<Buf
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new Error(`Refusing to browse "${url}" — only http:// and https:// URLs are allowed.`);
   }
+  return parsed;
+}
+
+/** Screenshots any public URL — competitor products, design references
+ * (Dribbble, Behance, live SaaS products), articles, anything reachable on
+ * the open web. Unlike screenshotPage, this attaches no session cookie and
+ * isn't scoped to this app's own domain. Restricted to http(s) to rule out
+ * file://, chrome://, javascript: and similar non-navigational schemes. */
+export async function screenshotUrl(url: string, fullPage: boolean): Promise<Buffer> {
+  const parsed = assertBrowsableUrl(url);
 
   const connectUrl = await createBrowserbaseSession();
   const browser = await puppeteer.connect({ browserWSEndpoint: connectUrl });
@@ -165,6 +170,40 @@ export async function screenshotUrl(url: string, fullPage: boolean): Promise<Buf
     await page.setViewport({ width: 1440, height: 900 });
     await page.goto(parsed.toString(), { waitUntil: 'networkidle0', timeout: 30_000 });
     return await capturePageScreenshot(page, fullPage);
+  } finally {
+    await browser.close();
+  }
+}
+
+export interface PageLink {
+  href: string;
+  text: string;
+}
+
+// A plain screenshot's pixels never expose a post's actual permalink — a
+// feed shows a caption and a username, not the href behind it — so
+// discovering commentable posts (the Interactions feature) needs the real
+// anchor hrefs alongside the image. Capped at 200 raw links (before the
+// caller's own pattern filtering) as a sanity limit against link-farm pages.
+export async function screenshotUrlWithLinks(url: string, fullPage: boolean): Promise<{ screenshot: Buffer; links: PageLink[] }> {
+  const parsed = assertBrowsableUrl(url);
+
+  const connectUrl = await createBrowserbaseSession();
+  const browser = await puppeteer.connect({ browserWSEndpoint: connectUrl });
+
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1440, height: 900 });
+    await page.goto(parsed.toString(), { waitUntil: 'networkidle0', timeout: 30_000 });
+    const [screenshot, links] = await Promise.all([
+      capturePageScreenshot(page, fullPage),
+      page.evaluate(() =>
+        Array.from(document.querySelectorAll('a[href]'))
+          .slice(0, 200)
+          .map(a => ({ href: (a as HTMLAnchorElement).href, text: (a.textContent ?? '').trim().slice(0, 200) }))
+      ),
+    ]);
+    return { screenshot, links };
   } finally {
     await browser.close();
   }
