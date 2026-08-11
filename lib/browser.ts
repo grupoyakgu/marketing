@@ -1,4 +1,4 @@
-import puppeteer, { type Page } from 'puppeteer-core';
+import puppeteer, { type Browser, type Page } from 'puppeteer-core';
 
 // Four straight attempts at running Chromium *inside* the Vercel function
 // itself (bundled via @sparticuz/chromium, downloaded via
@@ -6,11 +6,12 @@ import puppeteer, { type Page } from 'puppeteer-core';
 // the same "error while loading shared libraries: libnss3.so" — Vercel's
 // current Node runtime appears to be missing a system library every one of
 // those approaches assumes exists, regardless of how the Chromium binary
-// itself is packaged or fetched. Browserbase sidesteps the entire problem
-// class: the actual browser runs on Browserbase's infrastructure, not
-// inside this function at all — puppeteer-core just connects to it over
-// the Chrome DevTools Protocol (CDP) instead of launching a local process,
-// so there's no local binary to fail to launch in the first place.
+// itself is packaged or fetched. Browserbase (with Browserless as a fallback
+// — see connectRemoteBrowser below) sidesteps the entire problem class: the
+// actual browser runs on the provider's infrastructure, not inside this
+// function at all — puppeteer-core just connects to it over the Chrome
+// DevTools Protocol (CDP) instead of launching a local process, so there's
+// no local binary to fail to launch in the first place.
 const BROWSERBASE_API = 'https://api.browserbase.com/v1';
 
 function getBaseUrl(): string {
@@ -108,19 +109,47 @@ async function createBrowserbaseSession(): Promise<string> {
   return session.connectUrl as string;
 }
 
+// Browserless's CDP endpoint takes the token directly in the WebSocket URL —
+// no separate "create a session" call like Browserbase's, so there's nothing
+// to fail before puppeteer.connect() itself. Confirmed live: Browserbase's
+// free plan ran out of browser minutes (402 on every session create), so
+// this is a second provider to fall back to rather than a replacement — one
+// exhausting its quota doesn't take browsing down entirely. Override
+// BROWSERLESS_WS_URL if the account's endpoint differs (e.g. a
+// region-specific or dedicated Browserless cluster).
+function browserlessConnectUrl(): string {
+  const apiKey = process.env.BROWSERLESS_API_KEY;
+  if (!apiKey) throw new Error('BROWSERLESS_API_KEY not configured');
+  const base = process.env.BROWSERLESS_WS_URL ?? 'wss://chrome.browserless.io';
+  return `${base}?token=${apiKey}`;
+}
+
+/** Connects to a remote browser, trying Browserbase first and falling back
+ * to Browserless if that fails for any reason (exhausted quota, an outage,
+ * misconfiguration) — as long as BROWSERLESS_API_KEY is set. With no
+ * fallback configured, the original Browserbase error is what surfaces. */
+async function connectRemoteBrowser(): Promise<Browser> {
+  try {
+    const connectUrl = await createBrowserbaseSession();
+    return await puppeteer.connect({ browserWSEndpoint: connectUrl });
+  } catch (browserbaseErr) {
+    if (!process.env.BROWSERLESS_API_KEY) throw browserbaseErr;
+    console.error('[browser] Browserbase failed, falling back to Browserless:', browserbaseErr);
+    return await puppeteer.connect({ browserWSEndpoint: browserlessConnectUrl() });
+  }
+}
+
 /** Screenshots a live dashboard page as Angeles's read-only account, so she
  * can judge actual rendered layout/hierarchy/spacing instead of just
- * reading source. Runs on a remote Browserbase session rather than a local
+ * reading source. Runs on a remote browser session rather than a local
  * browser process — see the comment above BROWSERBASE_API for why. */
 export async function screenshotPage(path: string, fullPage: boolean): Promise<Buffer> {
   const baseUrl = getBaseUrl();
-  const [sessionCookie, connectUrl] = await Promise.all([
+  const [sessionCookie, browser] = await Promise.all([
     getSessionCookie(),
-    createBrowserbaseSession(),
+    connectRemoteBrowser(),
   ]);
   const targetUrl = `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
-
-  const browser = await puppeteer.connect({ browserWSEndpoint: connectUrl });
 
   try {
     const page = await browser.newPage();
@@ -161,9 +190,7 @@ function assertBrowsableUrl(url: string): URL {
  * file://, chrome://, javascript: and similar non-navigational schemes. */
 export async function screenshotUrl(url: string, fullPage: boolean): Promise<Buffer> {
   const parsed = assertBrowsableUrl(url);
-
-  const connectUrl = await createBrowserbaseSession();
-  const browser = await puppeteer.connect({ browserWSEndpoint: connectUrl });
+  const browser = await connectRemoteBrowser();
 
   try {
     const page = await browser.newPage();
@@ -187,9 +214,7 @@ export interface PageLink {
 // caller's own pattern filtering) as a sanity limit against link-farm pages.
 export async function screenshotUrlWithLinks(url: string, fullPage: boolean): Promise<{ screenshot: Buffer; links: PageLink[] }> {
   const parsed = assertBrowsableUrl(url);
-
-  const connectUrl = await createBrowserbaseSession();
-  const browser = await puppeteer.connect({ browserWSEndpoint: connectUrl });
+  const browser = await connectRemoteBrowser();
 
   try {
     const page = await browser.newPage();

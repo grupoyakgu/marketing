@@ -56,6 +56,8 @@
 - ANGELES_APP_PASSWORD      # password for that same account
 - BROWSERBASE_API_KEY       # remote-browser session API used by browse_page (running Chromium in-process on Vercel wasn't viable — see lib/browser.ts)
 - BROWSERBASE_PROJECT_ID    # Browserbase project ID paired with the API key above
+- BROWSERLESS_API_KEY       # fallback remote-browser provider — connectRemoteBrowser() in lib/browser.ts tries Browserbase first, falls back to this if it fails (e.g. quota exhausted); optional, browsing just surfaces the Browserbase error if unset
+- BROWSERLESS_WS_URL        # optional override if the account's Browserless endpoint isn't wss://chrome.browserless.io (e.g. a region-specific or dedicated cluster)
 - SANTI_VERCEL_TOKEN        # Vercel Access Token scoped to this team, used by list_deployments/get_deployment_logs
 
 ## Telegram Commands
