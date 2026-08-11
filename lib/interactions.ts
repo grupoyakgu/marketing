@@ -176,6 +176,15 @@ export async function deletePost(id: string): Promise<void> {
   await queueBackfillIfNeeded(post.platform as InteractionPlatform);
 }
 
+export async function countPosts(platform: InteractionPlatform): Promise<number> {
+  const { count, error } = await supabase
+    .from('interaction_posts')
+    .select('id', { count: 'exact', head: true })
+    .eq('platform', platform);
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
 // ─── Backfill ───────────────────────────────────────────────────────────────
 
 /** Tops a platform's queued+existing (active or done) post count up to the
@@ -185,14 +194,7 @@ export async function deletePost(id: string): Promise<void> {
 export async function queueBackfillIfNeeded(platform: InteractionPlatform): Promise<number> {
   const [target, existing, open] = await Promise.all([
     getDailyCount(),
-    supabase
-      .from('interaction_posts')
-      .select('id', { count: 'exact', head: true })
-      .eq('platform', platform)
-      .then(res => {
-        if (res.error) throw new Error(res.error.message);
-        return res.count ?? 0;
-      }),
+    countPosts(platform),
     countOpenFetchRequests(platform),
   ]);
 
