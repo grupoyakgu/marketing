@@ -278,6 +278,13 @@ export interface PageLink {
 // discovering commentable posts (the Interactions feature) needs the real
 // anchor hrefs alongside the image. Capped at 200 raw links (before the
 // caller's own pattern filtering) as a sanity limit against link-farm pages.
+//
+// Social platforms (LinkedIn especially) keep background XHR connections
+// alive indefinitely — networkidle0 (zero in-flight requests) never fires
+// on them, which is why these calls were timing out at 30 s. networkidle2
+// (≤2 in-flight) fires once the main content has settled, which is the
+// right bar for a search results page. Timeout is 60 s to give LinkedIn's
+// heavier pages room to fully render before we capture.
 export async function screenshotUrlWithLinks(
   url: string,
   fullPage: boolean,
@@ -294,7 +301,7 @@ export async function screenshotUrlWithLinks(
       ? await getAuthenticatedPage(browser, socialPlatform)
       : await browser.newPage();
     if (!socialPlatform) await page.setViewport({ width: 1440, height: 900 });
-    await page.goto(parsed.toString(), { waitUntil: 'networkidle0', timeout: 30_000 });
+    await page.goto(parsed.toString(), { waitUntil: 'networkidle2', timeout: 60_000 });
     const [screenshot, links] = await Promise.all([
       capturePageScreenshot(page, fullPage),
       page.evaluate(() =>

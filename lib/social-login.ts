@@ -48,6 +48,15 @@ const LOGIN_CONFIG: Record<SocialPlatform, LoginConfig> = {
   },
 };
 
+// Social platforms keep background XHR connections alive indefinitely —
+// networkidle0 never fires on them. networkidle2 (≤2 in-flight requests)
+// fires once the main content has settled, which is the right bar for both
+// login pages and feed/home pages. 60 s gives LinkedIn's heavier pages
+// enough room; Instagram and Facebook are faster but the same limit applies
+// uniformly for simplicity.
+const NAVIGATION_TIMEOUT = 60_000;
+const WAIT_UNTIL = 'networkidle2' as const;
+
 function isOnLoginPage(url: string, platform: SocialPlatform): boolean {
   return url.includes(LOGIN_CONFIG[platform].loginPathMarker);
 }
@@ -80,12 +89,12 @@ async function performLogin(page: Page, platform: SocialPlatform): Promise<void>
   }
 
   const config = LOGIN_CONFIG[platform];
-  await page.goto(config.loginUrl, { waitUntil: 'networkidle0', timeout: 30_000 });
+  await page.goto(config.loginUrl, { waitUntil: WAIT_UNTIL, timeout: NAVIGATION_TIMEOUT });
   await page.waitForSelector(config.usernameSelector, { timeout: 15_000 });
   await page.type(config.usernameSelector, username, { delay: 50 });
   await page.type(config.passwordSelector, password, { delay: 50 });
   await Promise.all([
-    page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 30_000 }).catch(() => {}),
+    page.waitForNavigation({ waitUntil: WAIT_UNTIL, timeout: NAVIGATION_TIMEOUT }).catch(() => {}),
     page.click(config.submitSelector),
   ]);
 
@@ -113,7 +122,7 @@ export async function getAuthenticatedPage(browser: Browser, platform: SocialPla
   const savedCookies = await getSavedCookies(platform);
   if (savedCookies && savedCookies.length > 0) {
     await page.setCookie(...savedCookies);
-    await page.goto(LOGIN_CONFIG[platform].homeUrl, { waitUntil: 'networkidle0', timeout: 30_000 });
+    await page.goto(LOGIN_CONFIG[platform].homeUrl, { waitUntil: WAIT_UNTIL, timeout: NAVIGATION_TIMEOUT });
     if (!isOnLoginPage(page.url(), platform)) {
       return page;
     }
