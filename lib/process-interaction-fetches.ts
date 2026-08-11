@@ -4,7 +4,7 @@ import {
   markFetchRequestDone,
   markFetchRequestFailed,
 } from './interaction-fetch-queue';
-import { listTopics, listRecentUrls, type InteractionPlatform } from './interactions';
+import { listTopics, listRecentUrls, countPosts, type InteractionPlatform } from './interactions';
 import { getMostRecentPepeChatId } from './marketing-plan';
 import { chat } from './marketing-agent';
 import { TelegramClient } from './telegram';
@@ -62,9 +62,26 @@ export async function processInteractionFetches(): Promise<{ processed: number }
     }
 
     try {
+      // chat() completing without throwing only means Pepe's turn finished
+      // cleanly — it says nothing about whether he actually called
+      // add_interaction_post (e.g. every browse attempt could have failed
+      // and he just explained that instead). Comparing the post count
+      // before/after is the only reliable signal that this request actually
+      // produced something, so a silent no-op doesn't get recorded as done.
+      const before = await countPosts(request.platform);
       const instructions = await buildInstructions(request.platform);
-      await chat(chatId, instructions);
-      await markFetchRequestDone(request.id);
+      const reply = await chat(chatId, instructions);
+      const after = await countPosts(request.platform);
+
+      if (after > before) {
+        await markFetchRequestDone(request.id);
+      } else {
+        await markFetchRequestFailed(request.id, reply);
+        const telegram = new TelegramClient(process.env.TELEGRAM_BOT_TOKEN);
+        await telegram
+          .sendMessage(chatId, `⚠️ Couldn't find a new ${request.platform} post for Interactions:\n\n${reply}`)
+          .catch(() => {});
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       await markFetchRequestFailed(request.id, message);
