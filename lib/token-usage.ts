@@ -3,12 +3,17 @@ import { supabase } from './supabase';
 export type AgentName = 'pepe' | 'santi' | 'angeles' | 'abu' | 'leads';
 export const AGENT_NAMES: AgentName[] = ['pepe', 'santi', 'angeles', 'abu', 'leads'];
 
-// $ per million tokens. Cache write is priced at 1.25x input (5-minute TTL,
-// the only TTL any agent uses); cache read at 0.1x input. None of the agents
-// set cache_control today, so cache fields are normally 0 -- priced anyway so
-// the numbers stay correct the day one of them does.
+// $ per million tokens, at standard (non-introductory) list price. Cache
+// write is priced at 1.25x input (5-minute TTL, the only TTL any agent
+// uses); cache read at 0.1x input. claude-sonnet-5 has a temporary
+// introductory rate ($2/$10) through 2026-08-31 -- priced here at its
+// permanent $3/$15 rate instead, so costs don't silently under-report the
+// moment the intro window ends. 'claude-sonnet-4-6' stays in the table to
+// price historical rows logged before the migration to claude-sonnet-5.
 const PRICING: Record<string, { input: number; output: number; cacheWrite: number; cacheRead: number }> = {
+  'claude-sonnet-5': { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.3 },
   'claude-sonnet-4-6': { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.3 },
+  'claude-haiku-4-5': { input: 1, output: 5, cacheWrite: 1.25, cacheRead: 0.1 },
 };
 
 interface Usage {
@@ -19,7 +24,7 @@ interface Usage {
 }
 
 export function calculateCost(model: string, usage: Usage): number {
-  const pricing = PRICING[model] ?? PRICING['claude-sonnet-4-6'];
+  const pricing = PRICING[model] ?? PRICING['claude-sonnet-5'];
   const cacheCreation = usage.cache_creation_input_tokens ?? 0;
   const cacheRead = usage.cache_read_input_tokens ?? 0;
   return (

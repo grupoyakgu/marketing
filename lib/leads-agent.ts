@@ -18,7 +18,7 @@ Only return the JSON array — no explanation.`;
 
 export async function extractLeadsFromHtml(html: string, source: string): Promise<Lead[]> {
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: 'claude-haiku-4-5',
     max_tokens: 2048,
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: `Source: ${source}\n\n${html.slice(0, 40000)}` }],
