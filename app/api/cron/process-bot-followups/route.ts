@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { processBotFollowups } from '@/lib/process-bot-followups';
+import { isCronEnabled } from '@/lib/cron-settings';
 
 export const dynamic = 'force-dynamic';
 // Matches every bot's own direct-message route — a followup runs the
@@ -12,6 +13,9 @@ export async function GET(req: Request) {
     req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`
   ) {
     return new NextResponse('Unauthorized', { status: 401 });
+  }
+  if (!(await isCronEnabled('process-bot-followups'))) {
+    return NextResponse.json({ skipped: 'disabled' });
   }
 
   const result = await processBotFollowups();

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { refreshAllPlatforms } from '@/lib/interactions';
+import { isCronEnabled } from '@/lib/cron-settings';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +15,9 @@ export async function GET(req: Request) {
     req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`
   ) {
     return new NextResponse('Unauthorized', { status: 401 });
+  }
+  if (!(await isCronEnabled('refresh-interactions'))) {
+    return NextResponse.json({ skipped: 'disabled' });
   }
 
   const queued = await refreshAllPlatforms();

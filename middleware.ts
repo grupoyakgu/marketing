@@ -32,7 +32,9 @@ export async function middleware(req: NextRequest) {
   }
 
   const isAdminRoute =
-    req.nextUrl.pathname.startsWith('/settings/users') || req.nextUrl.pathname.startsWith('/api/admin');
+    req.nextUrl.pathname.startsWith('/settings/users') ||
+    req.nextUrl.pathname.startsWith('/settings/crons') ||
+    req.nextUrl.pathname.startsWith('/api/admin');
   if (isAdminRoute && session.role !== 'admin') {
     if (isApi) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     return NextResponse.redirect(new URL('/', req.url));

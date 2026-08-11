@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { processInteractionFetches } from '@/lib/process-interaction-fetches';
+import { isCronEnabled } from '@/lib/cron-settings';
 
 export const dynamic = 'force-dynamic';
 // Matches process-santi-delegations: a fetch runs Pepe's full chat() loop,
@@ -12,6 +13,9 @@ export async function GET(req: Request) {
     req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`
   ) {
     return new NextResponse('Unauthorized', { status: 401 });
+  }
+  if (!(await isCronEnabled('process-interaction-fetches'))) {
+    return NextResponse.json({ skipped: 'disabled' });
   }
 
   const result = await processInteractionFetches();
