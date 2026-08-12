@@ -106,6 +106,18 @@ export interface PostUpdate {
   image_urls?: string[] | null;
 }
 
+/** Monday (UTC calendar date) of the week containing the given YYYY-MM-DD
+ * date — dates in this table are plain calendar dates with no time
+ * component, so this stays in UTC throughout rather than drifting with the
+ * server's local timezone. */
+function mondayOf(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00Z');
+  const day = d.getUTCDay();
+  const diff = day === 0 ? -6 : 1 - day; // Sunday (0) rolls back to the Monday before it
+  d.setUTCDate(d.getUTCDate() + diff);
+  return d.toISOString().split('T')[0];
+}
+
 export async function updatePost(postId: string, fields: PostUpdate): Promise<MarketingPost> {
   const { data: existing, error: fetchError } = await supabase
     .from('marketing_plan')
@@ -118,9 +130,17 @@ export async function updatePost(postId: string, fields: PostUpdate): Promise<Ma
     throw new Error('This post has already been published — it can no longer be edited or rescheduled, only posts that have not been posted yet.');
   }
 
+  // week_start drives the Planner page's weekly query (getWeeklyPlan) while
+  // the page itself groups cards by scheduled_date — the two columns must
+  // stay in sync or a rescheduled post silently disappears from the
+  // Planner (still fires from getPostsDueNow, which reads scheduled_date
+  // directly, so it can post without ever being visible there).
+  const updateFields: PostUpdate & { week_start?: string } = { ...fields };
+  if (fields.scheduled_date) updateFields.week_start = mondayOf(fields.scheduled_date);
+
   const { data, error } = await supabase
     .from('marketing_plan')
-    .update(fields)
+    .update(updateFields)
     .eq('id', postId)
     .select()
     .single();
