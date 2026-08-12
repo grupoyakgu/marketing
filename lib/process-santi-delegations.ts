@@ -1,7 +1,8 @@
-import { getPendingDelegationIds, claimDelegation, markDelegationDone, markDelegationFailed } from './santi-delegations';
+import { getPendingDelegationIds, claimDelegation, markDelegationDone, markDelegationFailed, releaseDelegationClaim } from './santi-delegations';
 import { chat } from './dev-agent';
 import { TelegramClient } from './telegram';
 import { splitMessage } from './split-message';
+import { ChatBusyError } from './chat-lock';
 
 export async function processSantiDelegations(): Promise<{ processed: number }> {
   const ids = await getPendingDelegationIds();
@@ -23,6 +24,13 @@ export async function processSantiDelegations(): Promise<{ processed: number }> 
       }
       await markDelegationDone(delegation.id);
     } catch (err) {
+      if (err instanceof ChatBusyError) {
+        // Not a real failure — Santi is still mid-turn on something else for
+        // this chat. Put it back for the next tick instead of losing it to a
+        // permanent 'failed' status or telling the user about it.
+        await releaseDelegationClaim(delegation.id);
+        continue;
+      }
       const message = err instanceof Error ? err.message : String(err);
       await markDelegationFailed(delegation.id, message);
       await telegram.sendMessage(

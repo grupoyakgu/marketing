@@ -47,6 +47,14 @@ export async function claimDelegation(id: string): Promise<SantiDelegation | nul
   return data;
 }
 
+/** Reverts a claimed delegation back to 'pending' — used when the run had to
+ * bail because Santi's chat lock was busy (see lib/chat-lock.ts), which
+ * isn't a real failure, just bad timing; the next cron tick retries it
+ * normally instead of it being lost to a permanent 'failed' status. */
+export async function releaseDelegationClaim(id: string): Promise<void> {
+  await supabase.from('santi_delegations').update({ status: 'pending' }).eq('id', id);
+}
+
 export async function markDelegationDone(id: string): Promise<void> {
   await supabase.from('santi_delegations').update({ status: 'done', completed_at: new Date().toISOString() }).eq('id', id);
 }

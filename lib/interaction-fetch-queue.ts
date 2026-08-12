@@ -78,6 +78,15 @@ export async function claimFetchRequest(id: string): Promise<InteractionFetchReq
   return data;
 }
 
+/** Reverts a claimed fetch request back to 'pending' — used when the run had
+ * to bail because Pepe's chat lock was busy (see lib/chat-lock.ts), which
+ * isn't a real failure, just bad timing; the next cron tick retries it
+ * normally instead of it being lost to a permanent 'failed' status (and,
+ * relatedly, counted against the daily failure cap in queueBackfillIfNeeded). */
+export async function releaseFetchRequestClaim(id: string): Promise<void> {
+  await supabase.from('interaction_fetch_requests').update({ status: 'pending' }).eq('id', id);
+}
+
 export async function markFetchRequestDone(id: string): Promise<void> {
   await supabase
     .from('interaction_fetch_requests')
