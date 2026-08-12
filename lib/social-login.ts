@@ -9,11 +9,6 @@ interface LoginConfig {
   usernameSelector: string;
   passwordSelector: string;
   submitSelector: string;
-  // Substring in the URL that means "still on a login/checkpoint page" —
-  // used both to detect a saved session going stale and to detect a failed
-  // login attempt (credentials rejected, or challenged with a CAPTCHA/2FA/
-  // "verify it's you" page a script can't get past).
-  loginPathMarker: string;
 }
 
 // Selectors below are these platforms' long-stable login page structure as
@@ -28,7 +23,6 @@ const LOGIN_CONFIG: Record<SocialPlatform, LoginConfig> = {
     usernameSelector: '#username',
     passwordSelector: '#password',
     submitSelector: 'button[type="submit"]',
-    loginPathMarker: '/login',
   },
   instagram: {
     loginUrl: 'https://www.instagram.com/accounts/login/',
@@ -36,7 +30,6 @@ const LOGIN_CONFIG: Record<SocialPlatform, LoginConfig> = {
     usernameSelector: 'input[name="username"]',
     passwordSelector: 'input[name="password"]',
     submitSelector: 'button[type="submit"]',
-    loginPathMarker: '/accounts/login',
   },
   facebook: {
     loginUrl: 'https://www.facebook.com/login',
@@ -44,7 +37,6 @@ const LOGIN_CONFIG: Record<SocialPlatform, LoginConfig> = {
     usernameSelector: '#email',
     passwordSelector: '#pass',
     submitSelector: 'button[name="login"]',
-    loginPathMarker: '/login',
   },
 };
 
@@ -66,8 +58,43 @@ const WAIT_UNTIL = 'networkidle2' as const;
 // `#username` at all no matter how long you wait.
 const USERNAME_FIELD_TIMEOUT = 30_000;
 
-function isOnLoginPage(url: string, platform: SocialPlatform): boolean {
-  return url.includes(LOGIN_CONFIG[platform].loginPathMarker);
+// Confirms an *actual* authenticated session by checking where we land after
+// navigating to homeUrl, rather than just checking we're not on the literal
+// /login URL. That negative check used to pass a session that wasn't really
+// authenticated: submitting credentials from an automated/headless browser
+// can get redirected to a security checkpoint / "verify it's you" interstitial
+// at a path that doesn't contain "/login" at all, which isOnLoginPage missed
+// entirely — the code then saved cookies from that half-authenticated state
+// and kept reusing them (a real LinkedIn login wall screenshot, confirmed
+// live on 2026-08-12, came from exactly this: a fresh login "succeeded" by
+// the old check, got saved, and both that call and a saved-cookie reuse two
+// hours later still hit the login wall on real content pages). Landing back
+// on homeUrl's own path is a much stronger positive signal than merely not
+// being on /login.
+function isOnHomePage(url: string, platform: SocialPlatform): boolean {
+  const home = new URL(LOGIN_CONFIG[platform].homeUrl);
+  let current: URL;
+  try {
+    current = new URL(url);
+  } catch {
+    return false;
+  }
+  if (current.origin !== home.origin) return false;
+
+  const homePath = home.pathname.replace(/\/+$/, '');
+  const currentPath = current.pathname.replace(/\/+$/, '');
+  if (homePath === '') return currentPath === '';
+  return currentPath === homePath || currentPath.startsWith(`${homePath}/`);
+}
+
+/** Navigates to homeUrl and confirms we actually land there — the one
+ * reliable signal that a session (saved cookies, or a session just logged
+ * into) is genuinely authenticated rather than stuck on a checkpoint page
+ * that happens not to contain "/login". */
+async function confirmAuthenticated(page: Page, platform: SocialPlatform): Promise<boolean> {
+  const config = LOGIN_CONFIG[platform];
+  await page.goto(config.homeUrl, { waitUntil: WAIT_UNTIL, timeout: NAVIGATION_TIMEOUT });
+  return isOnHomePage(page.url(), platform);
 }
 
 async function getSavedCookies(platform: SocialPlatform): Promise<Cookie[] | null> {
@@ -126,12 +153,13 @@ async function performLogin(page: Page, platform: SocialPlatform): Promise<void>
     page.click(config.submitSelector),
   ]);
 
-  if (isOnLoginPage(page.url(), platform)) {
+  if (!(await confirmAuthenticated(page, platform))) {
     throw new Error(
-      `${platform} login did not go through — still on a login/checkpoint page after submitting ` +
-      `credentials (current URL: ${page.url()}). This usually means the platform challenged the ` +
-      `automated login (CAPTCHA, 2FA, "verify it's you") rather than a credentials problem — that may ` +
-      `require signing in manually from a real browser once to clear the challenge.`
+      `${platform} login did not result in an authenticated session — after submitting credentials and ` +
+      `navigating to ${config.homeUrl}, landed on ${page.url()} instead. This usually means the platform ` +
+      `challenged the automated login (CAPTCHA, 2FA, a security checkpoint, "verify it's you") rather ` +
+      `than a credentials problem — that may require signing in manually from a real browser once to ` +
+      `clear the challenge.`
     );
   }
 
@@ -150,8 +178,7 @@ export async function getAuthenticatedPage(browser: Browser, platform: SocialPla
   const savedCookies = await getSavedCookies(platform);
   if (savedCookies && savedCookies.length > 0) {
     await page.setCookie(...savedCookies);
-    await page.goto(LOGIN_CONFIG[platform].homeUrl, { waitUntil: WAIT_UNTIL, timeout: NAVIGATION_TIMEOUT });
-    if (!isOnLoginPage(page.url(), platform)) {
+    if (await confirmAuthenticated(page, platform)) {
       return page;
     }
   }
