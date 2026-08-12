@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { loadHistory, saveMessage, clearHistory as clearDb, drainBroadcasts } from '@/lib/chat-history';
+import { acquireChatLock, releaseChatLock } from '@/lib/chat-lock';
 import {
   readFile,
   listDirectory,
@@ -215,6 +216,15 @@ export async function clearHistory(chatId: number): Promise<void> {
 }
 
 export async function chat(chatId: number, userMessage: string): Promise<string> {
+  await acquireChatLock(chatId, BOT_NAME);
+  try {
+    return await chatInner(chatId, userMessage);
+  } finally {
+    await releaseChatLock(chatId, BOT_NAME);
+  }
+}
+
+async function chatInner(chatId: number, userMessage: string): Promise<string> {
   await drainBroadcasts(chatId, BOT_NAME);
   const history = await loadHistory(chatId, BOT_NAME);
   history.push({ role: 'user', content: userMessage });

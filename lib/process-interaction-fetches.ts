@@ -3,11 +3,13 @@ import {
   claimFetchRequest,
   markFetchRequestDone,
   markFetchRequestFailed,
+  releaseFetchRequestClaim,
 } from './interaction-fetch-queue';
 import { listTopics, listRecentUrls, countPosts, getDailyCount, type InteractionPlatform } from './interactions';
 import { getMostRecentPepeChatId } from './marketing-plan';
 import { chat } from './marketing-agent';
 import { TelegramClient } from './telegram';
+import { ChatBusyError } from './chat-lock';
 
 const SEARCH_HINTS: Record<InteractionPlatform, string> = {
   linkedin: 'e.g. https://www.linkedin.com/search/results/content/?keywords=<topic, url-encoded>',
@@ -101,6 +103,15 @@ export async function processInteractionFetches(): Promise<{ processed: number }
           .catch(() => {});
       }
     } catch (err) {
+      if (err instanceof ChatBusyError) {
+        // Not a real failure — Pepe is still mid-turn on something else for
+        // this chat. Put it back for the next tick instead of losing it to a
+        // permanent 'failed' status (which would also wrongly count against
+        // the daily failure cap in queueBackfillIfNeeded) or telling the
+        // user about it.
+        await releaseFetchRequestClaim(request.id);
+        continue;
+      }
       const message = err instanceof Error ? err.message : String(err);
       await markFetchRequestFailed(request.id, message);
       const telegram = new TelegramClient(process.env.TELEGRAM_BOT_TOKEN);

@@ -4,6 +4,7 @@ import { clearHistory, chat } from '@/lib/product-agent';
 import { broadcastToTeammates } from '@/lib/chat-history';
 import { claimTelegramUpdate } from '@/lib/telegram-dedup';
 import { resolveAddressee, allBots } from '@/lib/bot-addressing';
+import { ChatBusyError } from '@/lib/chat-lock';
 
 export const maxDuration = 300;
 
@@ -75,7 +76,12 @@ export async function POST(req: NextRequest) {
         await broadcastToTeammates(resolvedChatId, 'angeles', reply);
       } catch (err) {
         console.error('[telegram-angeles] agent error:', err);
-        await telegram.sendMessage(resolvedChatId, '❌ Something went wrong. Please try again.');
+        await telegram.sendMessage(
+          resolvedChatId,
+          err instanceof ChatBusyError
+            ? "⏳ I'm still finishing something else in this chat — give me a moment and try again."
+            : '❌ Something went wrong. Please try again.'
+        );
       }
       return NextResponse.json({ ok: true });
     }

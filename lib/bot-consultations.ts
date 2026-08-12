@@ -55,6 +55,15 @@ export async function claimConsultation(id: string): Promise<BotConsultation | n
   return data;
 }
 
+/** Reverts a claimed consultation back to 'pending' — used when the reply
+ * had to bail because the target bot's chat lock was busy (see
+ * lib/chat-lock.ts), which isn't a real failure, just bad timing; the next
+ * cron tick retries it normally instead of it being lost to a permanent
+ * 'failed' status. */
+export async function releaseConsultationClaim(id: string): Promise<void> {
+  await supabase.from('bot_consultations').update({ status: 'pending' }).eq('id', id);
+}
+
 export async function markConsultationDone(id: string): Promise<void> {
   await supabase.from('bot_consultations').update({ status: 'done', completed_at: new Date().toISOString() }).eq('id', id);
 }

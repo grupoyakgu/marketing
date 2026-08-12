@@ -49,6 +49,14 @@ export async function claimFollowup(id: string): Promise<BotFollowup | null> {
   return data;
 }
 
+/** Reverts a claimed followup back to 'pending' — used when delivery had to
+ * bail because the target bot's chat lock was busy (see lib/chat-lock.ts),
+ * which isn't a real failure, just bad timing; the next cron tick retries it
+ * normally instead of it being lost to a permanent 'failed' status. */
+export async function releaseFollowupClaim(id: string): Promise<void> {
+  await supabase.from('bot_followups').update({ status: 'pending' }).eq('id', id);
+}
+
 export async function markFollowupDone(id: string): Promise<void> {
   await supabase.from('bot_followups').update({ status: 'done', completed_at: new Date().toISOString() }).eq('id', id);
 }

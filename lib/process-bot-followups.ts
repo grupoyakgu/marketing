@@ -1,7 +1,8 @@
-import { getPendingFollowupIds, claimFollowup, markFollowupDone, markFollowupFailed } from './bot-followups';
+import { getPendingFollowupIds, claimFollowup, markFollowupDone, markFollowupFailed, releaseFollowupClaim } from './bot-followups';
 import { BOT_REGISTRY } from './bot-registry';
 import { TelegramClient } from './telegram';
 import { splitMessage } from './split-message';
+import { ChatBusyError } from './chat-lock';
 
 export async function processBotFollowups(): Promise<{ processed: number }> {
   const ids = await getPendingFollowupIds();
@@ -24,6 +25,13 @@ export async function processBotFollowups(): Promise<{ processed: number }> {
       }
       await markFollowupDone(followup.id);
     } catch (err) {
+      if (err instanceof ChatBusyError) {
+        // Not a real failure — the bot is still mid-turn on something else
+        // for this chat. Put it back for the next tick instead of losing it
+        // to a permanent 'failed' status or telling the user about it.
+        await releaseFollowupClaim(followup.id);
+        continue;
+      }
       const message = err instanceof Error ? err.message : String(err);
       await markFollowupFailed(followup.id, message);
       await telegram.sendMessage(followup.chat_id, `❌ ${bot.label} couldn't process a teammate's reply: ${message}`);

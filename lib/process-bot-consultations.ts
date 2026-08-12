@@ -1,8 +1,9 @@
-import { getPendingConsultationIds, claimConsultation, markConsultationDone, markConsultationFailed } from './bot-consultations';
+import { getPendingConsultationIds, claimConsultation, markConsultationDone, markConsultationFailed, releaseConsultationClaim } from './bot-consultations';
 import { createFollowup } from './bot-followups';
 import { BOT_REGISTRY } from './bot-registry';
 import { TelegramClient } from './telegram';
 import { splitMessage } from './split-message';
+import { ChatBusyError } from './chat-lock';
 
 export async function processBotConsultations(): Promise<{ processed: number }> {
   const ids = await getPendingConsultationIds();
@@ -40,6 +41,14 @@ export async function processBotConsultations(): Promise<{ processed: number }> 
         `[Reply from ${toBot.label}, re: your consultation]\n\n${reply}`
       );
     } catch (err) {
+      if (err instanceof ChatBusyError) {
+        // Not a real failure — the answering bot is still mid-turn on
+        // something else for this chat. Put it back for the next tick
+        // instead of losing it to a permanent 'failed' status or telling
+        // the asking bot it's never getting a reply.
+        await releaseConsultationClaim(consultation.id);
+        continue;
+      }
       const message = err instanceof Error ? err.message : String(err);
       await markConsultationFailed(consultation.id, message);
       await telegram.sendMessage(
