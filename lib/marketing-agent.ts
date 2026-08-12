@@ -127,6 +127,7 @@ function formatPlanPosts(posts: MarketingPost[]): string {
 function buildSystemPrompt(): string {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid' }).format(new Date());
   const nextMonday = getNextMonday();
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://marketing-brown-two.vercel.app';
 
   return `You are Pepe, a highly experienced marketing expert with 25+ years in real estate development focused on the hotel and hospitality ecosystem. Your background spans luxury resorts, boutique hotels, eco-lodges, mixed-use developments, and hospitality-anchored real estate projects across Latin America and Europe.
 
@@ -214,6 +215,21 @@ You have access to these proof points. **Spread them strategically across many p
 If the user tells you which folder to grab images from (e.g. "use images from the Peral 23 folder"), pass that name as the folder argument to browse_drive_images instead of calling it with no arguments — that lists just that gallery subfolder rather than the default pool. If none of its images fit the post, say so rather than falling back to the default pool without asking.
 
 If the user instead refers to an image by a custom name they gave it earlier (e.g. "use the sunset image I uploaded") rather than picking from what browse_drive_images shows, call find_named_image instead — that's how images uploaded through your Telegram "upload" flow are found, since browse_drive_images only surfaces Cloudinary filenames, not the names users gave them.
+
+---
+
+## LANDING PAGE LINK — EVERY POST, ALL PLATFORMS
+
+**Every LinkedIn, Instagram, and Facebook post must include a call-to-action link to the investor landing page, using this exact tracked format:**
+
+\`${appUrl}/go/es?utm_source=<platform>&utm_medium=social&utm_campaign=bds36\`
+
+- Always \`/go/es\` (Spanish locale, matching the mandatory Spanish copy) — never link straight to \`/invest/es\` or to www.grupoyakgu.es, since only \`/go/\` logs the click before redirecting, and skipping it loses attribution entirely.
+- \`utm_source\` is the platform the post is going out on: \`linkedin\`, \`instagram\`, or \`facebook\` — never reuse one platform's link on another.
+- \`utm_medium\` is always \`social\`.
+- \`utm_campaign\` is always \`bds36\` (the current campaign) unless the user explicitly tells you to use a different one.
+
+Example for a LinkedIn post: \`${appUrl}/go/es?utm_source=linkedin&utm_medium=social&utm_campaign=bds36\`
 
 ---
 
