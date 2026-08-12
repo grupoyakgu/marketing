@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { queueFetchRequest, countOpenFetchRequests } from './interaction-fetch-queue';
+import { queueFetchRequest, countOpenFetchRequests, countFailuresToday } from './interaction-fetch-queue';
 
 export type InteractionPlatform = 'linkedin' | 'facebook' | 'instagram';
 export const INTERACTION_PLATFORMS: InteractionPlatform[] = ['linkedin', 'facebook', 'instagram'];
@@ -206,16 +206,28 @@ export async function countPosts(platform: InteractionPlatform): Promise<number>
 
 // ─── Backfill ───────────────────────────────────────────────────────────────
 
+// Once a platform has failed this many discovery attempts in a single UTC
+// day (login wall down, page layout changed, etc.), stop queueing more for
+// it until the next day rather than retrying — and re-notifying on Telegram
+// — indefinitely. queueBackfillIfNeeded is re-evaluated fresh each day (the
+// refresh-interactions cron and any delete on that platform), so the platform
+// automatically gets another round of attempts tomorrow.
+const MAX_DAILY_FETCH_FAILURES = 3;
+
 /** Tops a platform's queued+existing (active or done) post count up to the
  * daily target by queueing one fetch request per missing slot. Open (pending
  * or processing) requests are counted too, so calling this repeatedly before
- * earlier requests finish never over-queues. */
+ * earlier requests finish never over-queues. Stops early if the platform has
+ * already hit its daily failure cap. */
 export async function queueBackfillIfNeeded(platform: InteractionPlatform): Promise<number> {
-  const [target, existing, open] = await Promise.all([
+  const [target, existing, open, failuresToday] = await Promise.all([
     getDailyCount(platform),
     countPosts(platform),
     countOpenFetchRequests(platform),
+    countFailuresToday(platform),
   ]);
+
+  if (failuresToday >= MAX_DAILY_FETCH_FAILURES) return 0;
 
   const shortfall = target - existing - open;
   for (let i = 0; i < shortfall; i++) {

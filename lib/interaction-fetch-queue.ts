@@ -33,6 +33,24 @@ export async function countOpenFetchRequests(platform: InteractionPlatform): Pro
   return count ?? 0;
 }
 
+/** Failed requests for a platform since UTC midnight — used to cap how many
+ * times a platform is retried per day once discovery keeps failing (a login
+ * wall, a changed page layout), instead of the daily refresh cron re-queuing
+ * the same shortfall forever. */
+export async function countFailuresToday(platform: InteractionPlatform): Promise<number> {
+  const startOfDay = new Date();
+  startOfDay.setUTCHours(0, 0, 0, 0);
+
+  const { count, error } = await supabase
+    .from('interaction_fetch_requests')
+    .select('id', { count: 'exact', head: true })
+    .eq('platform', platform)
+    .eq('status', 'failed')
+    .gte('created_at', startOfDay.toISOString());
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
 export async function getPendingFetchRequestIds(): Promise<string[]> {
   const { data, error } = await supabase
     .from('interaction_fetch_requests')
