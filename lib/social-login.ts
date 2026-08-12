@@ -57,6 +57,15 @@ const LOGIN_CONFIG: Record<SocialPlatform, LoginConfig> = {
 const NAVIGATION_TIMEOUT = 60_000;
 const WAIT_UNTIL = 'networkidle2' as const;
 
+// The username field wait used to be 15 s, which turned out to be too tight
+// even after the nav timeout fix above — a remote CDP session can take
+// longer than that just to hydrate the login form. 30 s gives it more room
+// for that ordinary case. This alone won't help if the field is missing for
+// a different reason entirely (see the diagnostics added in
+// performLogin below) — a challenge/CAPTCHA/consent page never renders
+// `#username` at all no matter how long you wait.
+const USERNAME_FIELD_TIMEOUT = 30_000;
+
 function isOnLoginPage(url: string, platform: SocialPlatform): boolean {
   return url.includes(LOGIN_CONFIG[platform].loginPathMarker);
 }
@@ -90,7 +99,26 @@ async function performLogin(page: Page, platform: SocialPlatform): Promise<void>
 
   const config = LOGIN_CONFIG[platform];
   await page.goto(config.loginUrl, { waitUntil: WAIT_UNTIL, timeout: NAVIGATION_TIMEOUT });
-  await page.waitForSelector(config.usernameSelector, { timeout: 15_000 });
+
+  try {
+    await page.waitForSelector(config.usernameSelector, { timeout: USERNAME_FIELD_TIMEOUT });
+  } catch {
+    // The plain "waiting for selector failed" error from Puppeteer says
+    // nothing about *what actually loaded* — a slow-to-hydrate real login
+    // page and a checkpoint/CAPTCHA/consent page that will never contain
+    // this selector look identical from that message alone. Surfacing the
+    // URL and title we actually landed on turns "the selector timed out"
+    // into an answerable question next time this happens.
+    const title = await page.title().catch(() => '(unable to read title)');
+    throw new Error(
+      `${platform} login page never showed the username field ("${config.usernameSelector}") after ` +
+      `${USERNAME_FIELD_TIMEOUT / 1000}s — current URL: ${page.url()}, page title: "${title}". If the ` +
+      `URL is still the plain login page, the form is just slow or the selector no longer matches; if ` +
+      `it's something else (a checkpoint, CAPTCHA, or consent page), the automated login is being ` +
+      `challenged and needs a manual sign-in from a real browser to clear it.`
+    );
+  }
+
   await page.type(config.usernameSelector, username, { delay: 50 });
   await page.type(config.passwordSelector, password, { delay: 50 });
   await Promise.all([
