@@ -39,13 +39,23 @@ async function buildInstructions(platform: InteractionPlatform): Promise<string>
   );
 }
 
+// Confirmed live 2026-08-13: draining 7 queued requests in one invocation
+// blew through the route's 300s maxDuration (each request can involve two
+// browse_social_search calls at ~35s apiece, plus several Anthropic turns) --
+// the request that was mid-flight when the function was killed stayed
+// claimed ('processing') forever, since nothing after the timeout ever ran
+// to mark it done/failed. Capping how many requests one tick will drain
+// keeps a single invocation well under the limit; anything left over just
+// waits for the next tick five minutes later instead of racing the clock.
+const MAX_REQUESTS_PER_RUN = 3;
+
 /** Drains the interaction_fetch_requests queue by asking Pepe (via his own
  * chat() loop, same as santi_delegations/bot_followups) to find one post per
  * request. Runs silently on success — this is background housekeeping, not a
  * user-initiated task, so it doesn't spam Telegram every 5 minutes; a
  * persistent failure still gets surfaced there so it doesn't go unnoticed. */
 export async function processInteractionFetches(): Promise<{ processed: number }> {
-  const ids = await getPendingFetchRequestIds();
+  const ids = (await getPendingFetchRequestIds()).slice(0, MAX_REQUESTS_PER_RUN);
   let processed = 0;
 
   for (const id of ids) {
