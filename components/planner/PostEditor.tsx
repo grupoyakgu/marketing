@@ -55,7 +55,8 @@ export function PostEditor({
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [videoScript, setVideoScript] = useState('');
   const [avatarId, setAvatarId] = useState<string | null>(null);
-  const [avatars, setAvatars] = useState<HeyGenAvatar[] | null>(null);
+  const [myAvatars, setMyAvatars] = useState<HeyGenAvatar[] | null>(null);
+  const [publicAvatars, setPublicAvatars] = useState<HeyGenAvatar[] | null>(null);
   const [loadingAvatars, setLoadingAvatars] = useState(false);
   const [folders, setFolders] = useState<CloudinaryFolderImages[] | null>(null);
   const [reloadingFolders, setReloadingFolders] = useState(false);
@@ -109,14 +110,20 @@ export function PostEditor({
   }, [post, editable, folders]);
 
   useEffect(() => {
-    if (!post || !editable || post.post_type !== 'video' || avatars !== null) return;
+    if (!post || !editable || post.post_type !== 'video' || myAvatars !== null) return;
     setLoadingAvatars(true);
     fetch('/api/dashboard/heygen/avatars')
       .then(res => res.json())
-      .then(body => setAvatars(body.avatars ?? []))
-      .catch(() => setAvatars([]))
+      .then(body => {
+        setMyAvatars(body.myAvatars ?? []);
+        setPublicAvatars(body.publicAvatars ?? []);
+      })
+      .catch(() => {
+        setMyAvatars([]);
+        setPublicAvatars([]);
+      })
       .finally(() => setLoadingAvatars(false));
-  }, [post, editable, avatars]);
+  }, [post, editable, myAvatars]);
 
   async function reloadFolders() {
     setReloadingFolders(true);
@@ -464,46 +471,24 @@ export function PostEditor({
               <p className="mb-1.5 text-xs text-neutral-400">Click a look to use it for this post. Leave unset to use the account default.</p>
               {loadingAvatars ? (
                 <p className="text-xs text-neutral-400">Loading avatars…</p>
-              ) : !avatars || avatars.length === 0 ? (
-                <p className="text-xs text-neutral-400">No avatars found on the HeyGen account.</p>
               ) : (
-                <div className="grid grid-cols-3 gap-2">
-                  {avatars.map(a => (
-                    <div key={a.avatarId} className="relative">
-                      {a.previewImageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={a.previewImageUrl}
-                          alt={a.name}
-                          title={a.name}
-                          onClick={() => selectAvatar(a.avatarId)}
-                          className={cn(
-                            savingAvatar && 'pointer-events-none opacity-60',
-                            'aspect-square w-full cursor-pointer rounded-lg object-cover ring-2 ring-transparent transition hover:opacity-80',
-                            avatarId === a.avatarId && 'ring-neutral-900 dark:ring-white'
-                          )}
-                        />
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => selectAvatar(a.avatarId)}
-                          disabled={savingAvatar}
-                          title={a.name}
-                          className={cn(
-                            'flex aspect-square w-full items-center justify-center rounded-lg border border-neutral-200 bg-neutral-50 text-center text-[10px] text-neutral-500 ring-2 ring-transparent transition hover:opacity-80 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-800',
-                            avatarId === a.avatarId && 'ring-neutral-900 dark:ring-white'
-                          )}
-                        >
-                          {a.name}
-                        </button>
-                      )}
-                      {avatarId === a.avatarId && (
-                        <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-neutral-900 text-white dark:bg-white dark:text-neutral-900">
-                          <Check className="h-2.5 w-2.5" />
-                        </span>
-                      )}
-                    </div>
-                  ))}
+                <div className="space-y-3">
+                  <AvatarGroupPicker
+                    label="My Avatars"
+                    avatars={myAvatars ?? []}
+                    selectedId={avatarId}
+                    saving={savingAvatar}
+                    onSelect={selectAvatar}
+                    emptyText="No custom avatars on this HeyGen account."
+                  />
+                  <AvatarGroupPicker
+                    label="Public Avatars"
+                    avatars={publicAvatars ?? []}
+                    selectedId={avatarId}
+                    saving={savingAvatar}
+                    onSelect={selectAvatar}
+                    emptyText="No public avatars found."
+                  />
                 </div>
               )}
             </div>
@@ -661,6 +646,70 @@ function StatTile({
         {label}
       </div>
       <p className="mt-0.5 text-sm font-semibold tabular-nums text-neutral-900 dark:text-white">{value}</p>
+    </div>
+  );
+}
+
+function AvatarGroupPicker({
+  label,
+  avatars,
+  selectedId,
+  saving,
+  onSelect,
+  emptyText,
+}: {
+  label: string;
+  avatars: HeyGenAvatar[];
+  selectedId: string | null;
+  saving: boolean;
+  onSelect: (id: string) => void;
+  emptyText: string;
+}) {
+  return (
+    <div>
+      <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-neutral-400">{label}</p>
+      {avatars.length === 0 ? (
+        <p className="text-xs text-neutral-400">{emptyText}</p>
+      ) : (
+        <div className="grid grid-cols-3 gap-2">
+          {avatars.map(a => (
+            <div key={a.avatarId} className="relative">
+              {a.previewImageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={a.previewImageUrl}
+                  alt={a.name}
+                  title={a.name}
+                  onClick={() => onSelect(a.avatarId)}
+                  className={cn(
+                    saving && 'pointer-events-none opacity-60',
+                    'aspect-square w-full cursor-pointer rounded-lg object-cover ring-2 ring-transparent transition hover:opacity-80',
+                    selectedId === a.avatarId && 'ring-neutral-900 dark:ring-white'
+                  )}
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onSelect(a.avatarId)}
+                  disabled={saving}
+                  title={a.name}
+                  className={cn(
+                    'flex aspect-square w-full items-center justify-center rounded-lg border border-neutral-200 bg-neutral-50 text-center text-[10px] text-neutral-500 ring-2 ring-transparent transition hover:opacity-80 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-800',
+                    selectedId === a.avatarId && 'ring-neutral-900 dark:ring-white'
+                  )}
+                >
+                  {a.name}
+                </button>
+              )}
+              {selectedId === a.avatarId && (
+                <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-neutral-900 text-white dark:bg-white dark:text-neutral-900">
+                  <Check className="h-2.5 w-2.5" />
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
