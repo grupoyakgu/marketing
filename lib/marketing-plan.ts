@@ -110,7 +110,7 @@ export interface PostUpdate {
  * date — dates in this table are plain calendar dates with no time
  * component, so this stays in UTC throughout rather than drifting with the
  * server's local timezone. */
-function mondayOf(dateStr: string): string {
+export function mondayOf(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00Z');
   const day = d.getUTCDay();
   const diff = day === 0 ? -6 : 1 - day; // Sunday (0) rolls back to the Monday before it
@@ -208,6 +208,37 @@ export async function trackDirectPost(
   await supabase
     .from('tracked_posts')
     .upsert({ platform, platform_post_id: platformPostId });
+}
+
+/** Records a post that went out directly (outside the Planner's draft ->
+ * approved -> posted flow, e.g. a HeyGen video) as an already-posted
+ * marketing_plan row, so the Planner stays a complete record of everything
+ * published rather than only what was scheduled through it. trackDirectPost
+ * above writes to tracked_posts, which exists purely so the comment cron can
+ * find the post -- it isn't queried anywhere the Planner UI reads from, so a
+ * direct post was otherwise invisible there. */
+export async function recordDirectPostInPlan(fields: {
+  platform: 'linkedin' | 'instagram' | 'facebook';
+  content: string;
+  postUrl?: string;
+  platformPostId?: string;
+  imageNote?: string;
+}): Promise<void> {
+  const now = new Date();
+  const scheduledDate = now.toISOString().split('T')[0];
+  const scheduledTime = now.toISOString().split('T')[1].slice(0, 8);
+  const { error } = await supabase.from('marketing_plan').insert({
+    week_start: mondayOf(scheduledDate),
+    platform: fields.platform,
+    scheduled_date: scheduledDate,
+    scheduled_time: scheduledTime,
+    content: fields.content,
+    image_note: fields.imageNote,
+    status: 'posted',
+    post_url: fields.postUrl,
+    platform_post_id: fields.platformPostId,
+  });
+  if (error) throw new Error(error.message);
 }
 
 /** Returns all post IDs (from both marketing_plan and tracked_posts) for comment checking. */

@@ -7,7 +7,7 @@ import {
   checkInstagramContainer,
   publishInstagramContainer,
 } from './meta-poster';
-import { trackDirectPost } from './marketing-plan';
+import { trackDirectPost, recordDirectPostInPlan } from './marketing-plan';
 
 async function sendTelegramMessage(chatId: number, text: string) {
   const token = process.env.TELEGRAM_BOT_TOKEN!;
@@ -42,7 +42,16 @@ async function processGenerating(job: VideoJob): Promise<void> {
 
   if (job.platform === 'facebook') {
     const result = await postVideoToFacebook(job.caption, uploaded.url);
-    if (result.success && result.postId) await trackDirectPost('facebook', result.postId);
+    if (result.success && result.postId) {
+      await trackDirectPost('facebook', result.postId);
+      await recordDirectPostInPlan({
+        platform: 'facebook',
+        content: job.caption,
+        postUrl: result.url,
+        platformPostId: result.postId,
+        imageNote: 'AI avatar video (HeyGen)',
+      });
+    }
     await updateVideoJob(job.id, {
       status: result.success ? 'posted' : 'failed',
       error: result.success ? null : (result.error ?? 'Unknown error'),
@@ -76,7 +85,16 @@ async function processInstagramContainer(job: VideoJob): Promise<void> {
   }
 
   const published = await publishInstagramContainer(job.ig_container_id);
-  if (published.success && published.postId) await trackDirectPost('instagram', published.postId);
+  if (published.success && published.postId) {
+    await trackDirectPost('instagram', published.postId);
+    await recordDirectPostInPlan({
+      platform: 'instagram',
+      content: job.caption,
+      postUrl: published.url,
+      platformPostId: published.postId,
+      imageNote: 'AI avatar video (HeyGen)',
+    });
+  }
   await updateVideoJob(job.id, {
     status: published.success ? 'posted' : 'failed',
     error: published.success ? null : (published.error ?? 'Unknown error'),
