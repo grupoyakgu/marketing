@@ -60,6 +60,7 @@ import {
   type InteractionPlatform,
 } from '@/lib/interactions';
 import { recordUsage } from '@/lib/token-usage';
+import { isCronEnabled } from '@/lib/cron-settings';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BOT_NAME = 'pepe';
@@ -1305,7 +1306,14 @@ async function chatInner(chatId: number, userMessage: string): Promise<string> {
 
         if (block.name === 'browse_social_search') {
           browseCallCount++;
-          if (browseCallCount > MAX_BROWSE_CALLS_PER_TURN) {
+          // Shares its on/off switch with the "Process Interaction Fetches" cron
+          // (Settings → Crons) -- flipped off 2026-08-13 while LinkedIn/Facebook's
+          // automated login is being blocked, so a direct Telegram ask for a post
+          // doesn't burn more login attempts against a wall known to be up. One
+          // switch controls both the scheduled queue drain and any live request.
+          if (!(await isCronEnabled('process-interaction-fetches'))) {
+            resultContent = 'Interactions discovery (browse_social_search) is temporarily disabled — LinkedIn/Facebook are blocking the automated login used to browse them, and this is paused until that\'s resolved. Don\'t retry; tell the user it\'s paused rather than reporting a login-wall failure.';
+          } else if (browseCallCount > MAX_BROWSE_CALLS_PER_TURN) {
             resultContent = `Browsing budget for this conversation turn is used up (max ${MAX_BROWSE_CALLS_PER_TURN} screenshots) — answer with what you've already seen instead of browsing more; the user can ask you to look at specific other pages in a follow-up message.`;
           } else {
             const input = block.input as { url: string; platform: InteractionPlatform };
