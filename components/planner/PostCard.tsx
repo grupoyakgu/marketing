@@ -1,4 +1,4 @@
-import { Crown } from 'lucide-react';
+import { Crown, Video } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { PlatformBadge } from '@/components/ui/PlatformBadge';
 import type { MarketingPost } from '@/lib/marketing-plan';
@@ -6,6 +6,7 @@ import type { MarketingPost } from '@/lib/marketing-plan';
 const STATUS_TONE: Record<string, 'neutral' | 'positive' | 'negative'> = {
   draft: 'neutral',
   approved: 'neutral',
+  generating: 'neutral',
   posted: 'positive',
   failed: 'negative',
 };
@@ -27,6 +28,11 @@ export function PostCard({
       <div className="mb-2 flex flex-wrap items-center justify-between gap-x-1.5 gap-y-1">
         <div className="flex shrink-0 items-center gap-1.5">
           <PlatformBadge platform={post.platform} />
+          {post.post_type === 'video' && (
+            <span title="AI avatar video" className="text-neutral-400 dark:text-neutral-500">
+              <Video className="h-3.5 w-3.5" />
+            </span>
+          )}
           <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
             {post.scheduled_time.slice(0, 5)}
           </span>
