@@ -14,6 +14,15 @@ export interface MarketingPost {
   status?: string;
   post_url?: string;
   platform_post_id?: string;
+  /** 'video' posts are generated via HeyGen instead of using image_url(s) --
+   * see publishPost, which branches on this at the post's scheduled time. */
+  post_type?: 'standard' | 'video';
+  /** What the HeyGen avatar says — distinct from content, which stays the
+   * platform caption for a video post. Required when post_type is 'video'. */
+  video_script?: string | null;
+  /** Per-post HeyGen avatar override. Falls back to HEYGEN_DEFAULT_AVATAR_ID
+   * (via createVideo) when not set. */
+  avatar_id?: string | null;
 }
 
 export async function saveDraftPlan(
@@ -185,7 +194,7 @@ export async function getPostsDueNow(): Promise<MarketingPost[]> {
 
 export async function markPostStatus(
   postId: string,
-  status: 'posted' | 'failed',
+  status: 'posted' | 'failed' | 'generating',
   postUrl?: string,
   platformPostId?: string
 ): Promise<void> {
@@ -303,7 +312,10 @@ export async function getPostCounts(): Promise<PostCounts> {
   const rows = data ?? [];
   const counts: PostCounts = { total: rows.length, scheduled: 0, published: 0, failed: 0, pending: 0 };
   for (const r of rows) {
-    if (r.status === 'approved') counts.scheduled++;
+    // 'generating' (a video post whose HeyGen render is in flight) counts as
+    // scheduled, same bucket as 'approved' -- it's still on its way out, just
+    // mid-flight rather than waiting for its scheduled time.
+    if (r.status === 'approved' || r.status === 'generating') counts.scheduled++;
     else if (r.status === 'posted') counts.published++;
     else if (r.status === 'failed') counts.failed++;
     else if (r.status === 'draft') counts.pending++;

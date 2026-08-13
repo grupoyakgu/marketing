@@ -118,6 +118,9 @@ function truncateSafely(text: string, maxLen: number): string {
 // date/range).
 function formatPlanPosts(posts: MarketingPost[]): string {
   return posts.map((p, i) => {
+    if (p.post_type === 'video') {
+      return `${i + 1}. [${p.platform}] [video] ${p.scheduled_date} ${p.scheduled_time} [${p.status}]\n   ID: ${p.id}\n   Avatar: ${p.avatar_id ?? '(default)'}\n   Script: ${p.video_script}\n   Caption: ${p.content}`;
+    }
     const images = (p.image_urls?.length ? p.image_urls : p.image_url ? [p.image_url] : []);
     const imageLine = images.length === 0
       ? '(none selected — the user may have picked or changed this in the dashboard planner)'
@@ -269,6 +272,15 @@ The user can ask to delete/remove/cancel a post, move/reschedule its date or tim
 
 Once you've found the post_id and current content, call reject_post to delete it, reschedule_post to change its date/time (pass only the field(s) actually changing), or edit_post to change its text — for edit_post, apply the requested change to the existing content yourself and pass the FULL new caption, not just a diff or instruction. All three only work on posts that haven't been published yet (draft, approved, or failed) — they'll fail with a clear reason if the post has already gone out, since a published post's record is tracked history and can't be changed. If that happens, tell the user it's already live and can't be modified.
 
+## VIDEO POSTS IN THE WEEKLY PLAN
+A post in save_marketing_plan can be a HeyGen avatar video instead of a text/image post — set post_type to "video" on that post instead of calling create_video directly. Only do this when the user explicitly asks for a video post in the plan, exactly like create_video itself — never add one proactively as part of routine planning. Requirements specific to a video post:
+- platform must be instagram or facebook — HeyGen video posting doesn't support LinkedIn, so never schedule a video post there.
+- video_script is required and is what the avatar actually says — content is still the platform caption, a separate piece of text, not the script.
+- avatar_id is optional per post — use list_video_avatars if the user wants a specific look for that post; otherwise it uses the account's default avatar. The voice is always the account default (there's no per-post voice override).
+- Skip image_urls/image_note entirely for a video post — there's no image to pick.
+
+A scheduled video post goes through the exact same draft → approve → posted flow as any other post. The only difference is timing: at its scheduled time, the post-schedule cron starts HeyGen generation and moves the post to a 'generating' status rather than posting immediately (generation takes minutes) — you'll see that status in get_weekly_plan/get_plan_by_date while it renders, then 'posted' once it's actually live, same as create_video's own background flow. If a video post ends up 'failed' (HeyGen generation, upload, or the actual platform post itself failed), retry_post re-triggers a fresh HeyGen generation for it, same as for any other failed post.
+
 ## COMPARING TWO POSTS
 If the user asks to compare two posts (e.g. "how did post 3 do vs post 5", "compare Monday's LinkedIn post with last week's"), find each one's internal post_id via get_weekly_plan or get_plan_by_date, then call compare_posts with post_id_a and post_id_b. It returns each post's platform, schedule, caption preview, and full engagement stats (or "not posted yet" if either hasn't gone out). Narrate the comparison yourself — call out which one performed better and on what, don't just repeat the raw numbers back.
 
@@ -282,7 +294,7 @@ For "which post got the most likes", "top 5 posts by impressions", "what's our b
 - post_instagram_story, post_facebook_story — publish to Stories (24h, ephemeral, image only, no caption)
 - browse_drive_images — list Cloudinary images (call ONCE per plan)
 - find_named_image — look up an image by the custom name the user gave it after uploading it to you
-- save_marketing_plan, get_weekly_plan, get_plan_by_date, approve_posts, reject_post, reschedule_post, retry_post, edit_post — plan management. get_plan_by_date looks up a specific date or range instead of a Monday-aligned week.
+- save_marketing_plan, get_weekly_plan, get_plan_by_date, approve_posts, reject_post, reschedule_post, retry_post, edit_post — plan management. get_plan_by_date looks up a specific date or range instead of a Monday-aligned week. save_marketing_plan can also schedule a HeyGen video post (post_type "video") — see VIDEO POSTS IN THE WEEKLY PLAN.
 - compare_posts — compare engagement between two named posts
 - get_top_posts — rank all published posts by likes/comments/shares/impressions/reach/engagement_rate
 - reply_to_comment — reply to a specific comment
@@ -402,16 +414,19 @@ const tools: Anthropic.Tool[] = [
           items: {
             type: 'object',
             properties: {
-              platform: { type: 'string', enum: ['linkedin', 'instagram', 'facebook'] },
+              platform: { type: 'string', enum: ['linkedin', 'instagram', 'facebook'], description: 'A video post (post_type "video") only supports instagram or facebook, never linkedin.' },
               scheduled_date: { type: 'string' },
               scheduled_time: { type: 'string' },
-              content: { type: 'string' },
-              image_note: { type: 'string', description: 'Human-readable label for the image, e.g. "Nervión skyline at dusk".' },
+              content: { type: 'string', description: 'The platform caption. For a video post this is still the caption, not what the avatar says (see video_script).' },
+              image_note: { type: 'string', description: 'Human-readable label for the image, e.g. "Nervión skyline at dusk". Not used for a video post.' },
               image_urls: {
                 type: 'array',
                 items: { type: 'string' },
-                description: 'Exact URL(s) of the chosen image(s) from browse_drive_images. One image is the default; only include multiple if the user specifically asked for a carousel/multi-image post.',
+                description: 'Exact URL(s) of the chosen image(s) from browse_drive_images. One image is the default; only include multiple if the user specifically asked for a carousel/multi-image post. Not used for a video post.',
               },
+              post_type: { type: 'string', enum: ['standard', 'video'], description: 'Omit or "standard" for a normal text/image post. Set "video" to schedule a HeyGen avatar video instead — requires video_script, and platform must be instagram or facebook.' },
+              video_script: { type: 'string', description: 'Required when post_type is "video" — what the avatar says. This is separate from content, which stays the caption.' },
+              avatar_id: { type: 'string', description: 'Optional HeyGen avatar override for this video post — use list_video_avatars to pick one. Falls back to the account default when omitted. Ignored for a standard post.' },
             },
             required: ['platform', 'scheduled_date', 'scheduled_time', 'content'],
           },
@@ -571,7 +586,7 @@ const tools: Anthropic.Tool[] = [
   {
     name: 'create_video',
     description:
-      'Generates an AI avatar video from a text script via HeyGen, then automatically uploads it to Cloudinary and posts it to Instagram or Facebook once ready. Generation and posting run in the background and can take several minutes — this call only starts the process and returns immediately; the user gets a Telegram message here when it actually finishes (posted or failed), so tell them it is running rather than that it is done. Uses a fixed default avatar/voice unless avatar_id/voice_id are given — use list_video_avatars first if the user wants to pick a specific one.',
+      'Generates an AI avatar video from a text script via HeyGen right now, then automatically uploads it to Cloudinary and posts it to Instagram or Facebook once ready. Generation and posting run in the background and can take several minutes — this call only starts the process and returns immediately; the user gets a Telegram message here when it actually finishes (posted or failed), so tell them it is running rather than that it is done. Uses a fixed default avatar/voice unless avatar_id/voice_id are given — use list_video_avatars first if the user wants to pick a specific one. For a video the user wants scheduled into the weekly plan instead of posted immediately, use save_marketing_plan with post_type "video" instead of this tool.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -951,12 +966,32 @@ async function chatInner(chatId: number, userMessage: string): Promise<string> {
         if (block.name === 'save_marketing_plan') {
           const input = block.input as {
             week_start: string;
-            posts: Array<{ platform: 'linkedin' | 'instagram' | 'facebook'; scheduled_date: string; scheduled_time: string; content: string; image_note?: string; image_urls?: string[] }>;
+            posts: Array<{
+              platform: 'linkedin' | 'instagram' | 'facebook';
+              scheduled_date: string;
+              scheduled_time: string;
+              content: string;
+              image_note?: string;
+              image_urls?: string[];
+              post_type?: 'standard' | 'video';
+              video_script?: string;
+              avatar_id?: string;
+            }>;
           };
           try {
+            for (const [i, p] of input.posts.entries()) {
+              if (p.post_type === 'video') {
+                if (p.platform === 'linkedin') {
+                  throw new Error(`Post ${i + 1}: video posts only support instagram or facebook, not linkedin.`);
+                }
+                if (!p.video_script) {
+                  throw new Error(`Post ${i + 1}: post_type "video" requires video_script.`);
+                }
+              }
+            }
             const saved = await saveDraftPlan(input.posts.map(p => ({ ...p, week_start: input.week_start })));
             resultContent = `Saved ${saved.length} posts as drafts for week of ${input.week_start}.\nPost IDs:\n${
-              saved.map((p, i) => `${i + 1}. [${p.platform}] ${p.scheduled_date} ${p.scheduled_time} — ID: ${p.id}`).join('\n')
+              saved.map((p, i) => `${i + 1}. [${p.platform}]${p.post_type === 'video' ? ' [video]' : ''} ${p.scheduled_date} ${p.scheduled_time} — ID: ${p.id}`).join('\n')
             }`;
           } catch (err) {
             resultContent = `Failed to save plan: ${err instanceof Error ? err.message : String(err)}`;
@@ -1037,7 +1072,9 @@ async function chatInner(chatId: number, userMessage: string): Promise<string> {
           const input = block.input as { post_id: string };
           try {
             const result = await publishPost(input.post_id);
-            resultContent = result.success
+            resultContent = result.pending
+              ? `Video generation started for post ${input.post_id} — it'll post automatically once ready, and you'll get a message here when it does.`
+              : result.success
               ? `Post ${input.post_id} published successfully.${result.url ? ` URL: ${result.url}` : ''}`
               : `Failed: ${result.error}`;
           } catch (err) {

@@ -33,7 +33,9 @@ export async function GET(req: Request) {
 
   for (const post of posts) {
     const result = await publishPost(post.id!);
-    if (result.success) {
+    if (result.pending) {
+      lines.push(`🎬 ${post.platform} — video generating, will post automatically once ready`);
+    } else if (result.success) {
       const urlLine = result.url ? `\n${result.url}` : '';
       lines.push(`✅ ${post.platform}${urlLine}`);
     } else {

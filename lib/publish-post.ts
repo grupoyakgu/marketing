@@ -1,12 +1,18 @@
-import { getPostById, markPostStatus } from './marketing-plan';
+import { getPostById, markPostStatus, getMostRecentPepeChatId } from './marketing-plan';
 import { postToLinkedIn } from './linkedin-poster';
 import { postToFacebook, postToInstagram } from './meta-poster';
 import { listCloudinaryImages } from './cloudinary';
+import { createVideo } from './heygen';
+import { createVideoJob } from './video-jobs';
 
 export interface PublishResult {
   success: boolean;
   url?: string;
   error?: string;
+  /** True when "success" only means a background job was started (video
+   * generation) rather than the post actually being live yet -- callers
+   * should say so rather than reporting it as posted. */
+  pending?: boolean;
 }
 
 /** Publishes an existing marketing_plan post right now, reusing whatever
@@ -30,6 +36,43 @@ export async function publishPost(postId: string): Promise<PublishResult> {
       success: false,
       error: `This post is still '${post.status}' -- only approved or previously-failed posts can be published. Approve it first.`,
     };
+  }
+
+  if (post.post_type === 'video') {
+    if (post.platform === 'linkedin') {
+      await markPostStatus(post.id!, 'failed');
+      return { success: false, error: 'HeyGen video posts only support Instagram or Facebook, not LinkedIn.' };
+    }
+    if (!post.video_script) {
+      await markPostStatus(post.id!, 'failed');
+      return { success: false, error: 'This video post has no video_script to generate from.' };
+    }
+
+    const created = await createVideo(post.video_script, post.avatar_id ?? undefined);
+    if (created.error || !created.videoId) {
+      const error = created.error ?? 'HeyGen did not return a video_id.';
+      console.error(`[publishPost] video generation failed for post ${post.id}: ${error}`);
+      await markPostStatus(post.id!, 'failed');
+      return { success: false, error };
+    }
+
+    // Generation and posting happen in the background (process-video-jobs.ts,
+    // ticked by the process-video-jobs cron) -- this call only starts it.
+    // Status goes to 'generating' rather than back to 'approved' so
+    // getPostsDueNow doesn't pick the same post up again next tick while
+    // it's still rendering; process-video-jobs.ts moves it on to 'posted' or
+    // 'failed' once the job actually finishes.
+    const chatId = await getMostRecentPepeChatId();
+    await createVideoJob({
+      chatId,
+      platform: post.platform,
+      caption: post.content,
+      heygenVideoId: created.videoId,
+      planPostId: post.id,
+      avatarId: post.avatar_id ?? null,
+    });
+    await markPostStatus(post.id!, 'generating');
+    return { success: true, pending: true };
   }
 
   let imageUrls = (post.image_urls ?? []).filter(Boolean);
