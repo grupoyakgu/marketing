@@ -36,6 +36,7 @@ interface PostEngagementStats {
 
 const PLATFORMS: Array<'linkedin' | 'instagram' | 'facebook'> = ['linkedin', 'instagram', 'facebook'];
 const IMAGES_PER_PAGE = 20;
+const AVATARS_PER_PAGE = 12;
 
 export function PostEditor({
   post,
@@ -157,6 +158,12 @@ export function PostEditor({
   }
 
   if (!post) return null;
+
+  // Only resolved once the avatar lists have actually loaded (gated on
+  // editable, same as the picker below) -- for an already-posted/failed/
+  // generating post we never fetch them, so the preview falls back to
+  // showing the bare avatar_id instead of pretending to have an image.
+  const selectedAvatar = [...(myAvatars ?? []), ...(publicAvatars ?? [])].find(a => a.avatarId === avatarId);
 
   async function handleSave() {
     setSaving(true);
@@ -337,10 +344,27 @@ export function PostEditor({
         )}
 
         {post.post_type === 'video' ? (
-          <div className="mb-4 flex h-40 w-full flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-neutral-200 text-neutral-400 dark:border-neutral-800 dark:text-neutral-600">
-            <Video className="h-5 w-5" />
-            <span className="text-xs">AI avatar video (HeyGen)</span>
-          </div>
+          selectedAvatar?.previewImageUrl ? (
+            <div className="relative mb-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={selectedAvatar.previewImageUrl} alt={selectedAvatar.name} className="h-40 w-full rounded-xl object-cover" />
+              <span className="absolute inset-x-0 bottom-0 flex items-center gap-1 rounded-b-xl bg-black/50 px-2 py-1 text-xs text-white">
+                <Video className="h-3 w-3" />
+                {selectedAvatar.name}
+              </span>
+            </div>
+          ) : (
+            <div className="mb-4 flex h-40 w-full flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-neutral-200 text-neutral-400 dark:border-neutral-800 dark:text-neutral-600">
+              <Video className="h-5 w-5" />
+              <span className="text-xs">
+                {avatarId
+                  ? loadingAvatars
+                    ? 'Loading avatar preview…'
+                    : `Avatar: ${avatarId}`
+                  : 'AI avatar video (HeyGen) — account default avatar'}
+              </span>
+            </div>
+          )
         ) : imageUrls.length === 1 ? (
           <div className="relative mb-4">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -665,6 +689,17 @@ function AvatarGroupPicker({
   onSelect: (id: string) => void;
   emptyText: string;
 }) {
+  const [page, setPage] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(avatars.length / AVATARS_PER_PAGE));
+  // The public HeyGen library alone can run into the hundreds -- there's no
+  // page/limit query param on their end to ask for just one page (GET
+  // /v2/avatars takes no parameters), so the underlying fetch always pulls
+  // the full metadata list. What this actually saves is the expensive part:
+  // only the current page's <img> tags exist in the DOM, so the browser
+  // never requests preview images for avatars that aren't shown yet.
+  const clampedPage = Math.min(page, totalPages - 1);
+  const pageAvatars = avatars.slice(clampedPage * AVATARS_PER_PAGE, clampedPage * AVATARS_PER_PAGE + AVATARS_PER_PAGE);
+
   return (
     <div>
       <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-neutral-400">{label}</p>
@@ -672,7 +707,7 @@ function AvatarGroupPicker({
         <p className="text-xs text-neutral-400">{emptyText}</p>
       ) : (
         <div className="grid grid-cols-3 gap-2">
-          {avatars.map(a => (
+          {pageAvatars.map(a => (
             <div key={a.avatarId} className="relative">
               {a.previewImageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -708,6 +743,31 @@ function AvatarGroupPicker({
               )}
             </div>
           ))}
+        </div>
+      )}
+      {totalPages > 1 && (
+        <div className="mt-2 flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400">
+          <button
+            type="button"
+            onClick={() => setPage(p => Math.max(0, p - 1))}
+            disabled={clampedPage === 0}
+            className="flex items-center gap-1 rounded-lg px-2 py-1 disabled:opacity-40 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+            Prev
+          </button>
+          <span>
+            {clampedPage * AVATARS_PER_PAGE + 1}–{Math.min((clampedPage + 1) * AVATARS_PER_PAGE, avatars.length)} of {avatars.length}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+            disabled={clampedPage >= totalPages - 1}
+            className="flex items-center gap-1 rounded-lg px-2 py-1 disabled:opacity-40 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+          >
+            Next
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
         </div>
       )}
     </div>
