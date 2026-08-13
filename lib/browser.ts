@@ -100,7 +100,19 @@ async function createBrowserbaseSession(): Promise<string> {
   const res = await fetch(`${BROWSERBASE_API}/sessions`, {
     method: 'POST',
     headers: { 'X-BB-API-Key': apiKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectId }),
+    // proxies: true routes the session through Browserbase's own proxy
+    // network instead of Vercel's serverless egress IP -- a plain, unproxied
+    // datacenter IP is a well-known trigger for LinkedIn/Facebook/Instagram
+    // serving a login page that never actually authenticates (confirmed live
+    // 2026-08-13: every attempt landed back on a real login page with no
+    // error, even with correct credentials -- classic IP-reputation
+    // blocking, not a selector or credentials problem). Documented
+    // Browserbase session option, not verified live -- this sandbox's
+    // network egress can't reach api.browserbase.com to confirm the response
+    // shape or that this actually clears the block; if login still fails
+    // after this, the next thing to check is whether the plan tier includes
+    // proxy/stealth features at all.
+    body: JSON.stringify({ projectId, proxies: true }),
   });
   if (!res.ok) {
     const body = await res.text();
