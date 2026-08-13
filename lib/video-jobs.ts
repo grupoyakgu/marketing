@@ -11,6 +11,12 @@ export interface VideoJob {
   status: 'generating' | 'processing_ig' | 'posted' | 'failed';
   error: string | null;
   post_url: string | null;
+  /** Set when this job came from a scheduled marketing_plan video post
+   * (publishPost) rather than an ad-hoc create_video call -- lets
+   * process-video-jobs.ts update that specific plan post's status instead of
+   * only recording a standalone tracked_posts/marketing_plan entry. */
+  plan_post_id: string | null;
+  avatar_id: string | null;
 }
 
 export async function createVideoJob(fields: {
@@ -18,6 +24,8 @@ export async function createVideoJob(fields: {
   platform: 'instagram' | 'facebook';
   caption: string;
   heygenVideoId: string;
+  planPostId?: string | null;
+  avatarId?: string | null;
 }): Promise<VideoJob> {
   const { data, error } = await supabase
     .from('video_jobs')
@@ -26,6 +34,8 @@ export async function createVideoJob(fields: {
       platform: fields.platform,
       caption: fields.caption,
       heygen_video_id: fields.heygenVideoId,
+      plan_post_id: fields.planPostId ?? null,
+      avatar_id: fields.avatarId ?? null,
       status: 'generating',
     })
     .select()

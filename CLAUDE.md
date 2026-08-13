@@ -31,6 +31,10 @@
 - /lib/interactions.ts              → "Interactions" feature — topics/settings/posts CRUD, per-platform daily-target backfill trigger (app/(dashboard)/interactions)
 - /lib/interaction-fetch-queue.ts + /lib/process-interaction-fetches.ts → queue of "find one more post" requests Pepe fulfills via browse_social_search, drained by /api/cron/process-interaction-fetches every 5 minutes
 - /lib/social-login.ts              → logs a Puppeteer page into LinkedIn/Instagram/Facebook (SOCIAL_LOGIN_USERNAME/PASSWORD) and persists the session's cookies in social_login_sessions, reusing them across calls instead of logging in fresh each time — used by browse_social_search, since these platforms show a login wall to anonymous sessions
+- /lib/heygen.ts                    → HeyGen API wrapper (list avatars/voices, start video generation, poll status)
+- /lib/video-jobs.ts + /lib/process-video-jobs.ts → video_jobs state machine (generating → processing_ig → posted/failed) ticked by /api/cron/process-video-jobs every 5 minutes; drives both Pepe's immediate create_video tool and a scheduled marketing_plan video post (see publish-post.ts)
+- /lib/publish-post.ts              → single dispatch used by the post-schedule cron, the dashboard's manual "Retry", and Pepe's retry_post — branches on post_type: 'standard' posts go straight to LinkedIn/Facebook/Instagram, 'video' posts kick off HeyGen generation and hand off to process-video-jobs.ts
+- /lib/marketing-plan.ts            → marketing_plan (the weekly Planner) CRUD — draft → approved → posted/failed/generating
 - /supabase/migrations/             → SQL migrations
 
 ## Environment Variables
@@ -64,6 +68,9 @@
 - SOCIAL_LOGIN_USERNAME     # shared login for the LinkedIn/Instagram/Facebook accounts browse_social_search authenticates as (see lib/social-login.ts) — same credentials across all three
 - SOCIAL_LOGIN_PASSWORD     # password for that same shared login
 - SANTI_VERCEL_TOKEN        # Vercel Access Token scoped to this team, used by list_deployments/get_deployment_logs
+- HEYGEN_API_KEY            # HeyGen API key used by lib/heygen.ts (list avatars/voices, generate videos, poll status)
+- HEYGEN_DEFAULT_AVATAR_ID  # fallback avatar for create_video / a scheduled video post when no avatar_id is given
+- HEYGEN_DEFAULT_VOICE_ID   # fallback voice for create_video / a scheduled video post — there is no per-post voice override, only per-post avatar_id
 
 ## Telegram Commands
 - /post linkedin <message>              — text post
