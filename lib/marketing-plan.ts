@@ -113,6 +113,8 @@ export interface PostUpdate {
   platform?: 'linkedin' | 'instagram' | 'facebook';
   image_url?: string | null;
   image_urls?: string[] | null;
+  video_script?: string | null;
+  avatar_id?: string | null;
 }
 
 /** Monday (UTC calendar date) of the week containing the given YYYY-MM-DD

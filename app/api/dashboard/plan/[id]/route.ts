@@ -12,6 +12,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
   if (typeof body.image_url === 'string' || body.image_url === null) fields.image_url = body.image_url;
   if (Array.isArray(body.image_urls) || body.image_urls === null) fields.image_urls = body.image_urls;
+  if (typeof body.video_script === 'string' || body.video_script === null) fields.video_script = body.video_script;
+  if (typeof body.avatar_id === 'string' || body.avatar_id === null) fields.avatar_id = body.avatar_id;
 
   try {
     const post = await updatePost(params.id, fields);

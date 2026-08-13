@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, Check, Trash2, ImageIcon, ChevronRight, ChevronDown, ChevronLeft, FolderClosed, RotateCw, Copy, CopyCheck, ThumbsUp, MessageCircle, Share2, Eye, TrendingUp, type LucideIcon } from 'lucide-react';
+import { X, Check, Trash2, ImageIcon, ChevronRight, ChevronDown, ChevronLeft, FolderClosed, RotateCw, Copy, CopyCheck, ThumbsUp, MessageCircle, Share2, Eye, TrendingUp, Video, type LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { PlatformBadge } from '@/components/ui/PlatformBadge';
@@ -17,6 +17,12 @@ interface CloudinaryImage {
 interface CloudinaryFolderImages {
   folder: string;
   images: CloudinaryImage[];
+}
+
+interface HeyGenAvatar {
+  avatarId: string;
+  name: string;
+  previewImageUrl: string | null;
 }
 
 interface PostEngagementStats {
@@ -47,12 +53,17 @@ export function PostEditor({
   const [scheduledTime, setScheduledTime] = useState('');
   const [platform, setPlatform] = useState<'linkedin' | 'instagram' | 'facebook'>('linkedin');
   const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [videoScript, setVideoScript] = useState('');
+  const [avatarId, setAvatarId] = useState<string | null>(null);
+  const [avatars, setAvatars] = useState<HeyGenAvatar[] | null>(null);
+  const [loadingAvatars, setLoadingAvatars] = useState(false);
   const [folders, setFolders] = useState<CloudinaryFolderImages[] | null>(null);
   const [reloadingFolders, setReloadingFolders] = useState(false);
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
   const [folderPage, setFolderPage] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
   const [savingImage, setSavingImage] = useState(false);
+  const [savingAvatar, setSavingAvatar] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [idCopied, setIdCopied] = useState(false);
   const [engagement, setEngagement] = useState<PostEngagementStats | null>(null);
@@ -68,6 +79,8 @@ export function PostEditor({
     setScheduledTime(post.scheduled_time.slice(0, 5));
     setPlatform(post.platform);
     setImageUrls(post.image_urls?.length ? post.image_urls : post.image_url ? [post.image_url] : []);
+    setVideoScript(post.video_script ?? '');
+    setAvatarId(post.avatar_id ?? null);
     setError(null);
     setIdCopied(false);
     setEngagement(null);
@@ -88,12 +101,22 @@ export function PostEditor({
   }, [post]);
 
   useEffect(() => {
-    if (!post || !editable || folders !== null) return;
+    if (!post || !editable || post.post_type !== 'standard' || folders !== null) return;
     fetch('/api/dashboard/images')
       .then(res => res.json())
       .then(body => setFolders(body.folders ?? []))
       .catch(() => setFolders([]));
   }, [post, editable, folders]);
+
+  useEffect(() => {
+    if (!post || !editable || post.post_type !== 'video' || avatars !== null) return;
+    setLoadingAvatars(true);
+    fetch('/api/dashboard/heygen/avatars')
+      .then(res => res.json())
+      .then(body => setAvatars(body.avatars ?? []))
+      .catch(() => setAvatars([]))
+      .finally(() => setLoadingAvatars(false));
+  }, [post, editable, avatars]);
 
   async function reloadFolders() {
     setReloadingFolders(true);
@@ -132,10 +155,16 @@ export function PostEditor({
     setSaving(true);
     setError(null);
     try {
+      const body: Record<string, unknown> = { content, scheduled_date: scheduledDate, scheduled_time: scheduledTime, platform };
+      if (post!.post_type === 'video') {
+        body.video_script = videoScript;
+      } else {
+        body.image_urls = imageUrls;
+      }
       const res = await fetch(`/api/dashboard/plan/${post!.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content, scheduled_date: scheduledDate, scheduled_time: scheduledTime, platform, image_urls: imageUrls }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Failed to save.');
       onSaved();
@@ -172,6 +201,32 @@ export function PostEditor({
       setError(err instanceof Error ? err.message : 'Failed to save image.');
     } finally {
       setSavingImage(false);
+    }
+  }
+
+  // Same immediate-save pattern as toggleImage — a different look picked and
+  // then the panel closed without hitting Save shouldn't silently discard it.
+  // Unlike images, an avatar is a single choice, not a set: picking one always
+  // replaces the previous choice rather than toggling it off.
+  async function selectAvatar(id: string) {
+    const previous = avatarId;
+    setAvatarId(id);
+    setSavingAvatar(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/dashboard/plan/${post!.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatar_id: id }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Failed to save avatar.');
+      const body = await res.json();
+      onPostUpdated(body.post);
+    } catch (err) {
+      setAvatarId(previous);
+      setError(err instanceof Error ? err.message : 'Failed to save avatar.');
+    } finally {
+      setSavingAvatar(false);
     }
   }
 
@@ -218,6 +273,12 @@ export function PostEditor({
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <PlatformBadge platform={post.platform} size="md" />
+            {post.post_type === 'video' && (
+              <span title="AI avatar video" className="flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
+                <Video className="h-3 w-3" />
+                Video
+              </span>
+            )}
             <h2 className="text-lg font-semibold text-neutral-900 dark:text-white">Edit post</h2>
           </div>
           <button onClick={onClose} className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800">
@@ -227,8 +288,12 @@ export function PostEditor({
 
         {!editable && (
           <div className="mb-4 rounded-xl bg-neutral-100 px-3 py-2 text-sm text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
-            This post is <Badge tone={post.status === 'posted' ? 'positive' : 'negative'}>{post.status}</Badge> and can no
-            longer be edited.
+            This post is{' '}
+            <Badge tone={post.status === 'posted' ? 'positive' : post.status === 'generating' ? 'neutral' : 'negative'}>
+              {post.status}
+            </Badge>{' '}
+            and can no longer be edited.
+            {post.status === 'generating' && ' The video is rendering and will post automatically once ready.'}
             {post.post_url && (
               <a href={post.post_url} target="_blank" rel="noreferrer" className="ml-1 underline">
                 View live
@@ -264,7 +329,12 @@ export function PostEditor({
           </div>
         )}
 
-        {imageUrls.length === 1 ? (
+        {post.post_type === 'video' ? (
+          <div className="mb-4 flex h-40 w-full flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-neutral-200 text-neutral-400 dark:border-neutral-800 dark:text-neutral-600">
+            <Video className="h-5 w-5" />
+            <span className="text-xs">AI avatar video (HeyGen)</span>
+          </div>
+        ) : imageUrls.length === 1 ? (
           <div className="relative mb-4">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={imageUrls[0]} alt="Selected" className="h-40 w-full rounded-xl object-cover" />
@@ -321,6 +391,19 @@ export function PostEditor({
             />
           </div>
 
+          {post.post_type === 'video' && (
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-neutral-500">Video script (what the avatar says)</label>
+              <textarea
+                value={videoScript}
+                onChange={e => setVideoScript(e.target.value)}
+                disabled={!editable}
+                rows={5}
+                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm outline-none focus:border-neutral-400 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-800 dark:text-white"
+              />
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1.5 block text-xs font-medium text-neutral-500">Date</label>
@@ -352,12 +435,15 @@ export function PostEditor({
               disabled={!editable}
               className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm capitalize outline-none focus:border-neutral-400 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-800 dark:text-white"
             >
-              {PLATFORMS.map(p => (
+              {(post.post_type === 'video' ? PLATFORMS.filter(p => p !== 'linkedin') : PLATFORMS).map(p => (
                 <option key={p} value={p}>
                   {p}
                 </option>
               ))}
             </select>
+            {post.post_type === 'video' && (
+              <p className="mt-1 text-xs text-neutral-400">Video posts only support Instagram or Facebook.</p>
+            )}
             <button
               type="button"
               onClick={copyPostId}
@@ -369,7 +455,61 @@ export function PostEditor({
             </button>
           </div>
 
-          {editable && (
+          {editable && post.post_type === 'video' && (
+            <div>
+              <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-neutral-500">
+                <Video className="h-3.5 w-3.5" />
+                Avatar{savingAvatar && <span className="font-normal text-neutral-400">Saving…</span>}
+              </label>
+              <p className="mb-1.5 text-xs text-neutral-400">Click a look to use it for this post. Leave unset to use the account default.</p>
+              {loadingAvatars ? (
+                <p className="text-xs text-neutral-400">Loading avatars…</p>
+              ) : !avatars || avatars.length === 0 ? (
+                <p className="text-xs text-neutral-400">No avatars found on the HeyGen account.</p>
+              ) : (
+                <div className="grid grid-cols-3 gap-2">
+                  {avatars.map(a => (
+                    <div key={a.avatarId} className="relative">
+                      {a.previewImageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={a.previewImageUrl}
+                          alt={a.name}
+                          title={a.name}
+                          onClick={() => selectAvatar(a.avatarId)}
+                          className={cn(
+                            savingAvatar && 'pointer-events-none opacity-60',
+                            'aspect-square w-full cursor-pointer rounded-lg object-cover ring-2 ring-transparent transition hover:opacity-80',
+                            avatarId === a.avatarId && 'ring-neutral-900 dark:ring-white'
+                          )}
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => selectAvatar(a.avatarId)}
+                          disabled={savingAvatar}
+                          title={a.name}
+                          className={cn(
+                            'flex aspect-square w-full items-center justify-center rounded-lg border border-neutral-200 bg-neutral-50 text-center text-[10px] text-neutral-500 ring-2 ring-transparent transition hover:opacity-80 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-800',
+                            avatarId === a.avatarId && 'ring-neutral-900 dark:ring-white'
+                          )}
+                        >
+                          {a.name}
+                        </button>
+                      )}
+                      {avatarId === a.avatarId && (
+                        <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-neutral-900 text-white dark:bg-white dark:text-neutral-900">
+                          <Check className="h-2.5 w-2.5" />
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {editable && post.post_type !== 'video' && (
             <div>
               <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-neutral-500">
                 <ImageIcon className="h-3.5 w-3.5" />
