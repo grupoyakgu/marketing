@@ -43,7 +43,7 @@ import {
 } from '@/lib/marketing-plan';
 import { searchHashtag, getTrackedHashtagStats, addTrackedHashtag } from '@/lib/instagram-hashtags';
 import { publishPost } from '@/lib/publish-post';
-import { createVideo, listAvatars, listVoices } from '@/lib/heygen';
+import { createVideo, listAvatars, listMyAvatars, listVoices, type HeyGenAvatar } from '@/lib/heygen';
 import { createVideoJob } from '@/lib/video-jobs';
 import { getLandingCopyOrThrow, updateLandingCopy, type EditableLandingCopy } from '@/lib/landing-copy';
 import type { Locale } from '@/app/invest/[locale]/copy';
@@ -601,7 +601,7 @@ const tools: Anthropic.Tool[] = [
   },
   {
     name: 'list_video_avatars',
-    description: 'Lists available HeyGen avatars and voices — use when the user wants to pick one for create_video instead of using the default.',
+    description: 'Lists available HeyGen avatars and voices — use when the user wants to pick one for create_video or a scheduled video post instead of using the default. Returns two avatar sections: "My Avatars" (custom looks created on this HeyGen account) and "Public Avatars" (HeyGen\'s stock library) — either kind\'s id works as avatar_id.',
     input_schema: { type: 'object' as const, properties: {}, required: [] },
   },
   {
@@ -1120,10 +1120,11 @@ async function chatInner(chatId: number, userMessage: string): Promise<string> {
 
         if (block.name === 'list_video_avatars') {
           try {
-            const [avatars, voices] = await Promise.all([listAvatars(), listVoices()]);
-            const avatarList = avatars.slice(0, 20).map(a => `- ${a.name} (id: ${a.avatarId})`).join('\n') || '(none found)';
+            const [myAvatars, publicAvatars, voices] = await Promise.all([listMyAvatars(), listAvatars(), listVoices()]);
+            const formatAvatars = (list: HeyGenAvatar[]) =>
+              list.slice(0, 20).map(a => `- ${a.name} (id: ${a.avatarId})`).join('\n') || '(none found)';
             const voiceList = voices.slice(0, 20).map(v => `- ${v.name}${v.language ? ` [${v.language}]` : ''} (id: ${v.voiceId})`).join('\n') || '(none found)';
-            resultContent = `Avatars:\n${avatarList}\n\nVoices:\n${voiceList}`;
+            resultContent = `My Avatars:\n${formatAvatars(myAvatars)}\n\nPublic Avatars:\n${formatAvatars(publicAvatars)}\n\nVoices:\n${voiceList}`;
           } catch (err) {
             resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
           }
