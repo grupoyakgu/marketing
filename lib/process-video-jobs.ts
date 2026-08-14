@@ -75,6 +75,7 @@ async function processGenerating(job: VideoJob): Promise<void> {
           postUrl: result.url,
           platformPostId: result.postId,
           imageNote: 'AI avatar video (HeyGen)',
+          postType: 'video',
         });
       }
     } else {
@@ -126,6 +127,7 @@ async function processInstagramContainer(job: VideoJob): Promise<void> {
         postUrl: published.url,
         platformPostId: published.postId,
         imageNote: 'AI avatar video (HeyGen)',
+        postType: 'video',
       });
     }
   } else {

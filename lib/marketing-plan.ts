@@ -234,6 +234,7 @@ export async function recordDirectPostInPlan(fields: {
   postUrl?: string;
   platformPostId?: string;
   imageNote?: string;
+  postType?: 'standard' | 'video';
 }): Promise<void> {
   const now = new Date();
   const scheduledDate = now.toISOString().split('T')[0];
@@ -245,6 +246,7 @@ export async function recordDirectPostInPlan(fields: {
     scheduled_time: scheduledTime,
     content: fields.content,
     image_note: fields.imageNote,
+    post_type: fields.postType ?? 'standard',
     status: 'posted',
     post_url: fields.postUrl,
     platform_post_id: fields.platformPostId,
