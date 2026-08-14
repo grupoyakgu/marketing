@@ -512,6 +512,7 @@ export interface PostPerformance {
   impressions: number;
   reach: number;
   engagementRate: number;
+  postType?: 'video' | 'standard';
 }
 
 function performanceMetricValue(p: PostPerformance, metric: PerformanceMetric): number {
@@ -533,6 +534,7 @@ interface PostedRow {
   content: string;
   post_url: string | null;
   platform_post_id: string | null;
+  post_type?: 'video' | 'standard';
 }
 
 async function getPostedRows(options: {
@@ -543,7 +545,7 @@ async function getPostedRows(options: {
 } = {}): Promise<PostedRow[]> {
   let query = supabase
     .from('marketing_plan')
-    .select('id, platform, scheduled_date, scheduled_time, content, post_url, platform_post_id')
+    .select('id, platform, scheduled_date, scheduled_time, content, post_url, platform_post_id, post_type')
     .eq('status', 'posted')
     .not('platform_post_id', 'is', null)
     .order('scheduled_date', { ascending: false });
@@ -598,6 +600,7 @@ async function buildPostPerformance(rows: PostedRow[]): Promise<PostPerformance[
         impressions: e.impressions,
         reach: e.reach,
         engagementRate: computeEngagementRate(e),
+        postType: p.post_type,
       };
     })
     .filter((p): p is PostPerformance => p !== null);

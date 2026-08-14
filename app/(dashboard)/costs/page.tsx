@@ -56,8 +56,8 @@ const AGENT_LABELS: Record<AgentName, string> = {
 };
 
 const AGENT_COLORS: Record<AgentName, string> = {
-  pepe: '#ef4444',
-  santi: '#6366f1',
+  pepe: '#6366f1',
+  santi: '#ef4444',
   angeles: '#f59e0b',
 };
 

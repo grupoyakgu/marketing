@@ -192,6 +192,9 @@ export function PerformanceTable({ posts, total }: { posts: RankedPostPerformanc
                 <td className="max-w-xs px-2 py-3 align-top">
                   <div className="flex items-center gap-1.5">
                     <PlatformBadge platform={p.platform} />
+                    {p.postType === 'video' && (
+                      <Video className="h-3 w-3 text-blue-500" title="Video post" />
+                    )}
                     <span className="text-xs text-neutral-400">{formatDate(p.scheduledDate)}</span>
                     {p.postUrl && (
                       <a
