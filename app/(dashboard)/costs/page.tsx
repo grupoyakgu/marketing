@@ -8,7 +8,7 @@ import { KpiCard } from '@/components/ui/KpiCard';
 import { cn } from '@/lib/cn';
 
 type Range = '7d' | '30d' | '90d';
-type AgentName = 'pepe' | 'santi' | 'angeles' | 'abu' | 'leads';
+type AgentName = 'pepe' | 'santi' | 'angeles';
 
 interface AgentUsage {
   agent: AgentName;
@@ -53,16 +53,12 @@ const AGENT_LABELS: Record<AgentName, string> = {
   pepe: 'Pepe',
   santi: 'Santi',
   angeles: 'Angeles',
-  abu: 'Abu',
-  leads: 'Leads (lead extraction)',
 };
 
 const AGENT_COLORS: Record<AgentName, string> = {
-  pepe: '#0A66C2',
+  pepe: '#ef4444',
   santi: '#6366f1',
   angeles: '#f59e0b',
-  abu: '#10b981',
-  leads: '#6b7280',
 };
 
 function formatUsd(value: number): string {
@@ -73,6 +69,26 @@ function formatUsd(value: number): string {
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+function CustomTooltip(props: any) {
+  const { active, payload, label } = props;
+  if (!active || !payload) return null;
+  return (
+    <div className="rounded-lg border border-neutral-200 bg-white p-2 shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
+      <p className="text-xs font-medium text-neutral-900 dark:text-white">{formatDate(label)}</p>
+      {payload.map((entry: any, idx: number) => {
+        const agentKey = entry.dataKey.split('.')[1];
+        const agentLabel = AGENT_LABELS[agentKey as AgentName] || agentKey;
+        return (
+          <p key={idx} className="text-xs text-neutral-700 dark:text-neutral-300">
+            <span style={{ color: entry.color }} className="inline-block mr-1">●</span>
+            {agentLabel}: {formatUsd(entry.value)}
+          </p>
+        );
+      })}
+    </div>
+  );
 }
 
 export default function CostsPage() {
@@ -108,7 +124,7 @@ export default function CostsPage() {
           Costs
         </h1>
         <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-          Claude API token usage and spend, per bot (Pepe, Santi, Angeles, Abu) and the lead-extraction job.
+          Claude API token usage and spend, per bot (Pepe, Santi, Angeles).
         </p>
       </div>
 
@@ -188,13 +204,9 @@ export default function CostsPage() {
                 className="text-neutral-400"
                 tickFormatter={(v: number) => formatUsd(v)}
               />
-              <Tooltip
-                contentStyle={{ borderRadius: 12, border: '1px solid #e5e5e5', fontSize: 13 }}
-                labelFormatter={(label: unknown) => typeof label === 'string' ? formatDate(label) : String(label)}
-                formatter={(value: unknown) => [formatUsd(Number(value ?? 0))]}
-              />
+              <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ paddingTop: '8px' }} />
-              {(['pepe', 'santi', 'angeles', 'abu', 'leads'] as const).map((agent) => (
+              {(['pepe', 'santi', 'angeles'] as const).map((agent) => (
                 <Bar
                   key={agent}
                   dataKey={`byAgent.${agent}`}
