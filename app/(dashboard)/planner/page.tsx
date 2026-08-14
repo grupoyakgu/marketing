@@ -16,7 +16,7 @@ function addDays(dateStr: string, days: number): string {
 }
 
 export default function PlannerPage() {
-  const [weekStart, setWeekStart] = useState(currentWeekMonday);
+  const [weekStart, setWeekStart] = useState(currentWeekMonday());
   const [posts, setPosts] = useState<MarketingPost[] | null>(null);
   const [weeklyLeaders, setWeeklyLeaders] = useState<Partial<Record<'linkedin' | 'instagram' | 'facebook', string>>>({});
   const [error, setError] = useState<string | null>(null);
