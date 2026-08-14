@@ -68,26 +68,37 @@ export interface AgentUsageSummary {
   cacheCreationTokens: number;
   cacheReadTokens: number;
   costUsd: number;
+  avgTokensPerCall: number;
+  cacheReadPct: number;
 }
 
 export interface DailyCostPoint {
   date: string;
+  costUsd: number;
+  byAgent: Record<AgentName, number>;
+}
+
+export interface ModelUsageSummary {
+  model: string;
+  calls: number;
   costUsd: number;
 }
 
 export interface UsageSummary {
   byAgent: AgentUsageSummary[];
   byDay: DailyCostPoint[];
+  byModel: ModelUsageSummary[];
   totalCostUsd: number;
   totalCalls: number;
+  projectedMonthlyCostUsd: number;
 }
 
-/** Aggregates token_usage rows since `since` into per-agent totals and a
- * per-day cost series (UTC calendar days) for the dashboard. */
+/** Aggregates token_usage rows since `since` into per-agent totals, per-day
+ * cost series (UTC calendar days), and per-model breakdown for the dashboard. */
 export async function getUsageSummary(since: Date): Promise<UsageSummary> {
   const { data, error } = await supabase
     .from('token_usage')
-    .select('agent, input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens, cost_usd, created_at')
+    .select('agent, model, input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens, cost_usd, created_at')
     .gte('created_at', since.toISOString());
   if (error) throw new Error(error.message);
 
@@ -103,10 +114,13 @@ export async function getUsageSummary(since: Date): Promise<UsageSummary> {
       cacheCreationTokens: 0,
       cacheReadTokens: 0,
       costUsd: 0,
+      avgTokensPerCall: 0,
+      cacheReadPct: 0,
     });
   }
 
-  const byDayMap = new Map<string, number>();
+  const byDayMap = new Map<string, Map<AgentName, number>>();
+  const byModelMap = new Map<string, { calls: number; costUsd: number }>();
   let totalCostUsd = 0;
 
   for (const row of rows) {
@@ -118,6 +132,8 @@ export async function getUsageSummary(since: Date): Promise<UsageSummary> {
       cacheCreationTokens: 0,
       cacheReadTokens: 0,
       costUsd: 0,
+      avgTokensPerCall: 0,
+      cacheReadPct: 0,
     };
     agentSummary.calls += 1;
     agentSummary.inputTokens += row.input_tokens;
@@ -128,19 +144,63 @@ export async function getUsageSummary(since: Date): Promise<UsageSummary> {
     byAgentMap.set(row.agent, agentSummary);
 
     const day = row.created_at.slice(0, 10);
-    byDayMap.set(day, (byDayMap.get(day) ?? 0) + Number(row.cost_usd));
+    if (!byDayMap.has(day)) byDayMap.set(day, new Map());
+    const dayAgents = byDayMap.get(day)!;
+    dayAgents.set(row.agent as AgentName, (dayAgents.get(row.agent as AgentName) ?? 0) + Number(row.cost_usd));
+
+    const model = row.model || 'unknown';
+    const modelUsage = byModelMap.get(model) ?? { calls: 0, costUsd: 0 };
+    modelUsage.calls += 1;
+    modelUsage.costUsd += Number(row.cost_usd);
+    byModelMap.set(model, modelUsage);
 
     totalCostUsd += Number(row.cost_usd);
   }
 
+  // Compute per-call metrics for each agent
+  for (const agent of byAgentMap.values()) {
+    if (agent.calls > 0) {
+      agent.avgTokensPerCall = Math.round(
+        (agent.inputTokens + agent.outputTokens + agent.cacheCreationTokens + agent.cacheReadTokens) / agent.calls
+      );
+      const totalCacheTokens = agent.cacheCreationTokens + agent.cacheReadTokens;
+      const totalTokens = agent.inputTokens + agent.outputTokens + totalCacheTokens;
+      agent.cacheReadPct = totalTokens > 0 ? Math.round((agent.cacheReadTokens / totalTokens) * 100) : 0;
+    }
+  }
+
   const byDay = Array.from(byDayMap.entries())
-    .map(([date, costUsd]) => ({ date, costUsd }))
+    .map(([date, agentCosts]) => {
+      const byAgent: Record<AgentName, number> = {
+        pepe: 0,
+        santi: 0,
+        angeles: 0,
+        abu: 0,
+        leads: 0,
+      };
+      for (const [agent, cost] of agentCosts) {
+        byAgent[agent] = cost;
+      }
+      return {
+        date,
+        costUsd: Array.from(agentCosts.values()).reduce((a, b) => a + b, 0),
+        byAgent,
+      };
+    })
     .sort((a, b) => a.date.localeCompare(b.date));
+
+  const projectedMonthlyCostUsd = byDay.length > 0 ? (totalCostUsd / byDay.length) * 30 : 0;
+
+  const byModel = Array.from(byModelMap.entries())
+    .map(([model, usage]) => ({ model, ...usage }))
+    .sort((a, b) => b.costUsd - a.costUsd);
 
   return {
     byAgent: Array.from(byAgentMap.values()),
     byDay,
+    byModel,
     totalCostUsd,
     totalCalls: rows.length,
+    projectedMonthlyCostUsd,
   };
 }

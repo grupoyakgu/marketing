@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { DollarSign, Hash, Zap, Calendar } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { DollarSign, Hash, Zap, Calendar, TrendingUp } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell } from 'recharts';
 import { Card } from '@/components/ui/Card';
 import { KpiCard } from '@/components/ui/KpiCard';
 import { cn } from '@/lib/cn';
@@ -18,18 +18,29 @@ interface AgentUsage {
   cacheCreationTokens: number;
   cacheReadTokens: number;
   costUsd: number;
+  avgTokensPerCall: number;
+  cacheReadPct: number;
 }
 
 interface DailyCostPoint {
   date: string;
+  costUsd: number;
+  byAgent: Record<AgentName, number>;
+}
+
+interface ModelUsage {
+  model: string;
+  calls: number;
   costUsd: number;
 }
 
 interface UsageSummary {
   byAgent: AgentUsage[];
   byDay: DailyCostPoint[];
+  byModel: ModelUsage[];
   totalCostUsd: number;
   totalCalls: number;
+  projectedMonthlyCostUsd: number;
 }
 
 const RANGES: { value: Range; label: string }[] = [
@@ -128,12 +139,18 @@ export default function CostsPage() {
 
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-4">
         <KpiCard
           label="Total spend"
           value={data ? formatUsd(data.totalCostUsd) : '—'}
           icon={DollarSign}
-          tooltip="Estimated USD cost across all agents, based on published Claude API list pricing for the model each call used."
+          caption="Estimated USD cost. Based on published Claude API list pricing."
+        />
+        <KpiCard
+          label="Projected monthly"
+          value={data ? formatUsd(data.projectedMonthlyCostUsd) : '—'}
+          icon={TrendingUp}
+          caption={data && data.byDay.length > 0 ? `Average of ${data.byDay.length} days` : undefined}
         />
         <KpiCard
           label="API calls"
@@ -144,19 +161,19 @@ export default function CostsPage() {
           label="Total tokens"
           value={data ? totalTokens : '—'}
           icon={Zap}
-          tooltip="Input + output tokens across all calls (cache read/write tokens shown separately per agent below)."
+          caption="Input + output + cache tokens across all calls."
         />
       </section>
 
       <Card className="space-y-3">
-        <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">Spend over time</h3>
+        <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">Spend over time (by agent)</h3>
         {data === null ? (
           <p className="py-10 text-center text-sm text-neutral-400">Loading…</p>
         ) : data.byDay.length === 0 ? (
           <p className="py-10 text-center text-sm text-neutral-400">No API usage recorded in this period.</p>
         ) : (
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={data.byDay} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={data.byDay} margin={{ top: 16, right: 8, left: -16, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-neutral-100 dark:stroke-neutral-800" />
               <XAxis
                 dataKey="date"
@@ -174,9 +191,19 @@ export default function CostsPage() {
               <Tooltip
                 contentStyle={{ borderRadius: 12, border: '1px solid #e5e5e5', fontSize: 13 }}
                 labelFormatter={(label: unknown) => typeof label === 'string' ? formatDate(label) : String(label)}
-                formatter={(value: unknown) => [formatUsd(Number(value ?? 0)), 'Spend']}
+                formatter={(value: unknown) => [formatUsd(Number(value ?? 0))]}
               />
-              <Bar dataKey="costUsd" name="Spend" fill="#6366f1" radius={[6, 6, 0, 0]} />
+              <Legend wrapperStyle={{ paddingTop: '8px' }} />
+              {(['pepe', 'santi', 'angeles', 'abu', 'leads'] as const).map((agent) => (
+                <Bar
+                  key={agent}
+                  dataKey={`byAgent.${agent}`}
+                  name={AGENT_LABELS[agent]}
+                  fill={AGENT_COLORS[agent]}
+                  radius={[6, 6, 0, 0]}
+                  stackId="cost"
+                />
+              ))}
             </BarChart>
           </ResponsiveContainer>
         )}
@@ -195,6 +222,8 @@ export default function CostsPage() {
                 <tr className="border-b border-neutral-100 text-left text-xs text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
                   <th className="pb-2 font-medium">Agent</th>
                   <th className="pb-2 font-medium">Calls</th>
+                  <th className="pb-2 font-medium">Avg tokens/call</th>
+                  <th className="pb-2 font-medium">Cache read %</th>
                   <th className="pb-2 font-medium">Input tokens</th>
                   <th className="pb-2 font-medium">Output tokens</th>
                   <th className="pb-2 font-medium">Cache write</th>
@@ -218,6 +247,8 @@ export default function CostsPage() {
                         </span>
                       </td>
                       <td className="py-2.5 text-neutral-700 dark:text-neutral-300">{row.calls.toLocaleString()}</td>
+                      <td className="py-2.5 text-neutral-700 dark:text-neutral-300">{row.avgTokensPerCall.toLocaleString()}</td>
+                      <td className="py-2.5 text-neutral-700 dark:text-neutral-300">{row.cacheReadPct}%</td>
                       <td className="py-2.5 text-neutral-700 dark:text-neutral-300">{row.inputTokens.toLocaleString()}</td>
                       <td className="py-2.5 text-neutral-700 dark:text-neutral-300">{row.outputTokens.toLocaleString()}</td>
                       <td className="py-2.5 text-neutral-700 dark:text-neutral-300">{row.cacheCreationTokens.toLocaleString()}</td>
@@ -225,6 +256,40 @@ export default function CostsPage() {
                       <td className="py-2.5 font-medium text-neutral-900 dark:text-white">{formatUsd(row.costUsd)}</td>
                     </tr>
                   ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      <Card className="space-y-3">
+        <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">By model</h3>
+        {data === null ? (
+          <p className="text-sm text-neutral-400">Loading…</p>
+        ) : data.byModel.length === 0 ? (
+          <p className="text-sm text-neutral-400">No API usage recorded in this period.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-neutral-100 text-left text-xs text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
+                  <th className="pb-2 font-medium">Model</th>
+                  <th className="pb-2 font-medium">Calls</th>
+                  <th className="pb-2 font-medium">Spend</th>
+                  <th className="pb-2 font-medium">% of total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-50 dark:divide-neutral-800">
+                {data.byModel.map(row => (
+                  <tr key={row.model}>
+                    <td className="py-2.5 font-medium text-neutral-900 dark:text-white">{row.model}</td>
+                    <td className="py-2.5 text-neutral-700 dark:text-neutral-300">{row.calls.toLocaleString()}</td>
+                    <td className="py-2.5 font-medium text-neutral-900 dark:text-white">{formatUsd(row.costUsd)}</td>
+                    <td className="py-2.5 text-neutral-700 dark:text-neutral-300">
+                      {data.totalCostUsd > 0 ? ((row.costUsd / data.totalCostUsd) * 100).toFixed(1) : '0'}%
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
