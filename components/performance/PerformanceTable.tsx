@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Trophy, ExternalLink, ArrowUp, ArrowDown, ArrowUpDown, Info } from 'lucide-react';
+import { Trophy, ExternalLink, ArrowUp, ArrowDown, ArrowUpDown, Info, Video } from 'lucide-react';
 import { PlatformBadge } from '@/components/ui/PlatformBadge';
 import { cn } from '@/lib/cn';
 import type { RankedPostPerformance } from '@/lib/engagement';
