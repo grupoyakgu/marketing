@@ -56,6 +56,7 @@ export function PostEditor({
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [videoScript, setVideoScript] = useState('');
   const [avatarId, setAvatarId] = useState<string | null>(null);
+  const [motionPrompt, setMotionPrompt] = useState('');
   const [myAvatars, setMyAvatars] = useState<HeyGenAvatar[] | null>(null);
   const [publicAvatars, setPublicAvatars] = useState<HeyGenAvatar[] | null>(null);
   const [loadingAvatars, setLoadingAvatars] = useState(false);
@@ -83,6 +84,7 @@ export function PostEditor({
     setImageUrls(post.image_urls?.length ? post.image_urls : post.image_url ? [post.image_url] : []);
     setVideoScript(post.video_script ?? '');
     setAvatarId(post.avatar_id ?? null);
+    setMotionPrompt(post.motion_prompt ?? '');
     setError(null);
     setIdCopied(false);
     setEngagement(null);
@@ -172,6 +174,7 @@ export function PostEditor({
       const body: Record<string, unknown> = { content, scheduled_date: scheduledDate, scheduled_time: scheduledTime, platform };
       if (post!.post_type === 'video') {
         body.video_script = videoScript;
+        body.motion_prompt = motionPrompt || null;
       } else {
         body.image_urls = imageUrls;
       }
@@ -423,15 +426,28 @@ export function PostEditor({
           </div>
 
           {post.post_type === 'video' && (
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-neutral-500">Video script (what the avatar says)</label>
-              <textarea
-                value={videoScript}
-                onChange={e => setVideoScript(e.target.value)}
-                disabled={!editable}
-                rows={5}
-                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm outline-none focus:border-neutral-400 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-800 dark:text-white"
-              />
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-neutral-500">Video script (what the avatar says)</label>
+                <textarea
+                  value={videoScript}
+                  onChange={e => setVideoScript(e.target.value)}
+                  disabled={!editable}
+                  rows={5}
+                  className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm outline-none focus:border-neutral-400 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-800 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-neutral-500">Motion prompt (optional — e.g. "excited and energetic")</label>
+                <input
+                  type="text"
+                  value={motionPrompt}
+                  onChange={e => setMotionPrompt(e.target.value)}
+                  disabled={!editable}
+                  placeholder="Controls avatar motion and gestures"
+                  className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm outline-none focus:border-neutral-400 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-800 dark:text-white"
+                />
+              </div>
             </div>
           )}
 

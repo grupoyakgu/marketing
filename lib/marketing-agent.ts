@@ -595,6 +595,7 @@ const tools: Anthropic.Tool[] = [
         caption: { type: 'string', description: 'Caption for the resulting post.' },
         avatar_id: { type: 'string', description: 'Optional — overrides the default HeyGen avatar.' },
         voice_id: { type: 'string', description: 'Optional — overrides the default HeyGen voice.' },
+        motion_prompt: { type: 'string', description: 'Optional — controls the avatar\'s motion and gestures, e.g. "excited and energetic", "professional and calm".' },
       },
       required: ['script', 'platform', 'caption'],
     },
@@ -1099,9 +1100,10 @@ async function chatInner(chatId: number, userMessage: string): Promise<string> {
             caption: string;
             avatar_id?: string;
             voice_id?: string;
+            motion_prompt?: string;
           };
           try {
-            const created = await createVideo(input.script, input.avatar_id, input.voice_id);
+            const created = await createVideo(input.script, input.avatar_id, input.voice_id, input.motion_prompt);
             if (created.error || !created.videoId) {
               resultContent = `Failed: ${created.error}`;
             } else {

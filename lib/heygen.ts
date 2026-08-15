@@ -151,7 +151,8 @@ export interface CreateVideoResult {
 export async function createVideo(
   script: string,
   avatarId?: string,
-  voiceId?: string
+  voiceId?: string,
+  motionPrompt?: string
 ): Promise<CreateVideoResult> {
   const apiKey = getApiKey();
   if (!apiKey) return { error: 'HeyGen is not configured (HEYGEN_API_KEY missing).' };
@@ -162,16 +163,19 @@ export async function createVideo(
     return { error: 'No avatar/voice configured — set HEYGEN_DEFAULT_AVATAR_ID and HEYGEN_DEFAULT_VOICE_ID, or pass them explicitly.' };
   }
 
+  const videoInput: Record<string, unknown> = {
+    character: { type: 'avatar', avatar_id: resolvedAvatarId, avatar_style: 'normal' },
+    voice: { type: 'text', input_text: script, voice_id: resolvedVoiceId },
+  };
+  if (motionPrompt) {
+    videoInput.motion_prompt = motionPrompt;
+  }
+
   const res = await fetchHeyGen('/v2/video/generate', {
     method: 'POST',
     headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      video_inputs: [
-        {
-          character: { type: 'avatar', avatar_id: resolvedAvatarId, avatar_style: 'normal' },
-          voice: { type: 'text', input_text: script, voice_id: resolvedVoiceId },
-        },
-      ],
+      video_inputs: [videoInput],
       dimension: { width: 1080, height: 1920 },
     }),
   });

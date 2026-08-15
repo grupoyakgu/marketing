@@ -23,6 +23,9 @@ export interface MarketingPost {
   /** Per-post HeyGen avatar override. Falls back to HEYGEN_DEFAULT_AVATAR_ID
    * (via createVideo) when not set. */
   avatar_id?: string | null;
+  /** Per-post motion prompt for controlling the avatar's motion and gestures.
+   * Optional; defaults to no specific motion prompt when not set. */
+  motion_prompt?: string | null;
 }
 
 export async function saveDraftPlan(
@@ -115,6 +118,7 @@ export interface PostUpdate {
   image_urls?: string[] | null;
   video_script?: string | null;
   avatar_id?: string | null;
+  motion_prompt?: string | null;
 }
 
 /** Monday (UTC calendar date) of the week containing the given YYYY-MM-DD
