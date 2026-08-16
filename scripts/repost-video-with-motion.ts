@@ -1,7 +1,4 @@
 import { createVideo } from '../lib/heygen';
-import { postVideoToInstagram } from '../lib/meta-poster';
-import { uploadVideoFromUrl } from '../lib/cloudinary';
-import { trackDirectPost, recordDirectPostInPlan } from '../lib/marketing-plan';
 
 async function repostVideoWithMotion() {
   const script = `Si inviertes en hostelería, hay una métrica que lo dice casi todo: el RevPAR, el ingreso por habitación disponible.
