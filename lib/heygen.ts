@@ -163,13 +163,22 @@ export async function createVideo(
     return { error: 'No avatar/voice configured — set HEYGEN_DEFAULT_AVATAR_ID and HEYGEN_DEFAULT_VOICE_ID, or pass them explicitly.' };
   }
 
+  // Gestures/body motion (motion_prompt) are an Avatar IV feature and only take
+  // effect on a "talking_photo" character -- HeyGen silently ignores
+  // motion_prompt on the standard "avatar" character type instead of erroring,
+  // which is why earlier attempts produced a video with no motion at all. Our
+  // avatars all come from "My Avatars" (HeyGen photo-avatar/avatar-group looks,
+  // see listMyAvatars below), so their IDs are valid talking_photo_ids -- switch
+  // character type only when a motion prompt is actually requested, so
+  // motion-less calls keep using the previously-working "avatar" shape.
+  const character: Record<string, unknown> = motionPrompt
+    ? { type: 'talking_photo', talking_photo_id: resolvedAvatarId, motion_prompt: motionPrompt, custom_motion_prompt: motionPrompt }
+    : { type: 'avatar', avatar_id: resolvedAvatarId, avatar_style: 'normal' };
+
   const videoInput: Record<string, unknown> = {
-    character: { type: 'avatar', avatar_id: resolvedAvatarId, avatar_style: 'normal' },
+    character,
     voice: { type: 'text', input_text: script, voice_id: resolvedVoiceId },
   };
-  if (motionPrompt) {
-    videoInput.motion_prompt = motionPrompt;
-  }
 
   const requestBody: Record<string, unknown> = {
     video_inputs: [videoInput],
