@@ -21,7 +21,7 @@ Descubre más sobre nuestro próximo proyecto en Sevilla 👉 https://marketing-
   const avatarId = '3258c953a0344467bdbf131c1badbc36';
 
   // Motion prompt for natural hand gestures while speaking
-  const motionPrompt = 'natural hand gestures while speaking expressively, animated movements with hands, speaking naturally with upper body movement';
+  const motionPrompt = 'Natural, relaxed, and animated — move hands, arms, and upper body fluidly and naturally while speaking, as if explaining something to a colleague in person, with all visible body parts in motion rather than staying static.';
 
   console.log('Starting video generation with motion prompt...');
   console.log(`Motion: "${motionPrompt}"`);
