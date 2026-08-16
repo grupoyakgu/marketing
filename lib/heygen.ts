@@ -163,24 +163,23 @@ export async function createVideo(
     return { error: 'No avatar/voice configured — set HEYGEN_DEFAULT_AVATAR_ID and HEYGEN_DEFAULT_VOICE_ID, or pass them explicitly.' };
   }
 
-  // Gestures/body motion (motion_prompt) are an Avatar IV feature and only take
-  // effect on a "talking_photo" character -- HeyGen silently ignores
-  // motion_prompt on the standard "avatar" character type instead of erroring,
-  // which is why earlier attempts produced a video with no motion at all. Our
-  // avatars all come from "My Avatars" (HeyGen photo-avatar/avatar-group looks,
-  // see listMyAvatars below), so their IDs are valid talking_photo_ids -- switch
-  // character type only when a motion prompt is actually requested, so
-  // motion-less calls keep using the previously-working "avatar" shape.
-  // expressiveness controls how much body motion actually renders and
-  // defaults to HeyGen's "low" when omitted -- without it, motion_prompt text
-  // alone can produce visually near-static video even when the prompt itself
-  // is accepted, which matches what we saw on the last two attempts.
+  // Gestures/body motion (motion_prompt) only take effect on a "talking_photo"
+  // character -- HeyGen silently ignores motion_prompt on the standard "avatar"
+  // character type instead of erroring. Confirmed against HeyGen's own MCP
+  // tool schema: the field is "motion_prompt" (not "custom_motion_prompt",
+  // which doesn't exist), it's only honored for photo avatars (or video
+  // avatars on the avatar_v engine), and "expressiveness" defaults to "low"
+  // when omitted -- without setting it, motion can render as near-static even
+  // with a valid prompt. Our avatars all come from "My Avatars" (HeyGen
+  // photo-avatar/avatar-group looks, see listMyAvatars below), so their IDs
+  // are valid talking_photo_ids. Switch character type only when a motion
+  // prompt is actually requested, so motion-less calls keep using the
+  // previously-working "avatar" shape.
   const character: Record<string, unknown> = motionPrompt
     ? {
         type: 'talking_photo',
         talking_photo_id: resolvedAvatarId,
         motion_prompt: motionPrompt,
-        custom_motion_prompt: motionPrompt,
         expressiveness: 'high',
       }
     : { type: 'avatar', avatar_id: resolvedAvatarId, avatar_style: 'normal' };
