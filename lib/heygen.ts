@@ -163,41 +163,30 @@ export async function createVideo(
     return { error: 'No avatar/voice configured — set HEYGEN_DEFAULT_AVATAR_ID and HEYGEN_DEFAULT_VOICE_ID, or pass them explicitly.' };
   }
 
-  // Gestures/body motion (motion_prompt) only take effect on a "talking_photo"
-  // character -- HeyGen silently ignores motion_prompt on the standard "avatar"
-  // character type instead of erroring. Confirmed against HeyGen's own MCP
-  // tool schema: the field is "motion_prompt" (not "custom_motion_prompt",
-  // which doesn't exist), it's only honored for photo avatars (or video
-  // avatars on the avatar_v engine), and "expressiveness" defaults to "low"
-  // when omitted -- without setting it, motion can render as near-static even
-  // with a valid prompt. Our avatars all come from "My Avatars" (HeyGen
-  // photo-avatar/avatar-group looks, see listMyAvatars below), so their IDs
-  // are valid talking_photo_ids. Switch character type only when a motion
-  // prompt is actually requested, so motion-less calls keep using the
-  // previously-working "avatar" shape.
-  const character: Record<string, unknown> = motionPrompt
-    ? {
-        type: 'talking_photo',
-        talking_photo_id: resolvedAvatarId,
-        motion_prompt: motionPrompt,
-        expressiveness: 'high',
-      }
-    : { type: 'avatar', avatar_id: resolvedAvatarId, avatar_style: 'normal' };
-
-  const videoInput: Record<string, unknown> = {
-    character,
-    voice: { type: 'text', input_text: script, voice_id: resolvedVoiceId },
-  };
-
+  // v2/video/generate is HeyGen's legacy endpoint (its own response carries a
+  // sunset warning telling AI agents specifically not to use it) -- it accepts
+  // motion_prompt/expressiveness without erroring but never actually renders
+  // them, which is why every attempt through it produced a static video
+  // despite a "successful" response. v3/videos is the current endpoint and is
+  // confirmed (via HeyGen's own MCP tool, which calls it under the hood) to
+  // render motion correctly. v3 also unifies studio/digital-twin/photo avatars
+  // under a single avatar_id, so no more type-branching is needed here.
   const requestBody: Record<string, unknown> = {
-    video_inputs: [videoInput],
-    dimension: { width: 1080, height: 1920 },
+    avatar_id: resolvedAvatarId,
+    script,
+    voice_id: resolvedVoiceId,
+    aspect_ratio: '9:16',
+    resolution: '1080p',
   };
+  if (motionPrompt) {
+    requestBody.motion_prompt = motionPrompt;
+    requestBody.expressiveness = 'high';
+  }
 
   console.log(`[HeyGen] Sending request with motion_prompt: ${motionPrompt ? 'yes' : 'no'}${motionPrompt ? ` (${motionPrompt})` : ''}`);
   console.log(`[HeyGen] Full request body:`, JSON.stringify(requestBody, null, 2));
 
-  const res = await fetchHeyGen('/v2/video/generate', {
+  const res = await fetchHeyGen('/v3/videos', {
     method: 'POST',
     headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
     body: JSON.stringify(requestBody),
@@ -208,7 +197,10 @@ export async function createVideo(
     console.error(`HeyGen createVideo failed: ${res.status} ${JSON.stringify(json)}`);
     return { error: (json.error?.message as string) ?? (json.error as string) ?? `Failed to start video generation (${res.status}).` };
   }
-  const videoId = json.data?.video_id as string | undefined;
+  // v3's response shape isn't fully confirmed (docs are unreachable from this
+  // environment -- see the comment above), so check the plausible spots
+  // rather than assuming v2's data.video_id wrapper still applies.
+  const videoId = (json.data?.video_id ?? json.video_id ?? json.data?.id) as string | undefined;
   if (!videoId) return { error: 'HeyGen did not return a video_id.' };
   return { videoId };
 }
