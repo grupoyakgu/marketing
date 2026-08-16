@@ -171,8 +171,18 @@ export async function createVideo(
   // see listMyAvatars below), so their IDs are valid talking_photo_ids -- switch
   // character type only when a motion prompt is actually requested, so
   // motion-less calls keep using the previously-working "avatar" shape.
+  // expressiveness controls how much body motion actually renders and
+  // defaults to HeyGen's "low" when omitted -- without it, motion_prompt text
+  // alone can produce visually near-static video even when the prompt itself
+  // is accepted, which matches what we saw on the last two attempts.
   const character: Record<string, unknown> = motionPrompt
-    ? { type: 'talking_photo', talking_photo_id: resolvedAvatarId, motion_prompt: motionPrompt, custom_motion_prompt: motionPrompt }
+    ? {
+        type: 'talking_photo',
+        talking_photo_id: resolvedAvatarId,
+        motion_prompt: motionPrompt,
+        custom_motion_prompt: motionPrompt,
+        expressiveness: 'high',
+      }
     : { type: 'avatar', avatar_id: resolvedAvatarId, avatar_style: 'normal' };
 
   const videoInput: Record<string, unknown> = {
@@ -194,6 +204,7 @@ export async function createVideo(
     body: JSON.stringify(requestBody),
   });
   const json = await res.json().catch(() => ({}));
+  console.log(`[HeyGen] Response (${res.status}):`, JSON.stringify(json, null, 2));
   if (!res.ok || json.error) {
     console.error(`HeyGen createVideo failed: ${res.status} ${JSON.stringify(json)}`);
     return { error: (json.error?.message as string) ?? (json.error as string) ?? `Failed to start video generation (${res.status}).` };
