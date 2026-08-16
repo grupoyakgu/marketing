@@ -167,17 +167,19 @@ export async function createVideo(
     character: { type: 'avatar', avatar_id: resolvedAvatarId, avatar_style: 'normal' },
     voice: { type: 'text', input_text: script, voice_id: resolvedVoiceId },
   };
+
+  const requestBody: Record<string, unknown> = {
+    video_inputs: [videoInput],
+    dimension: { width: 1080, height: 1920 },
+  };
   if (motionPrompt) {
-    videoInput.motion_prompt = motionPrompt;
+    requestBody.motion_prompt = motionPrompt;
   }
 
   const res = await fetchHeyGen('/v2/video/generate', {
     method: 'POST',
     headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      video_inputs: [videoInput],
-      dimension: { width: 1080, height: 1920 },
-    }),
+    body: JSON.stringify(requestBody),
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok || json.error) {
