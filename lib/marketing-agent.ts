@@ -37,6 +37,7 @@ import {
   updatePost,
   getNextMonday,
   trackDirectPost,
+  recordDirectPostInPlan,
   getPostedPostsForCommentCheck,
   type PostUpdate,
   type MarketingPost,
@@ -904,7 +905,16 @@ async function chatInner(chatId: number, userMessage: string): Promise<string> {
           }
           if (!resultContent) {
             const result = await postToLinkedIn(input.content, input.image_urls, credentials);
-            if (result.success && result.postId) await trackDirectPost('linkedin', result.postId);
+            if (result.success && result.postId) {
+              await trackDirectPost('linkedin', result.postId);
+              await recordDirectPostInPlan({
+                platform: 'linkedin',
+                content: input.content,
+                postUrl: result.url,
+                platformPostId: result.postId,
+                postType: 'standard',
+              });
+            }
             resultContent = result.success
               ? `Posted to LinkedIn${input.via_community_management ? ' via the Community Management app' : ''}!${result.url ? ` URL: ${result.url}` : ''}`
               : `Failed: ${result.error}`;
@@ -914,14 +924,32 @@ async function chatInner(chatId: number, userMessage: string): Promise<string> {
         if (block.name === 'post_to_facebook') {
           const input = block.input as { message: string; image_urls?: string[] };
           const result = await postToFacebook(input.message, input.image_urls);
-          if (result.success && result.postId) await trackDirectPost('facebook', result.postId);
+          if (result.success && result.postId) {
+            await trackDirectPost('facebook', result.postId);
+            await recordDirectPostInPlan({
+              platform: 'facebook',
+              content: input.message,
+              postUrl: result.url,
+              platformPostId: result.postId,
+              postType: 'standard',
+            });
+          }
           resultContent = result.success ? `Posted to Facebook!${result.url ? ` URL: ${result.url}` : ''}` : `Failed: ${result.error}`;
         }
 
         if (block.name === 'post_to_instagram') {
           const input = block.input as { caption: string; image_urls: string[] };
           const result = await postToInstagram(input.caption, input.image_urls);
-          if (result.success && result.postId) await trackDirectPost('instagram', result.postId);
+          if (result.success && result.postId) {
+            await trackDirectPost('instagram', result.postId);
+            await recordDirectPostInPlan({
+              platform: 'instagram',
+              content: input.caption,
+              postUrl: result.url,
+              platformPostId: result.postId,
+              postType: 'standard',
+            });
+          }
           resultContent = result.success ? `Posted to Instagram!${result.url ? ` URL: ${result.url}` : ''}` : `Failed: ${result.error}`;
         }
 
