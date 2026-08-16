@@ -1103,7 +1103,8 @@ async function chatInner(chatId: number, userMessage: string): Promise<string> {
             motion_prompt?: string;
           };
           try {
-            const created = await createVideo(input.script, input.avatar_id, input.voice_id, input.motion_prompt);
+            const motionPrompt = input.motion_prompt || 'Natural, relaxed, and animated — move hands, arms, and upper body fluidly and naturally while speaking, as if explaining something to a colleague in person, with all visible body parts in motion rather than staying static.';
+            const created = await createVideo(input.script, input.avatar_id, input.voice_id, motionPrompt);
             if (created.error || !created.videoId) {
               resultContent = `Failed: ${created.error}`;
             } else {

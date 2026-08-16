@@ -48,7 +48,8 @@ export async function publishPost(postId: string): Promise<PublishResult> {
       return { success: false, error: 'This video post has no video_script to generate from.' };
     }
 
-    const created = await createVideo(post.video_script, post.avatar_id ?? undefined, undefined, post.motion_prompt ?? undefined);
+    const motionPrompt = post.motion_prompt || 'Natural, relaxed, and animated — move hands, arms, and upper body fluidly and naturally while speaking, as if explaining something to a colleague in person, with all visible body parts in motion rather than staying static.';
+    const created = await createVideo(post.video_script, post.avatar_id ?? undefined, undefined, motionPrompt);
     if (created.error || !created.videoId) {
       const error = created.error ?? 'HeyGen did not return a video_id.';
       console.error(`[publishPost] video generation failed for post ${post.id}: ${error}`);
