@@ -268,6 +268,17 @@ export function PostEditor({
     }
   }
 
+  async function handleDeletePosted() {
+    if (!window.confirm('Remove this post from the planner? This only deletes the planner record — it does NOT unpublish the live post from LinkedIn/Facebook/Instagram.')) return;
+    setSaving(true);
+    try {
+      await fetch(`/api/dashboard/plan/${post!.id}`, { method: 'DELETE' });
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleRetry() {
     setSaving(true);
     setError(null);
@@ -662,6 +673,15 @@ export function PostEditor({
             <Button variant="danger" onClick={handleReject} disabled={saving} className="ml-auto">
               <Trash2 className="h-4 w-4" />
               Reject
+            </Button>
+          </div>
+        )}
+
+        {post.status === 'posted' && (
+          <div className="mt-6 flex">
+            <Button variant="danger" onClick={handleDeletePosted} disabled={saving} className="ml-auto">
+              <Trash2 className="h-4 w-4" />
+              Remove from planner
             </Button>
           </div>
         )}
