@@ -163,44 +163,69 @@ export async function createVideo(
     return { error: 'No avatar/voice configured — set HEYGEN_DEFAULT_AVATAR_ID and HEYGEN_DEFAULT_VOICE_ID, or pass them explicitly.' };
   }
 
-  // v2/video/generate is HeyGen's legacy endpoint (its own response carries a
-  // sunset warning telling AI agents specifically not to use it) -- it accepts
-  // motion_prompt/expressiveness without erroring but never actually renders
-  // them, which is why every attempt through it produced a static video
-  // despite a "successful" response. v3/videos is the current endpoint and is
-  // confirmed (via HeyGen's own MCP tool, which calls it under the hood) to
-  // render motion correctly. v3 also unifies studio/digital-twin/photo avatars
-  // under a single avatar_id, so no more type-branching is needed here.
-  const requestBody: Record<string, unknown> = {
+  // v3/videos is HeyGen's current endpoint (v2/video/generate is legacy,
+  // sunsetting 2026-10-31, and accepts motion_prompt/expressiveness without
+  // erroring but silently never renders them). v3's exact wire schema isn't
+  // confirmed -- HeyGen's docs are unreachable from this environment, and a
+  // first flat-body attempt got a 400 "Unable to extract tag using
+  // discriminator 'type'", meaning some part of the body needs an explicit
+  // type discriminator we haven't pinned down yet. Try v3 with our best guess
+  // (a top-level type + explicit engine), and fall back to the known-working
+  // v2 shape on any failure so Pepe never hard-fails on video generation
+  // while this gets sorted out.
+  const v3Body: Record<string, unknown> = {
+    type: 'avatar',
     avatar_id: resolvedAvatarId,
     script,
     voice_id: resolvedVoiceId,
     aspect_ratio: '9:16',
     resolution: '1080p',
+    engine: { type: 'avatar_iv' },
   };
   if (motionPrompt) {
-    requestBody.motion_prompt = motionPrompt;
-    requestBody.expressiveness = 'high';
+    v3Body.motion_prompt = motionPrompt;
+    v3Body.expressiveness = 'high';
   }
 
-  console.log(`[HeyGen] Sending request with motion_prompt: ${motionPrompt ? 'yes' : 'no'}${motionPrompt ? ` (${motionPrompt})` : ''}`);
-  console.log(`[HeyGen] Full request body:`, JSON.stringify(requestBody, null, 2));
+  console.log(`[HeyGen] Trying v3 with motion_prompt: ${motionPrompt ? 'yes' : 'no'}`);
+  console.log(`[HeyGen] v3 request body:`, JSON.stringify(v3Body, null, 2));
 
-  const res = await fetchHeyGen('/v3/videos', {
+  const v3Res = await fetchHeyGen('/v3/videos', {
     method: 'POST',
     headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify(requestBody),
+    body: JSON.stringify(v3Body),
   });
-  const json = await res.json().catch(() => ({}));
-  console.log(`[HeyGen] Response (${res.status}):`, JSON.stringify(json, null, 2));
-  if (!res.ok || json.error) {
-    console.error(`HeyGen createVideo failed: ${res.status} ${JSON.stringify(json)}`);
-    return { error: (json.error?.message as string) ?? (json.error as string) ?? `Failed to start video generation (${res.status}).` };
+  const v3Json = await v3Res.json().catch(() => ({}));
+  console.log(`[HeyGen] v3 response (${v3Res.status}):`, JSON.stringify(v3Json, null, 2));
+
+  if (v3Res.ok && !v3Json.error) {
+    const videoId = (v3Json.data?.video_id ?? v3Json.video_id ?? v3Json.data?.id ?? v3Json.id) as string | undefined;
+    if (videoId) return { videoId };
   }
-  // v3's response shape isn't fully confirmed (docs are unreachable from this
-  // environment -- see the comment above), so check the plausible spots
-  // rather than assuming v2's data.video_id wrapper still applies.
-  const videoId = (json.data?.video_id ?? json.video_id ?? json.data?.id) as string | undefined;
+  console.error(`[HeyGen] v3 failed (${v3Res.status}): ${JSON.stringify(v3Json)} -- falling back to legacy v2`);
+
+  // v2 fallback -- confirmed to reliably generate and post, though motion may
+  // or may not render (its own deprecation warning suggests newer Avatar IV
+  // fields are ignored, not yet fully confirmed either way).
+  const character: Record<string, unknown> = motionPrompt
+    ? { type: 'talking_photo', talking_photo_id: resolvedAvatarId, motion_prompt: motionPrompt, expressiveness: 'high' }
+    : { type: 'avatar', avatar_id: resolvedAvatarId, avatar_style: 'normal' };
+  const v2Body: Record<string, unknown> = {
+    video_inputs: [{ character, voice: { type: 'text', input_text: script, voice_id: resolvedVoiceId } }],
+    dimension: { width: 1080, height: 1920 },
+  };
+  const v2Res = await fetchHeyGen('/v2/video/generate', {
+    method: 'POST',
+    headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify(v2Body),
+  });
+  const v2Json = await v2Res.json().catch(() => ({}));
+  console.log(`[HeyGen] v2 fallback response (${v2Res.status}):`, JSON.stringify(v2Json, null, 2));
+  if (!v2Res.ok || v2Json.error) {
+    console.error(`HeyGen createVideo failed on both v3 and v2 fallback: ${v2Res.status} ${JSON.stringify(v2Json)}`);
+    return { error: (v2Json.error?.message as string) ?? (v2Json.error as string) ?? `Failed to start video generation (${v2Res.status}).` };
+  }
+  const videoId = v2Json.data?.video_id as string | undefined;
   if (!videoId) return { error: 'HeyGen did not return a video_id.' };
   return { videoId };
 }
