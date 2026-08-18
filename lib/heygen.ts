@@ -151,20 +151,17 @@ export interface CreateVideoResult {
  * true (burned-in captions) — pass false to render clean with no on-screen
  * captions.
  *
- * This calls HeyGen's v2 video/generate endpoint only — the one actually
- * confirmed to reliably generate and post. A previous version of this also
- * tried a newer v3 endpoint first, with a request body that was a guess
- * (HeyGen's docs were unreachable from this environment when that was
- * written), and silently fell back to this same v2 call on any v3 failure.
- * That guess turned out wrong in production — v3 consistently 400'd with
- * "Unable to extract tag using discriminator 'type'" — and because v2 has no
- * captions field of its own at the time, every one of those fallbacks
- * rendered without captions regardless of what was requested, with nothing
- * surfaced anywhere to say so: createVideo returned an ordinary-looking
- * success. Rather than guess again at an unconfirmed v3 schema, this drops
- * that path entirely and uses v2's own top-level `caption` boolean for
- * burned-in captions, so a request either honors what was asked for or fails
- * loudly through the normal error path below — never a silent downgrade. */
+ * Calls POST /v3/videos. Two earlier versions of this got this endpoint
+ * wrong in opposite directions: a hand-guessed v3 body (HeyGen's docs were
+ * unreachable from this environment) 400'd in production, so a later
+ * version dropped v3 entirely for the legacy /v2/video/generate endpoint —
+ * which turned out to silently ignore motion_prompt/expressiveness/caption
+ * while still returning 200, per that endpoint's own deprecation warning
+ * telling AI agents specifically not to use it. This body shape is
+ * confirmed working -- verified directly against HeyGen's own v3 API via
+ * their MCP server using this account's real avatar/voice IDs -- so v3 is
+ * used exclusively now, and a failure surfaces loudly through the error
+ * path below rather than silently downgrading into a v2 fallback again. */
 export async function createVideo(
   script: string,
   avatarId?: string,
@@ -181,23 +178,30 @@ export async function createVideo(
     return { error: 'No avatar/voice configured — set HEYGEN_DEFAULT_AVATAR_ID and HEYGEN_DEFAULT_VOICE_ID, or pass them explicitly.' };
   }
 
-  // motion_prompt/expressiveness only take effect through the talking_photo
-  // character type -- HeyGen's own deprecation notice on this endpoint
-  // suggests newer Avatar IV motion fields may be ignored on a plain
-  // "avatar" character, not yet fully confirmed either way.
-  const character: Record<string, unknown> = motionPrompt
-    ? { type: 'talking_photo', talking_photo_id: resolvedAvatarId, motion_prompt: motionPrompt, expressiveness: 'high' }
-    : { type: 'avatar', avatar_id: resolvedAvatarId, avatar_style: 'normal' };
   const body: Record<string, unknown> = {
-    video_inputs: [{ character, voice: { type: 'text', input_text: script, voice_id: resolvedVoiceId } }],
-    dimension: { width: 1080, height: 1920 },
-    caption: captions,
+    type: 'avatar',
+    avatar_id: resolvedAvatarId,
+    script,
+    voice_id: resolvedVoiceId,
+    aspect_ratio: '9:16',
+    resolution: '1080p',
   };
+  if (motionPrompt) {
+    body.motion_prompt = motionPrompt;
+    body.expressiveness = 'high';
+  }
+  // A sidecar .srt is always generated once `caption` is set at all;
+  // `style: 'default'` additionally burns captions into the rendered
+  // video, returned separately as captioned_video_url (see getVideoStatus
+  // below) rather than replacing video_url.
+  if (captions) {
+    body.caption = { file_format: 'srt', style: 'default' };
+  }
 
   console.log(`[HeyGen] createVideo: motion_prompt: ${motionPrompt ? 'yes' : 'no'}, captions: ${captions}`);
   console.log(`[HeyGen] request body:`, JSON.stringify(body, null, 2));
 
-  const res = await fetchHeyGen('/v2/video/generate', {
+  const res = await fetchHeyGen('/v3/videos', {
     method: 'POST',
     headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -209,7 +213,10 @@ export async function createVideo(
     console.error(`HeyGen createVideo failed: ${res.status} ${JSON.stringify(json)}`);
     return { error: (json.error?.message as string) ?? (json.error as string) ?? `Failed to start video generation (${res.status}).` };
   }
-  const videoId = json.data?.video_id as string | undefined;
+  // Defensive about exactly where video_id lands -- confirmed flat
+  // (json.video_id) via HeyGen's own MCP server, but that may normalize the
+  // raw wire shape rather than reflect it exactly.
+  const videoId = (json.video_id ?? json.data?.video_id ?? json.id ?? json.data?.id) as string | undefined;
   if (!videoId) return { error: 'HeyGen did not return a video_id.' };
   return { videoId };
 }
@@ -220,11 +227,18 @@ export interface HeyGenStatus {
   error?: string;
 }
 
+/** Polls GET /v3/videos/{id} -- the v3 counterpart to createVideo above,
+ * not the legacy /v1/video_status.get this used before. Matters beyond just
+ * matching the create call: v3 returns a completed render's plain video
+ * separately from its captioned one (video_url vs captioned_video_url) --
+ * preferring captioned_video_url here is what actually makes a requested
+ * caption show up in the video callers post, rather than being generated
+ * and then silently left unused. */
 export async function getVideoStatus(videoId: string): Promise<HeyGenStatus> {
   const apiKey = getApiKey();
   if (!apiKey) return { status: 'failed', error: 'HeyGen is not configured.' };
 
-  const res = await fetchHeyGen(`/v1/video_status.get?video_id=${videoId}`, {
+  const res = await fetchHeyGen(`/v3/videos/${videoId}`, {
     headers: { 'X-Api-Key': apiKey },
     cache: 'no-store',
   });
@@ -233,10 +247,12 @@ export async function getVideoStatus(videoId: string): Promise<HeyGenStatus> {
     console.error(`HeyGen getVideoStatus failed for ${videoId}: ${res.status} ${JSON.stringify(json)}`);
     return { status: 'failed', error: `Failed to check video status (${res.status}).` };
   }
-  const data = json.data ?? {};
+  const data = json.data ?? json;
+  const status: HeyGenStatus['status'] =
+    data.status === 'completed' ? 'completed' : (data.status === 'failed' || data.failure_code) ? 'failed' : 'processing';
   return {
-    status: data.status,
-    videoUrl: data.video_url,
-    error: typeof data.error === 'string' ? data.error : data.error?.message,
+    status,
+    videoUrl: data.captioned_video_url || data.video_url,
+    error: data.failure_message || (typeof data.error === 'string' ? data.error : data.error?.message),
   };
 }
