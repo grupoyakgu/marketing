@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { SettingsBackLink } from '@/components/dashboard/SettingsBackLink';
-import { RefreshCw, Users2, FileStack, Clock3 } from 'lucide-react';
+import { RefreshCw, Users2, FileStack, Clock3, Link2 } from 'lucide-react';
 
 interface RefreshStatus {
   refreshedAt: string | null;
@@ -32,6 +32,9 @@ export default function DataSyncPage() {
   const [status, setStatus] = useState<RefreshStatus | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillResult, setBackfillResult] = useState<{ checked: number; updated: number; failed: number } | null>(null);
+  const [backfillError, setBackfillError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -70,6 +73,21 @@ export default function DataSyncPage() {
       setError(err instanceof Error ? err.message : 'Refresh failed.');
     } finally {
       setRefreshing(false);
+    }
+  }
+
+  async function handleBackfillInstagramLinks() {
+    setBackfilling(true);
+    setBackfillError(null);
+    try {
+      const res = await fetch('/api/admin/backfill-instagram-permalinks', { method: 'POST' });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error ?? 'Backfill failed.');
+      setBackfillResult({ checked: body.checked, updated: body.updated, failed: body.failed });
+    } catch (err) {
+      setBackfillError(err instanceof Error ? err.message : 'Backfill failed.');
+    } finally {
+      setBackfilling(false);
     }
   }
 
@@ -128,6 +146,32 @@ export default function DataSyncPage() {
             {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
           </div>
         )}
+      </Card>
+
+      <Card>
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-sm font-medium text-neutral-900 dark:text-white">Fix Instagram post links</h2>
+            <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+              Posts published before a recent fix have a broken "View post" link — it was built from the
+              post&apos;s internal ID instead of Instagram&apos;s own permalink. This re-fetches the real
+              link for every posted Instagram entry and updates it in place. Safe to run more than once.
+            </p>
+          </div>
+
+          <Button onClick={handleBackfillInstagramLinks} disabled={backfilling}>
+            <Link2 className={`h-4 w-4 ${backfilling ? 'animate-pulse' : ''}`} />
+            {backfilling ? 'Fixing links…' : 'Fix Instagram links'}
+          </Button>
+
+          {backfillResult && (
+            <p className="text-sm text-neutral-600 dark:text-neutral-300">
+              Checked {backfillResult.checked}, fixed {backfillResult.updated}
+              {backfillResult.failed > 0 ? `, ${backfillResult.failed} failed (see server logs)` : ''}.
+            </p>
+          )}
+          {backfillError && <p className="text-sm text-red-600 dark:text-red-400">{backfillError}</p>}
+        </div>
       </Card>
     </div>
   );

@@ -11,6 +11,34 @@ async function getPageToken(): Promise<string> {
   return process.env.INSTAGRAM_PAGE_ACCESS_TOKEN!;
 }
 
+// A published media object's numeric id is NOT the shortcode Instagram's
+// public URLs use (confirmed in production: hand-building
+// instagram.com/reel/<id>/ from it produced a dead link) -- permalink is the
+// Graph API's own real, correct URL for the post. No fallback guessing here
+// deliberately -- a caller either gets the real URL or knows the lookup
+// failed, rather than silently getting back the same wrong shape this
+// replaced. Exported for app/api/admin/backfill-instagram-permalinks/route.ts,
+// which re-fetches this for posts that predate this fix and already have a
+// bad post_url saved.
+export async function fetchInstagramPermalink(mediaId: string): Promise<string | null> {
+  const token = await getPageToken();
+  const res = await fetch(`${GRAPH_API}/${mediaId}?fields=permalink&access_token=${token}`, { cache: 'no-store' });
+  const json = await res.json().catch(() => ({}));
+  if (res.ok && typeof json.permalink === 'string') return json.permalink;
+  console.error(`[meta-poster] failed to fetch Instagram permalink for ${mediaId}: ${res.status} ${JSON.stringify(json)}`);
+  return null;
+}
+
+// Used at post time, where some URL is better than none -- falls back to the
+// old best-effort guess only if the real lookup fails.
+async function getInstagramPermalink(mediaId: string, token: string, fallbackPath: 'p' | 'reel'): Promise<string> {
+  const res = await fetch(`${GRAPH_API}/${mediaId}?fields=permalink&access_token=${token}`, { cache: 'no-store' });
+  const json = await res.json().catch(() => ({}));
+  if (res.ok && typeof json.permalink === 'string') return json.permalink;
+  console.error(`[meta-poster] failed to fetch Instagram permalink for ${mediaId}: ${res.status} ${JSON.stringify(json)}`);
+  return `https://www.instagram.com/${fallbackPath}/${mediaId}/`;
+}
+
 // Uploads a photo unpublished (no feed post created yet) — used both for the
 // single-photo path below (post_id comes back directly) and, via
 // attached_media, for the multi-photo path where each photo is uploaded this
@@ -164,7 +192,7 @@ export async function postToInstagram(caption: string, imageUrls: string | strin
     const published = await publishRes.json();
     if (!publishRes.ok) return { success: false, error: published.error?.message ?? 'Failed to publish carousel' };
 
-    return { success: true, postId: published.id, url: `https://www.instagram.com/p/${published.id}/` };
+    return { success: true, postId: published.id, url: await getInstagramPermalink(published.id, token, 'p') };
   }
 
   const containerRes = await fetch(`${GRAPH_API}/${igAccountId}/media`, {
@@ -186,7 +214,7 @@ export async function postToInstagram(caption: string, imageUrls: string | strin
   const published = await publishRes.json();
   if (!publishRes.ok) return { success: false, error: published.error?.message ?? 'Failed to publish media' };
 
-  return { success: true, postId: published.id, url: `https://www.instagram.com/p/${published.id}/` };
+  return { success: true, postId: published.id, url: await getInstagramPermalink(published.id, token, 'p') };
 }
 
 // Stories use the same container+publish flow as a feed image post, just
@@ -312,7 +340,7 @@ export async function publishInstagramContainer(containerId: string): Promise<Me
   });
   const json = await res.json();
   if (!res.ok) return { success: false, error: json.error?.message ?? 'Failed to publish video' };
-  return { success: true, postId: json.id, url: `https://www.instagram.com/reel/${json.id}/` };
+  return { success: true, postId: json.id, url: await getInstagramPermalink(json.id, token, 'reel') };
 }
 
 export async function getInstagramInsights(): Promise<Record<string, unknown> | null> {
