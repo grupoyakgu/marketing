@@ -37,6 +37,10 @@
 - /lib/marketing-plan.ts            → marketing_plan (the weekly Planner) CRUD — draft → approved → posted/failed/generating
 - /supabase/migrations/             → SQL migrations
 
+## Claude Code Skills
+- `.claude/skills/` — 49 marketing skills (cro, copywriting, seo-audit, ads, analytics, emails, social, etc.) from [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills), for Claude Code sessions working in this repo. Auto-invoked when a task matches a skill's description (e.g. "optimize this landing page" → `cro`).
+- `.claude/tools/` — companion tool registry (`REGISTRY.md`) and per-tool integration guides referenced by the skills above.
+
 ## Environment Variables
 - TELEGRAM_BOT_TOKEN
 - ANTHROPIC_API_KEY
