@@ -49,7 +49,10 @@ export async function publishPost(postId: string): Promise<PublishResult> {
     }
 
     const motionPrompt = post.motion_prompt || 'Natural, relaxed, and animated — move hands, arms, and upper body fluidly and naturally while speaking, as if explaining something to a colleague in person, with all visible body parts in motion rather than staying static.';
-    const created = await createVideo(post.video_script, post.avatar_id ?? undefined, undefined, motionPrompt);
+    // captions defaults to true at the DB column level (see the
+    // marketing_plan_video_captions migration), so post.captions is only
+    // ever false when a caller explicitly set it that way.
+    const created = await createVideo(post.video_script, post.avatar_id ?? undefined, undefined, motionPrompt, post.captions);
     if (created.error || !created.videoId) {
       const error = created.error ?? 'HeyGen did not return a video_id.';
       console.error(`[publishPost] video generation failed for post ${post.id}: ${error}`);

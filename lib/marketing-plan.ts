@@ -26,6 +26,10 @@ export interface MarketingPost {
   /** Per-post motion prompt for controlling the avatar's motion and gestures.
    * Optional; defaults to no specific motion prompt when not set. */
   motion_prompt?: string | null;
+  /** Whether this video post's HeyGen render has burned-in captions (plus the
+   * sidecar .srt HeyGen always generates alongside them). Defaults to true —
+   * only an explicit false renders clean. Ignored for a standard post. */
+  captions?: boolean;
 }
 
 export async function saveDraftPlan(

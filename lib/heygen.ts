@@ -147,12 +147,15 @@ export interface CreateVideoResult {
 /** Kicks off HeyGen video generation and returns immediately with a video_id —
  * generation itself takes minutes, so callers must poll getVideoStatus rather
  * than wait here. avatarId/voiceId default to HEYGEN_DEFAULT_AVATAR_ID /
- * HEYGEN_DEFAULT_VOICE_ID when not passed explicitly. */
+ * HEYGEN_DEFAULT_VOICE_ID when not passed explicitly. captions defaults to
+ * true (burned-in captions, plus the sidecar .srt HeyGen always generates
+ * alongside them) — pass false to render clean with no on-screen captions. */
 export async function createVideo(
   script: string,
   avatarId?: string,
   voiceId?: string,
-  motionPrompt?: string
+  motionPrompt?: string,
+  captions = true
 ): Promise<CreateVideoResult> {
   const apiKey = getApiKey();
   if (!apiKey) return { error: 'HeyGen is not configured (HEYGEN_API_KEY missing).' };
@@ -186,8 +189,17 @@ export async function createVideo(
     v3Body.motion_prompt = motionPrompt;
     v3Body.expressiveness = 'high';
   }
+  // 'default' style burns captions into the rendered video; HeyGen always
+  // returns a sidecar .srt too whenever `caption` is set at all. Omitting
+  // the field entirely (captions === false) renders with no captions and no
+  // sidecar. Only supported on this v3 path -- the v2 fallback below has no
+  // equivalent field, so a request that falls back to v2 renders without
+  // captions regardless of this flag.
+  if (captions) {
+    v3Body.caption = { file_format: 'srt', style: 'default' };
+  }
 
-  console.log(`[HeyGen] Trying v3 with motion_prompt: ${motionPrompt ? 'yes' : 'no'}`);
+  console.log(`[HeyGen] Trying v3 with motion_prompt: ${motionPrompt ? 'yes' : 'no'}, captions: ${captions}`);
   console.log(`[HeyGen] v3 request body:`, JSON.stringify(v3Body, null, 2));
 
   const v3Res = await fetchHeyGen('/v3/videos', {
