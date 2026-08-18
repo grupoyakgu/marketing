@@ -148,8 +148,23 @@ export interface CreateVideoResult {
  * generation itself takes minutes, so callers must poll getVideoStatus rather
  * than wait here. avatarId/voiceId default to HEYGEN_DEFAULT_AVATAR_ID /
  * HEYGEN_DEFAULT_VOICE_ID when not passed explicitly. captions defaults to
- * true (burned-in captions, plus the sidecar .srt HeyGen always generates
- * alongside them) — pass false to render clean with no on-screen captions. */
+ * true (burned-in captions) — pass false to render clean with no on-screen
+ * captions.
+ *
+ * This calls HeyGen's v2 video/generate endpoint only — the one actually
+ * confirmed to reliably generate and post. A previous version of this also
+ * tried a newer v3 endpoint first, with a request body that was a guess
+ * (HeyGen's docs were unreachable from this environment when that was
+ * written), and silently fell back to this same v2 call on any v3 failure.
+ * That guess turned out wrong in production — v3 consistently 400'd with
+ * "Unable to extract tag using discriminator 'type'" — and because v2 has no
+ * captions field of its own at the time, every one of those fallbacks
+ * rendered without captions regardless of what was requested, with nothing
+ * surfaced anywhere to say so: createVideo returned an ordinary-looking
+ * success. Rather than guess again at an unconfirmed v3 schema, this drops
+ * that path entirely and uses v2's own top-level `caption` boolean for
+ * burned-in captions, so a request either honors what was asked for or fails
+ * loudly through the normal error path below — never a silent downgrade. */
 export async function createVideo(
   script: string,
   avatarId?: string,
@@ -166,78 +181,35 @@ export async function createVideo(
     return { error: 'No avatar/voice configured — set HEYGEN_DEFAULT_AVATAR_ID and HEYGEN_DEFAULT_VOICE_ID, or pass them explicitly.' };
   }
 
-  // v3/videos is HeyGen's current endpoint (v2/video/generate is legacy,
-  // sunsetting 2026-10-31, and accepts motion_prompt/expressiveness without
-  // erroring but silently never renders them). v3's exact wire schema isn't
-  // confirmed -- HeyGen's docs are unreachable from this environment, and a
-  // first flat-body attempt got a 400 "Unable to extract tag using
-  // discriminator 'type'", meaning some part of the body needs an explicit
-  // type discriminator we haven't pinned down yet. Try v3 with our best guess
-  // (a top-level type + explicit engine), and fall back to the known-working
-  // v2 shape on any failure so Pepe never hard-fails on video generation
-  // while this gets sorted out.
-  const v3Body: Record<string, unknown> = {
-    type: 'avatar',
-    avatar_id: resolvedAvatarId,
-    script,
-    voice_id: resolvedVoiceId,
-    aspect_ratio: '9:16',
-    resolution: '1080p',
-    engine: { type: 'avatar_iv' },
-  };
-  if (motionPrompt) {
-    v3Body.motion_prompt = motionPrompt;
-    v3Body.expressiveness = 'high';
-  }
-  // 'default' style burns captions into the rendered video; HeyGen always
-  // returns a sidecar .srt too whenever `caption` is set at all. Omitting
-  // the field entirely (captions === false) renders with no captions and no
-  // sidecar. Only supported on this v3 path -- the v2 fallback below has no
-  // equivalent field, so a request that falls back to v2 renders without
-  // captions regardless of this flag.
-  if (captions) {
-    v3Body.caption = { file_format: 'srt', style: 'default' };
-  }
-
-  console.log(`[HeyGen] Trying v3 with motion_prompt: ${motionPrompt ? 'yes' : 'no'}, captions: ${captions}`);
-  console.log(`[HeyGen] v3 request body:`, JSON.stringify(v3Body, null, 2));
-
-  const v3Res = await fetchHeyGen('/v3/videos', {
-    method: 'POST',
-    headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify(v3Body),
-  });
-  const v3Json = await v3Res.json().catch(() => ({}));
-  console.log(`[HeyGen] v3 response (${v3Res.status}):`, JSON.stringify(v3Json, null, 2));
-
-  if (v3Res.ok && !v3Json.error) {
-    const videoId = (v3Json.data?.video_id ?? v3Json.video_id ?? v3Json.data?.id ?? v3Json.id) as string | undefined;
-    if (videoId) return { videoId };
-  }
-  console.error(`[HeyGen] v3 failed (${v3Res.status}): ${JSON.stringify(v3Json)} -- falling back to legacy v2`);
-
-  // v2 fallback -- confirmed to reliably generate and post, though motion may
-  // or may not render (its own deprecation warning suggests newer Avatar IV
-  // fields are ignored, not yet fully confirmed either way).
+  // motion_prompt/expressiveness only take effect through the talking_photo
+  // character type -- HeyGen's own deprecation notice on this endpoint
+  // suggests newer Avatar IV motion fields may be ignored on a plain
+  // "avatar" character, not yet fully confirmed either way.
   const character: Record<string, unknown> = motionPrompt
     ? { type: 'talking_photo', talking_photo_id: resolvedAvatarId, motion_prompt: motionPrompt, expressiveness: 'high' }
     : { type: 'avatar', avatar_id: resolvedAvatarId, avatar_style: 'normal' };
-  const v2Body: Record<string, unknown> = {
+  const body: Record<string, unknown> = {
     video_inputs: [{ character, voice: { type: 'text', input_text: script, voice_id: resolvedVoiceId } }],
     dimension: { width: 1080, height: 1920 },
+    caption: captions,
   };
-  const v2Res = await fetchHeyGen('/v2/video/generate', {
+
+  console.log(`[HeyGen] createVideo: motion_prompt: ${motionPrompt ? 'yes' : 'no'}, captions: ${captions}`);
+  console.log(`[HeyGen] request body:`, JSON.stringify(body, null, 2));
+
+  const res = await fetchHeyGen('/v2/video/generate', {
     method: 'POST',
     headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify(v2Body),
+    body: JSON.stringify(body),
   });
-  const v2Json = await v2Res.json().catch(() => ({}));
-  console.log(`[HeyGen] v2 fallback response (${v2Res.status}):`, JSON.stringify(v2Json, null, 2));
-  if (!v2Res.ok || v2Json.error) {
-    console.error(`HeyGen createVideo failed on both v3 and v2 fallback: ${v2Res.status} ${JSON.stringify(v2Json)}`);
-    return { error: (v2Json.error?.message as string) ?? (v2Json.error as string) ?? `Failed to start video generation (${v2Res.status}).` };
+  const json = await res.json().catch(() => ({}));
+  console.log(`[HeyGen] response (${res.status}):`, JSON.stringify(json, null, 2));
+
+  if (!res.ok || json.error) {
+    console.error(`HeyGen createVideo failed: ${res.status} ${JSON.stringify(json)}`);
+    return { error: (json.error?.message as string) ?? (json.error as string) ?? `Failed to start video generation (${res.status}).` };
   }
-  const videoId = v2Json.data?.video_id as string | undefined;
+  const videoId = json.data?.video_id as string | undefined;
   if (!videoId) return { error: 'HeyGen did not return a video_id.' };
   return { videoId };
 }
