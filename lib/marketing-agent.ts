@@ -62,6 +62,7 @@ import {
 } from '@/lib/interactions';
 import { recordUsage } from '@/lib/token-usage';
 import { isCronEnabled } from '@/lib/cron-settings';
+import { MARKETING_SKILLS, loadMarketingSkill } from '@/lib/marketing-skills';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const BOT_NAME = 'pepe';
@@ -290,6 +291,11 @@ For "which post got the most likes", "top 5 posts by impressions", "what's our b
 
 ---
 
+## MARKETING SKILLS LIBRARY
+You have full access to a library of 49 specialist marketing playbooks (vendored from coreyhaines31/marketingskills — see .claude/skills in the repo) via use_marketing_skill. Each one is a detailed, battle-tested framework for a specific marketing discipline — far more depth than you'd draft from general knowledge alone. Reach for one whenever a task falls in its territory, not just when the user explicitly names it: drafting LinkedIn/Instagram/Facebook content → social; writing or tightening any post/landing copy → copywriting or copy-editing; planning ad campaigns → ads or ad-creative; anything about the investor landing page's persuasiveness → cro or offers; email sequences → emails; and so on — use_marketing_skill's own tool description lists all 49 with a one-line trigger for each. Call it with just the skill name for its main playbook (SKILL.md); if that playbook's content points to a references/ file worth the deeper detail (it'll say so by filename, e.g. "references/hook-system.md"), call it again with that same skill and reference_file set. Don't call more than 2-3 skills in a single turn — pull what's actually relevant to the task at hand, then apply it, rather than surveying the whole library.
+
+---
+
 ## TOOLS SUMMARY
 - post_to_linkedin, post_to_facebook, post_to_instagram — publish posts
 - post_instagram_story, post_facebook_story — publish to Stories (24h, ephemeral, image only, no caption)
@@ -308,6 +314,7 @@ For "which post got the most likes", "top 5 posts by impressions", "what's our b
 - get_landing_page_copy, update_landing_page_copy — read and edit the content of the investor landing page (/invest/es, /invest/en, /invest/he — headline, highlights, market intel bullets, form section text, etc.). Edits are live immediately, no deploy needed. Always call get_landing_page_copy first so you're editing from the actual current wording, not guessing. Ask which language(s) to apply a change to if it's not obvious from context — an edit only applies to the locale you pass, it doesn't propagate to the others automatically, since each language's copy is an independent, deliberately localized translation rather than a mechanical mirror of the others.
 - browse_url — take a screenshot of any public webpage (a competitor, a reference site, an article the user points you at) so you can judge it from what it actually looks like instead of guessing from memory. Each call launches a real remote browser session that can take up to 30s; you have a budget of a few per conversation turn — pick the handful most worth looking at rather than surveying everything, and if you run out mid-research, answer with what you've already seen and offer to look at more in a follow-up.
 - consult_santi, consult_angeles — loop a teammate in for their technical or product/UX take on your own initiative, when a task genuinely needs it
+- use_marketing_skill — load a specialist marketing playbook (see MARKETING SKILLS LIBRARY above) to inform copy, campaigns, or strategy
 
 You speak with authority and warmth. You are direct, strategic, and deeply passionate about the intersection of hospitality and real estate.`;
 }
@@ -765,6 +772,20 @@ const tools: Anthropic.Tool[] = [
         id: { type: 'string', description: 'The topic\'s id, from get_interaction_settings.' },
       },
       required: ['id'],
+    },
+  },
+  {
+    name: 'use_marketing_skill',
+    description:
+      'Loads a specialist marketing playbook from the marketing skills library. Call with just skill for that skill\'s main guide (SKILL.md) — a deep, structured framework, not a summary. If it references a specific references/ file worth the extra depth, call again with the same skill and that reference_file. Available skills:\n' +
+      MARKETING_SKILLS.map(s => `- ${s.name}: ${s.description}`).join('\n'),
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        skill: { type: 'string', enum: MARKETING_SKILLS.map(s => s.name), description: 'Which skill\'s playbook to load.' },
+        reference_file: { type: 'string', description: 'Optional — a specific file under that skill\'s references/ (or assets/) folder, e.g. "references/hook-system.md", as named within the main SKILL.md content.' },
+      },
+      required: ['skill'],
     },
   },
   {
@@ -1461,6 +1482,15 @@ async function chatInner(chatId: number, userMessage: string): Promise<string> {
           try {
             await removeInteractionTopicRow(input.id);
             resultContent = 'Topic removed.';
+          } catch (err) {
+            resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        }
+
+        if (block.name === 'use_marketing_skill') {
+          const input = block.input as { skill: string; reference_file?: string };
+          try {
+            resultContent = await loadMarketingSkill(input.skill, input.reference_file);
           } catch (err) {
             resultContent = `Failed: ${err instanceof Error ? err.message : String(err)}`;
           }

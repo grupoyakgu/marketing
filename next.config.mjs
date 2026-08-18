@@ -11,6 +11,14 @@ const nextConfig = {
   // function — see the comment in that file for why.
   experimental: {
     serverComponentsExternalPackages: ['puppeteer-core'],
+    // .claude/skills/*/SKILL.md is never imported by any route's code, so
+    // Next's default file tracing (which follows require/import graphs)
+    // would otherwise leave it out of the deployed function bundle — Pepe's
+    // use_marketing_skill tool (lib/marketing-skills.ts) reads these files
+    // from disk at request time, not via import.
+    outputFileTracingIncludes: {
+      '/api/telegram': ['./.claude/skills/**/*'],
+    },
   },
 };
 export default nextConfig;
