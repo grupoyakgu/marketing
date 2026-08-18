@@ -68,6 +68,49 @@ async function uploadMedia(uploadUrl: string, data: ArrayBuffer, mimeType: strin
   if (!res.ok) throw new Error(`LinkedIn media upload failed ${res.status}: ${await res.text()}`);
 }
 
+/** The id in x-restli-id (urn:li:ugcPost:X or urn:li:share:X) is NOT the id
+ * LinkedIn's own web feed uses for /feed/update/ links -- that's a separate
+ * urn:li:activity:Y, with a numeric Y that isn't a fixed offset from X (confirmed
+ * from a real production pair: a ugcPost id and its actual working activity id
+ * differed by ~83 billion). LinkedIn's Share object carries an `activity` field
+ * that names the real one, so this fetches the share back by numeric id and
+ * reads it. Best-effort: falls back to the old (possibly-broken) direct-urn link
+ * on any failure, so a wrong guess here never makes a working link stop working,
+ * it just leaves already-broken links broken -- same failure mode as before this
+ * existed.
+ */
+export async function getLinkedInPermalink(postId: string, token?: string): Promise<string> {
+  const resolvedToken = token ?? process.env.LINKEDIN_ACCESS_TOKEN;
+  if (!resolvedToken) return `https://www.linkedin.com/feed/update/${postId}/`;
+  return getLinkedInPermalinkWithToken(postId, resolvedToken);
+}
+
+async function getLinkedInPermalinkWithToken(postId: string, token: string): Promise<string> {
+  const fallback = `https://www.linkedin.com/feed/update/${postId}/`;
+  const numericId = postId.split(':').pop();
+  if (!numericId) return fallback;
+
+  try {
+    const res = await fetch(`${LINKEDIN_API_BASE}/shares/${numericId}`, {
+      headers: { Authorization: `Bearer ${token}`, 'X-Restli-Protocol-Version': '2.0.0' },
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.log(`[LinkedIn] permalink lookup for ${postId} failed (${res.status}), using direct urn link. Response:`, JSON.stringify(json));
+      return fallback;
+    }
+    const activity = json.activity as string | undefined;
+    if (!activity) {
+      console.log(`[LinkedIn] permalink lookup for ${postId} had no activity field, using direct urn link. Response:`, JSON.stringify(json));
+      return fallback;
+    }
+    return `https://www.linkedin.com/feed/update/${activity}/`;
+  } catch (err) {
+    console.log(`[LinkedIn] permalink lookup for ${postId} threw, using direct urn link:`, err);
+    return fallback;
+  }
+}
+
 export async function postToLinkedIn(
   text: string,
   media?: MediaUpload | string | string[],
@@ -157,7 +200,7 @@ export async function postToLinkedIn(
   return {
     success: true,
     postId,
-    url: postId ? `https://www.linkedin.com/feed/update/${postId}/` : undefined,
+    url: postId ? await getLinkedInPermalink(postId, token) : undefined,
   };
 }
 

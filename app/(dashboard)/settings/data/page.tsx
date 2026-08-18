@@ -35,6 +35,9 @@ export default function DataSyncPage() {
   const [backfilling, setBackfilling] = useState(false);
   const [backfillResult, setBackfillResult] = useState<{ checked: number; updated: number; failed: number } | null>(null);
   const [backfillError, setBackfillError] = useState<string | null>(null);
+  const [liBackfilling, setLiBackfilling] = useState(false);
+  const [liBackfillResult, setLiBackfillResult] = useState<{ checked: number; updated: number; failed: number } | null>(null);
+  const [liBackfillError, setLiBackfillError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -88,6 +91,21 @@ export default function DataSyncPage() {
       setBackfillError(err instanceof Error ? err.message : 'Backfill failed.');
     } finally {
       setBackfilling(false);
+    }
+  }
+
+  async function handleBackfillLinkedInLinks() {
+    setLiBackfilling(true);
+    setLiBackfillError(null);
+    try {
+      const res = await fetch('/api/admin/backfill-linkedin-permalinks', { method: 'POST' });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error ?? 'Backfill failed.');
+      setLiBackfillResult({ checked: body.checked, updated: body.updated, failed: body.failed });
+    } catch (err) {
+      setLiBackfillError(err instanceof Error ? err.message : 'Backfill failed.');
+    } finally {
+      setLiBackfilling(false);
     }
   }
 
@@ -171,6 +189,32 @@ export default function DataSyncPage() {
             </p>
           )}
           {backfillError && <p className="text-sm text-red-600 dark:text-red-400">{backfillError}</p>}
+        </div>
+      </Card>
+
+      <Card>
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-sm font-medium text-neutral-900 dark:text-white">Fix LinkedIn post links</h2>
+            <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+              Same issue as Instagram — links were built from LinkedIn&apos;s internal post ID instead of the
+              activity ID its web feed actually uses. Best-effort: re-fetches each post&apos;s real link and
+              updates it in place, leaving anything it can&apos;t resolve unchanged. Safe to run more than once.
+            </p>
+          </div>
+
+          <Button onClick={handleBackfillLinkedInLinks} disabled={liBackfilling}>
+            <Link2 className={`h-4 w-4 ${liBackfilling ? 'animate-pulse' : ''}`} />
+            {liBackfilling ? 'Fixing links…' : 'Fix LinkedIn links'}
+          </Button>
+
+          {liBackfillResult && (
+            <p className="text-sm text-neutral-600 dark:text-neutral-300">
+              Checked {liBackfillResult.checked}, fixed {liBackfillResult.updated}
+              {liBackfillResult.failed > 0 ? `, ${liBackfillResult.failed} failed (see server logs)` : ''}.
+            </p>
+          )}
+          {liBackfillError && <p className="text-sm text-red-600 dark:text-red-400">{liBackfillError}</p>}
         </div>
       </Card>
     </div>
