@@ -30,6 +30,11 @@ export interface MarketingPost {
    * sidecar .srt HeyGen always generates alongside them). Defaults to true —
    * only an explicit false renders clean. Ignored for a standard post. */
   captions?: boolean;
+  /** URL of an image (from browse_drive_images/find_named_image) to layer
+   * onto the finished video as a watermark/overlay -- see publish-post.ts,
+   * which carries this onto the video_jobs row process-video-jobs.ts reads
+   * at generation time. Omit for no overlay. Ignored for a standard post. */
+  overlay_image_url?: string | null;
 }
 
 export async function saveDraftPlan(

@@ -18,6 +18,7 @@ import {
   DollarSign,
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { Logo } from '@/components/Logo';
 
 const COLLAPSE_KEY = 'sidebar-collapsed';
 
@@ -63,12 +64,7 @@ export function Sidebar({ buildVersion }: { buildVersion: string }) {
       )}
     >
       <div className={cn('mb-8 flex items-center px-2', collapsed ? 'justify-center' : 'gap-2')}>
-        <div className="h-7 w-7 shrink-0 rounded-lg bg-neutral-900 dark:bg-white" />
-        {!collapsed && (
-          <span className="truncate text-sm font-semibold tracking-tight text-neutral-900 dark:text-white">
-            Grupo YAKGU
-          </span>
-        )}
+        <Logo variant={collapsed ? 'mark' : 'wordmark'} size="sm" />
       </div>
 
       <nav className="flex flex-col gap-1">

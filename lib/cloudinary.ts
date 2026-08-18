@@ -80,6 +80,49 @@ export async function uploadVideoFromUrl(sourceUrl: string): Promise<{ url: stri
   return { url: json.secure_url };
 }
 
+// Matches the public_id out of one of our own Cloudinary delivery URLs, e.g.
+// ".../upload/v1784281655/01_a91jpx.jpg" -> "01_a91jpx", or
+// ".../upload/marketing/images/general/01_a91jpx.jpg" -> the same but with a
+// folder segment intact (kept as-is; buildVideoOverlayUrl below re-escapes
+// any "/" for layer syntax). Doesn't handle a URL that already carries other
+// transformations before the public_id -- none of ours do.
+const CLOUDINARY_PUBLIC_ID_RE = /\/upload\/(?:v\d+\/)?(.+?)\.[a-zA-Z0-9]+(?:[?#]|$)/;
+
+/** Recovers a Cloudinary public_id from one of our own secure_url delivery
+ * links. Needed because Pepe's tools only ever see an image's URL (from
+ * browse_drive_images/find_named_image), never its public_id directly, but
+ * Cloudinary's layer/overlay transformations address an asset by public_id,
+ * not URL. Returns null if the URL doesn't look like a Cloudinary upload URL. */
+export function extractCloudinaryPublicId(url: string): string | null {
+  return url.match(CLOUDINARY_PUBLIC_ID_RE)?.[1] ?? null;
+}
+
+/** Returns a Cloudinary delivery URL for videoUrl with overlayPublicId
+ * layered on top — e.g. watermarking the YAKGU logo into a corner of a
+ * HeyGen-generated video. This is a URL transformation, not a render step:
+ * Cloudinary composites the video the first time the URL is actually
+ * fetched (and caches the result), so the returned URL can be handed
+ * straight to Meta's video-post APIs exactly like a plain uploaded video
+ * URL. gravity/x/y/width follow Cloudinary's own layer positioning
+ * (https://cloudinary.com/documentation/video_layers) -- defaults place a
+ * modest watermark in the bottom-right corner. */
+export function buildVideoOverlayUrl(
+  videoUrl: string,
+  overlayPublicId: string,
+  opts?: { gravity?: string; x?: number; y?: number; width?: number }
+): string {
+  // "/" separates a transformation's own components, so a public_id that
+  // lives in a folder (e.g. "marketing/images/general/01_a91jpx") has to be
+  // ":"-joined instead when used as a layer identifier.
+  const layerId = overlayPublicId.replace(/\//g, ':');
+  const width = opts?.width ?? 200;
+  const gravity = opts?.gravity ?? 'south_east';
+  const x = opts?.x ?? 24;
+  const y = opts?.y ?? 24;
+  const transformation = `l_${layerId},w_${width}/fl_layer_apply,g_${gravity},x_${x},y_${y}`;
+  return videoUrl.replace('/upload/', `/upload/${transformation}/`);
+}
+
 /** Flat listing under CLOUDINARY_FOLDER — used by Pepe's browse_drive_images
  * tool and the post-schedule cron's fallback image pick. Unrelated to the
  * dashboard's per-project gallery below. */

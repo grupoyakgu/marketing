@@ -1,6 +1,6 @@
 import { getPendingVideoJobs, updateVideoJob, type VideoJob } from './video-jobs';
 import { getVideoStatus } from './heygen';
-import { uploadVideoFromUrl } from './cloudinary';
+import { uploadVideoFromUrl, extractCloudinaryPublicId, buildVideoOverlayUrl } from './cloudinary';
 import {
   postVideoToFacebook,
   createInstagramVideoContainer,
@@ -60,10 +60,25 @@ async function processGenerating(job: VideoJob): Promise<void> {
     await notify(job, `❌ Video upload to Cloudinary failed: ${uploaded.error}`);
     return;
   }
-  await updateVideoJob(job.id, { cloudinary_url: uploaded.url });
+
+  // Overlay is a URL transformation, not a re-upload -- Cloudinary composites
+  // it the first time this URL is actually fetched (by Meta's post APIs
+  // below, or by whoever loads it), so there's no extra render step here.
+  // Falls back to the plain uploaded URL if the overlay image's URL doesn't
+  // parse as one of our own Cloudinary asset links.
+  let finalUrl = uploaded.url;
+  if (job.overlay_image_url) {
+    const overlayPublicId = extractCloudinaryPublicId(job.overlay_image_url);
+    if (overlayPublicId) {
+      finalUrl = buildVideoOverlayUrl(uploaded.url, overlayPublicId);
+    } else {
+      console.error(`[process-video-jobs] overlay_image_url "${job.overlay_image_url}" for job ${job.id} isn't a recognizable Cloudinary URL -- posting without the overlay.`);
+    }
+  }
+  await updateVideoJob(job.id, { cloudinary_url: finalUrl });
 
   if (job.platform === 'facebook') {
-    const result = await postVideoToFacebook(job.caption, uploaded.url);
+    const result = await postVideoToFacebook(job.caption, finalUrl);
     if (result.success && result.postId) {
       await trackDirectPost('facebook', result.postId);
       if (job.plan_post_id) {
@@ -93,7 +108,7 @@ async function processGenerating(job: VideoJob): Promise<void> {
     return;
   }
 
-  const container = await createInstagramVideoContainer(job.caption, uploaded.url);
+  const container = await createInstagramVideoContainer(job.caption, finalUrl);
   if ('error' in container) {
     await updateVideoJob(job.id, { status: 'failed', error: container.error });
     await syncPlanPost(job, { status: 'failed' });

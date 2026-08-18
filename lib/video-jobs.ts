@@ -17,6 +17,12 @@ export interface VideoJob {
    * only recording a standalone tracked_posts/marketing_plan entry. */
   plan_post_id: string | null;
   avatar_id: string | null;
+  /** URL of an image (from browse_drive_images/find_named_image) to layer
+   * onto the finished video as a watermark/overlay — see
+   * process-video-jobs.ts's processGenerating, which applies it via
+   * lib/cloudinary.ts's buildVideoOverlayUrl once the HeyGen render is
+   * uploaded. Null means no overlay. */
+  overlay_image_url: string | null;
 }
 
 export async function createVideoJob(fields: {
@@ -26,6 +32,7 @@ export async function createVideoJob(fields: {
   heygenVideoId: string;
   planPostId?: string | null;
   avatarId?: string | null;
+  overlayImageUrl?: string | null;
 }): Promise<VideoJob> {
   const { data, error } = await supabase
     .from('video_jobs')
@@ -36,6 +43,7 @@ export async function createVideoJob(fields: {
       heygen_video_id: fields.heygenVideoId,
       plan_post_id: fields.planPostId ?? null,
       avatar_id: fields.avatarId ?? null,
+      overlay_image_url: fields.overlayImageUrl ?? null,
       status: 'generating',
     })
     .select()

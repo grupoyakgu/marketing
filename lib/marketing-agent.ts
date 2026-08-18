@@ -280,6 +280,7 @@ A post in save_marketing_plan can be a HeyGen avatar video instead of a text/ima
 - video_script is required and is what the avatar actually says — content is still the platform caption, a separate piece of text, not the script.
 - avatar_id is optional per post — use list_video_avatars if the user wants a specific look for that post; otherwise it uses the account's default avatar. The voice is always the account default (there's no per-post voice override).
 - captions defaults to true (burned-in captions) — only set it false if the user explicitly asks for a clean render with no on-screen captions.
+- overlay_image_url is optional — layers an image (e.g. the YAKGU logo) as a small watermark in the bottom-right corner of the finished video. Only set this when the user actually asks for an image/logo overlaid on the video; find the image's URL via browse_drive_images or find_named_image first.
 - Skip image_urls/image_note entirely for a video post — there's no image to pick.
 
 A scheduled video post goes through the exact same draft → approve → posted flow as any other post. The only difference is timing: at its scheduled time, the post-schedule cron starts HeyGen generation and moves the post to a 'generating' status rather than posting immediately (generation takes minutes) — you'll see that status in get_weekly_plan/get_plan_by_date while it renders, then 'posted' once it's actually live, same as create_video's own background flow. If a video post ends up 'failed' (HeyGen generation, upload, or the actual platform post itself failed), retry_post re-triggers a fresh HeyGen generation for it, same as for any other failed post.
@@ -309,7 +310,7 @@ You have full access to a library of 49 specialist marketing playbooks (vendored
 - post_comment — post a new top-level comment on a post (for thank-yous)
 - get_engagement — fetch likes/comments/reach stats
 - search_hashtag — look up an Instagram hashtag's engagement stats (avg likes/comments, top posts) for content research. Read-only: there is no way to comment on or otherwise interact with posts this surfaces — never suggest that as an option. Each call is a real network round-trip — check at most 3-4 hashtags per message; if asked to check more, do a batch of a few, report back, and continue with the rest in a follow-up message rather than calling it a dozen+ times in one turn (risks a timeout that can corrupt the conversation).
-- create_video, list_video_avatars — generate an AI avatar video (HeyGen) and auto-post it once ready; only when explicitly asked, never proactively as part of routine planning. Burns in captions by default (captions: false to disable).
+- create_video, list_video_avatars — generate an AI avatar video (HeyGen) and auto-post it once ready; only when explicitly asked, never proactively as part of routine planning. Burns in captions by default (captions: false to disable); optionally layers an image watermark over the video via overlay_image_url.
 - get_tracked_hashtags — see the user's tracked hashtag list with cached stats (same as the /hashtags dashboard)
 - add_tracked_hashtag — add a hashtag you've found worth tracking to that list, so the user sees it in the dashboard too
 - get_landing_page_copy, update_landing_page_copy — read and edit the content of the investor landing page (/invest/es, /invest/en, /invest/he — headline, highlights, market intel bullets, form section text, etc.). Edits are live immediately, no deploy needed. Always call get_landing_page_copy first so you're editing from the actual current wording, not guessing. Ask which language(s) to apply a change to if it's not obvious from context — an edit only applies to the locale you pass, it doesn't propagate to the others automatically, since each language's copy is an independent, deliberately localized translation rather than a mechanical mirror of the others.
@@ -437,6 +438,7 @@ const tools: Anthropic.Tool[] = [
               video_script: { type: 'string', description: 'Required when post_type is "video" — what the avatar says. This is separate from content, which stays the caption.' },
               avatar_id: { type: 'string', description: 'Optional HeyGen avatar override for this video post — use list_video_avatars to pick one. Falls back to the account default when omitted. Ignored for a standard post.' },
               captions: { type: 'boolean', description: 'Whether this video post\'s render has burned-in captions. Defaults to true (captions on) — set false only if the user explicitly asks for a clean render with no on-screen captions. Ignored for a standard post.' },
+              overlay_image_url: { type: 'string', description: 'Optional — URL of an image (from browse_drive_images or find_named_image) to layer onto this video post as a small watermark/overlay in the bottom-right corner, e.g. the YAKGU logo. Omit for no overlay. Ignored for a standard post.' },
             },
             required: ['platform', 'scheduled_date', 'scheduled_time', 'content'],
           },
@@ -607,6 +609,7 @@ const tools: Anthropic.Tool[] = [
         voice_id: { type: 'string', description: 'Optional — overrides the default HeyGen voice.' },
         motion_prompt: { type: 'string', description: 'Optional — controls the avatar\'s motion and gestures, e.g. "excited and energetic", "professional and calm".' },
         captions: { type: 'boolean', description: 'Whether the rendered video has burned-in captions. Defaults to true (captions on) — set false only if the user explicitly asks for a clean render with no on-screen captions.' },
+        overlay_image_url: { type: 'string', description: 'Optional — URL of an image (from browse_drive_images or find_named_image) to layer onto the finished video as a small watermark/overlay in the bottom-right corner, e.g. the YAKGU logo. Omit for no overlay.' },
       },
       required: ['script', 'platform', 'caption'],
     },
@@ -1030,6 +1033,7 @@ async function chatInner(chatId: number, userMessage: string): Promise<string> {
               video_script?: string;
               avatar_id?: string;
               captions?: boolean;
+              overlay_image_url?: string;
             }>;
           };
           try {
@@ -1155,6 +1159,7 @@ async function chatInner(chatId: number, userMessage: string): Promise<string> {
             voice_id?: string;
             motion_prompt?: string;
             captions?: boolean;
+            overlay_image_url?: string;
           };
           try {
             const motionPrompt = input.motion_prompt || 'Natural, relaxed, and animated — move hands, arms, and upper body fluidly and naturally while speaking, as if explaining something to a colleague in person, with all visible body parts in motion rather than staying static.';
@@ -1168,6 +1173,7 @@ async function chatInner(chatId: number, userMessage: string): Promise<string> {
                 platform: input.platform,
                 caption: input.caption,
                 heygenVideoId: created.videoId,
+                overlayImageUrl: input.overlay_image_url ?? null,
               });
               resultContent = `Video generation started (HeyGen video_id: ${created.videoId}). It'll be uploaded to Cloudinary and posted to ${input.platform} automatically once ready — this can take a few minutes. You'll get a message here when it's done.`;
             }

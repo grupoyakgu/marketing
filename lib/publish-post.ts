@@ -74,6 +74,7 @@ export async function publishPost(postId: string): Promise<PublishResult> {
       heygenVideoId: created.videoId,
       planPostId: post.id,
       avatarId: post.avatar_id ?? null,
+      overlayImageUrl: post.overlay_image_url ?? null,
     });
     await markPostStatus(post.id!, 'generating');
     return { success: true, pending: true };

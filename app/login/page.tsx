@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Logo } from '@/components/Logo';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -36,11 +37,8 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-neutral-50 px-4 dark:bg-neutral-950">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 h-10 w-10 rounded-xl bg-neutral-900 dark:bg-white" />
-          <h1 className="text-xl font-semibold tracking-tight text-neutral-900 dark:text-white">
-            Grupo YAKGU
-          </h1>
-          <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">Sign in to your dashboard</p>
+          <Logo size="lg" />
+          <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">Grupo YAKGU — Sign in to your dashboard</p>
         </div>
 
         <form
