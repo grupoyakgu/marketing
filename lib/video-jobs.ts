@@ -3,7 +3,7 @@ import { supabase } from './supabase';
 export interface VideoJob {
   id: string;
   chat_id: number | null;
-  platform: 'instagram' | 'facebook';
+  platform: 'instagram' | 'facebook' | 'linkedin';
   caption: string;
   heygen_video_id: string;
   cloudinary_url: string | null;
@@ -27,7 +27,7 @@ export interface VideoJob {
 
 export async function createVideoJob(fields: {
   chatId: number | null;
-  platform: 'instagram' | 'facebook';
+  platform: 'instagram' | 'facebook' | 'linkedin';
   caption: string;
   heygenVideoId: string;
   planPostId?: string | null;

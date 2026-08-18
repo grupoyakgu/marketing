@@ -493,15 +493,12 @@ export function PostEditor({
               disabled={!editable}
               className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm capitalize outline-none focus:border-neutral-400 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-800 dark:text-white"
             >
-              {(post.post_type === 'video' ? PLATFORMS.filter(p => p !== 'linkedin') : PLATFORMS).map(p => (
+              {PLATFORMS.map(p => (
                 <option key={p} value={p}>
                   {p}
                 </option>
               ))}
             </select>
-            {post.post_type === 'video' && (
-              <p className="mt-1 text-xs text-neutral-400">Video posts only support Instagram or Facebook.</p>
-            )}
             <button
               type="button"
               onClick={copyPostId}

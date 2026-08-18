@@ -276,7 +276,7 @@ Once you've found the post_id and current content, call reject_post to delete it
 
 ## VIDEO POSTS IN THE WEEKLY PLAN
 A post in save_marketing_plan can be a HeyGen avatar video instead of a text/image post — set post_type to "video" on that post instead of calling create_video directly. Only do this when the user explicitly asks for a video post in the plan, exactly like create_video itself — never add one proactively as part of routine planning. Requirements specific to a video post:
-- platform must be instagram or facebook — HeyGen video posting doesn't support LinkedIn, so never schedule a video post there.
+- platform can be linkedin, instagram, or facebook.
 - video_script is required and is what the avatar actually says — content is still the platform caption, a separate piece of text, not the script.
 - avatar_id is optional per post — use list_video_avatars if the user wants a specific look for that post; otherwise it uses the account's default avatar. The voice is always the account default (there's no per-post voice override).
 - captions defaults to true (burned-in captions) — only set it false if the user explicitly asks for a clean render with no on-screen captions.
@@ -424,7 +424,7 @@ const tools: Anthropic.Tool[] = [
           items: {
             type: 'object',
             properties: {
-              platform: { type: 'string', enum: ['linkedin', 'instagram', 'facebook'], description: 'A video post (post_type "video") only supports instagram or facebook, never linkedin.' },
+              platform: { type: 'string', enum: ['linkedin', 'instagram', 'facebook'] },
               scheduled_date: { type: 'string' },
               scheduled_time: { type: 'string' },
               content: { type: 'string', description: 'The platform caption. For a video post this is still the caption, not what the avatar says (see video_script).' },
@@ -434,7 +434,7 @@ const tools: Anthropic.Tool[] = [
                 items: { type: 'string' },
                 description: 'Exact URL(s) of the chosen image(s) from browse_drive_images. One image is the default; only include multiple if the user specifically asked for a carousel/multi-image post. Not used for a video post.',
               },
-              post_type: { type: 'string', enum: ['standard', 'video'], description: 'Omit or "standard" for a normal text/image post. Set "video" to schedule a HeyGen avatar video instead — requires video_script, and platform must be instagram or facebook.' },
+              post_type: { type: 'string', enum: ['standard', 'video'], description: 'Omit or "standard" for a normal text/image post. Set "video" to schedule a HeyGen avatar video instead — requires video_script.' },
               video_script: { type: 'string', description: 'Required when post_type is "video" — what the avatar says. This is separate from content, which stays the caption.' },
               avatar_id: { type: 'string', description: 'Optional HeyGen avatar override for this video post — use list_video_avatars to pick one. Falls back to the account default when omitted. Ignored for a standard post.' },
               captions: { type: 'boolean', description: 'Whether this video post\'s render has burned-in captions. Defaults to true (captions on) — set false only if the user explicitly asks for a clean render with no on-screen captions. Ignored for a standard post.' },
@@ -598,12 +598,12 @@ const tools: Anthropic.Tool[] = [
   {
     name: 'create_video',
     description:
-      'Generates an AI avatar video from a text script via HeyGen right now, then automatically uploads it to Cloudinary and posts it to Instagram or Facebook once ready. Generation and posting run in the background and can take several minutes — this call only starts the process and returns immediately; the user gets a Telegram message here when it actually finishes (posted or failed), so tell them it is running rather than that it is done. Uses a fixed default avatar/voice unless avatar_id/voice_id are given — use list_video_avatars first if the user wants to pick a specific one. For a video the user wants scheduled into the weekly plan instead of posted immediately, use save_marketing_plan with post_type "video" instead of this tool.',
+      'Generates an AI avatar video from a text script via HeyGen right now, then automatically uploads it to Cloudinary and posts it to LinkedIn, Instagram, or Facebook once ready. Generation and posting run in the background and can take several minutes — this call only starts the process and returns immediately; the user gets a Telegram message here when it actually finishes (posted or failed), so tell them it is running rather than that it is done. Uses a fixed default avatar/voice unless avatar_id/voice_id are given — use list_video_avatars first if the user wants to pick a specific one. For a video the user wants scheduled into the weekly plan instead of posted immediately, use save_marketing_plan with post_type "video" instead of this tool.',
     input_schema: {
       type: 'object' as const,
       properties: {
         script: { type: 'string', description: 'What the avatar should say in the video.' },
-        platform: { type: 'string', enum: ['instagram', 'facebook'] },
+        platform: { type: 'string', enum: ['linkedin', 'instagram', 'facebook'] },
         caption: { type: 'string', description: 'Caption for the resulting post.' },
         avatar_id: { type: 'string', description: 'Optional — overrides the default HeyGen avatar.' },
         voice_id: { type: 'string', description: 'Optional — overrides the default HeyGen voice.' },
@@ -1039,9 +1039,6 @@ async function chatInner(chatId: number, userMessage: string): Promise<string> {
           try {
             for (const [i, p] of input.posts.entries()) {
               if (p.post_type === 'video') {
-                if (p.platform === 'linkedin') {
-                  throw new Error(`Post ${i + 1}: video posts only support instagram or facebook, not linkedin.`);
-                }
                 if (!p.video_script) {
                   throw new Error(`Post ${i + 1}: post_type "video" requires video_script.`);
                 }
@@ -1153,7 +1150,7 @@ async function chatInner(chatId: number, userMessage: string): Promise<string> {
         if (block.name === 'create_video') {
           const input = block.input as {
             script: string;
-            platform: 'instagram' | 'facebook';
+            platform: 'linkedin' | 'instagram' | 'facebook';
             caption: string;
             avatar_id?: string;
             voice_id?: string;

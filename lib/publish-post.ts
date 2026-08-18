@@ -39,10 +39,6 @@ export async function publishPost(postId: string): Promise<PublishResult> {
   }
 
   if (post.post_type === 'video') {
-    if (post.platform === 'linkedin') {
-      await markPostStatus(post.id!, 'failed');
-      return { success: false, error: 'HeyGen video posts only support Instagram or Facebook, not LinkedIn.' };
-    }
     if (!post.video_script) {
       await markPostStatus(post.id!, 'failed');
       return { success: false, error: 'This video post has no video_script to generate from.' };

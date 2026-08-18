@@ -160,3 +160,21 @@ export async function postToLinkedIn(
     url: postId ? `https://www.linkedin.com/feed/update/${postId}/` : undefined,
   };
 }
+
+/** Posts a video to LinkedIn given a URL (e.g. a Cloudinary-hosted
+ * HeyGen render) rather than bytes already in hand -- unlike Meta's video
+ * APIs, LinkedIn's Assets API has no "fetch this URL yourself" option, so
+ * this downloads the video here and hands the bytes to postToLinkedIn's
+ * existing registerUpload/uploadMedia path, same as a Telegram-uploaded
+ * video already does via app/api/linkedin/process/route.ts. */
+export async function postVideoToLinkedInFromUrl(
+  caption: string,
+  videoUrl: string,
+  credentials?: { token: string; authorId: string }
+): Promise<LinkedInPostResult> {
+  const videoRes = await fetch(videoUrl);
+  if (!videoRes.ok) return { success: false, error: `Failed to fetch video: ${videoRes.status}` };
+  const data = await videoRes.arrayBuffer();
+  const mimeType = videoRes.headers.get('content-type') ?? 'video/mp4';
+  return postToLinkedIn(caption, { data, mimeType, mediaType: 'VIDEO' }, credentials);
+}

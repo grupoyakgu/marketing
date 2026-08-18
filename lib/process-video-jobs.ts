@@ -7,6 +7,7 @@ import {
   checkInstagramContainer,
   publishInstagramContainer,
 } from './meta-poster';
+import { postVideoToLinkedInFromUrl } from './linkedin-poster';
 import { trackDirectPost, recordDirectPostInPlan, markPostStatus } from './marketing-plan';
 
 async function sendTelegramMessage(chatId: number, text: string) {
@@ -40,6 +41,44 @@ async function syncPlanPost(
   } else {
     await markPostStatus(job.plan_post_id, 'failed');
   }
+}
+
+/** Shared tail for a single-step platform post (Facebook, LinkedIn) --
+ * Instagram is the odd one out below, needing an async container-processing
+ * step in between (processInstagramContainer) rather than a single call
+ * that returns success/failure immediately. */
+async function finishSingleStepPost(
+  job: VideoJob,
+  platform: 'facebook' | 'linkedin',
+  result: { success: boolean; postId?: string; url?: string; error?: string }
+): Promise<void> {
+  if (result.success && result.postId) {
+    await trackDirectPost(platform, result.postId);
+    if (job.plan_post_id) {
+      await syncPlanPost(job, { status: 'posted', url: result.url, postId: result.postId });
+    } else {
+      await recordDirectPostInPlan({
+        platform,
+        content: job.caption,
+        postUrl: result.url,
+        platformPostId: result.postId,
+        imageNote: 'AI avatar video (HeyGen)',
+        postType: 'video',
+      });
+    }
+  } else {
+    await syncPlanPost(job, { status: 'failed' });
+  }
+  await updateVideoJob(job.id, {
+    status: result.success ? 'posted' : 'failed',
+    error: result.success ? null : (result.error ?? 'Unknown error'),
+    post_url: result.url ?? null,
+  });
+  const label = platform === 'facebook' ? 'Facebook' : 'LinkedIn';
+  await notify(
+    job,
+    result.success ? `✅ Video posted to ${label}! ${result.url ?? ''}` : `❌ Video post to ${label} failed: ${result.error}`
+  );
 }
 
 async function processGenerating(job: VideoJob): Promise<void> {
@@ -79,32 +118,13 @@ async function processGenerating(job: VideoJob): Promise<void> {
 
   if (job.platform === 'facebook') {
     const result = await postVideoToFacebook(job.caption, finalUrl);
-    if (result.success && result.postId) {
-      await trackDirectPost('facebook', result.postId);
-      if (job.plan_post_id) {
-        await syncPlanPost(job, { status: 'posted', url: result.url, postId: result.postId });
-      } else {
-        await recordDirectPostInPlan({
-          platform: 'facebook',
-          content: job.caption,
-          postUrl: result.url,
-          platformPostId: result.postId,
-          imageNote: 'AI avatar video (HeyGen)',
-          postType: 'video',
-        });
-      }
-    } else {
-      await syncPlanPost(job, { status: 'failed' });
-    }
-    await updateVideoJob(job.id, {
-      status: result.success ? 'posted' : 'failed',
-      error: result.success ? null : (result.error ?? 'Unknown error'),
-      post_url: result.url ?? null,
-    });
-    await notify(
-      job,
-      result.success ? `✅ Video posted to Facebook! ${result.url ?? ''}` : `❌ Video post to Facebook failed: ${result.error}`
-    );
+    await finishSingleStepPost(job, 'facebook', result);
+    return;
+  }
+
+  if (job.platform === 'linkedin') {
+    const result = await postVideoToLinkedInFromUrl(job.caption, finalUrl);
+    await finishSingleStepPost(job, 'linkedin', result);
     return;
   }
 
