@@ -54,7 +54,6 @@ interface LeadRow {
   locale: string;
   source: string;
   consent_marketing: boolean;
-  mail_url: string | null;
 }
 
 interface DashboardData {
@@ -516,12 +515,7 @@ export default function LandingPerformancePage() {
                 </thead>
                 <tbody className="divide-y divide-neutral-50 dark:divide-neutral-800">
                   {pagedLeads.map(lead => (
-                    <tr
-                      key={lead.id}
-                      onClick={lead.mail_url ? () => window.open(lead.mail_url!, '_blank', 'noopener,noreferrer') : undefined}
-                      className={lead.mail_url ? 'cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800/50' : undefined}
-                      title={lead.mail_url ? 'Open in Gmail' : undefined}
-                    >
+                    <tr key={lead.id}>
                       <td className="py-2.5 text-xs text-neutral-500 dark:text-neutral-400">
                         {new Date(lead.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' })}
                       </td>

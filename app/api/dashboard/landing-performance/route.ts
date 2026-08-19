@@ -15,7 +15,7 @@ interface LinkClick {
   utm_source: string | null;
 }
 
-interface LeadRow {
+interface InvestorLeadRow {
   id: string;
   created_at: string;
   name: string;
@@ -33,15 +33,17 @@ interface EmailLeadRow {
   apellidos: string | null;
   phone: string | null;
   email: string | null;
-  gmail_message_id: string;
 }
 
-/** Gmail's web client accepts a message's Gmail API id directly as a
- * permalink fragment -- this opens that exact message in koby@grupoyakgu.es's
- * inbox rather than just a compose window, so a click takes you straight to
- * what the lead actually wrote. */
-function gmailMessageUrl(messageId: string): string {
-  return `https://mail.google.com/mail/u/0/#all/${messageId}`;
+interface Lead {
+  id: string;
+  created_at: string;
+  name: string;
+  email: string;
+  mobile: string;
+  locale: string;
+  source: string;
+  consent_marketing: boolean;
 }
 
 function isoDate(d: Date): string {
@@ -93,60 +95,72 @@ export async function GET(req: NextRequest) {
   }
   const clicks: LinkClick[] = clicksRaw ?? [];
 
-  // Fetch leads — include all leads in range (pre-tracking leads will have null utm_source)
-  let leadsQuery = supabase
+  // Fetch investor_leads — the BDS36 landing page's own form
+  const { data: investorLeadsRaw, error: investorLeadsError } = await supabase
     .from('investor_leads')
     .select('id, created_at, name, email, mobile, locale, utm_source, consent_marketing')
     .gte('created_at', sinceTs)
-    .lte('created_at', untilTs)
-    .order('created_at', { ascending: false });
-  if (utmSourceFilter) leadsQuery = leadsQuery.eq('utm_source', utmSourceFilter);
-  const { data: leadsRaw, error: leadsError } = await leadsQuery;
-  if (leadsError) {
-    console.error('[api/dashboard/landing-performance] investor_leads query failed:', leadsError.message);
+    .lte('created_at', untilTs);
+  if (investorLeadsError) {
+    console.error('[api/dashboard/landing-performance] investor_leads query failed:', investorLeadsError.message);
     return NextResponse.json({ error: 'Failed to load leads' }, { status: 500 });
   }
-  const leads: LeadRow[] = leadsRaw ?? [];
+  const investorLeads: InvestorLeadRow[] = investorLeadsRaw ?? [];
 
-  // Fetch Persuadis leads captured via the koby@grupoyakgu.es email
-  // automation (lib/process-email-leads.ts) -- a separate intake from the
-  // BDS36 landing page's own form, with no page-view data behind it, so
-  // these are only added to the leads listing below, not folded into the
-  // views/submissions funnel or the by-network breakdown (which model that
-  // specific tracked funnel). Skipped when a specific social network filter
-  // is active, since none of these are ever attributed to one.
-  let emailLeads: EmailLeadRow[] = [];
-  if (!utmSourceFilter) {
-    const { data: emailLeadsRaw, error: emailLeadsError } = await supabase
-      .from('email_leads')
-      .select('id, created_at, name, apellidos, phone, email, gmail_message_id')
-      .gte('created_at', sinceTs)
-      .lte('created_at', untilTs)
-      .order('created_at', { ascending: false });
-    if (emailLeadsError) {
-      console.error('[api/dashboard/landing-performance] email_leads query failed:', emailLeadsError.message);
-      return NextResponse.json({ error: 'Failed to load email leads' }, { status: 500 });
-    }
-    emailLeads = emailLeadsRaw ?? [];
+  // Fetch email_leads — Persuadis contact-form leads captured via the
+  // koby@grupoyakgu.es email automation (lib/process-email-leads.ts).
+  const { data: emailLeadsRaw, error: emailLeadsError } = await supabase
+    .from('email_leads')
+    .select('id, created_at, name, apellidos, phone, email')
+    .gte('created_at', sinceTs)
+    .lte('created_at', untilTs);
+  if (emailLeadsError) {
+    console.error('[api/dashboard/landing-performance] email_leads query failed:', emailLeadsError.message);
+    return NextResponse.json({ error: 'Failed to load email leads' }, { status: 500 });
   }
+  const emailLeads: EmailLeadRow[] = emailLeadsRaw ?? [];
+
+  // Unify both intakes into one lead pool -- a lead with no utm_source is
+  // real direct traffic and labeled 'direct'; every email lead is labeled
+  // 'website' since none of them come from a tracked campaign link.
+  let leads: Lead[] = [
+    ...investorLeads.map(l => ({
+      id: l.id,
+      created_at: l.created_at,
+      name: l.name,
+      email: l.email,
+      mobile: l.mobile,
+      locale: l.locale,
+      source: l.utm_source ?? 'direct',
+      consent_marketing: l.consent_marketing,
+    })),
+    ...emailLeads.map(l => ({
+      id: l.id,
+      created_at: l.created_at,
+      name: [l.name, l.apellidos].filter(Boolean).join(' ') || (l.name ?? '—'),
+      email: l.email ?? '—',
+      mobile: l.phone ?? '—',
+      locale: 'es',
+      source: 'website',
+      consent_marketing: false,
+    })),
+  ];
+  if (utmSourceFilter) leads = leads.filter(l => l.source === utmSourceFilter);
+  leads.sort((a, b) => b.created_at.localeCompare(a.created_at));
 
   const views = events.length;
-  // Every lead counts as a submission -- one with no utm_source is real
-  // direct traffic (someone who visited without a campaign link), not
-  // untracked data to exclude, so it's labeled 'direct' below rather than
-  // dropped from the totals.
   const submissions = leads.length;
   const conversionRate = views > 0 ? submissions / views : 0;
 
-  // By network — group events and leads by utm_source (null -> 'direct')
+  // By network — group events and leads by source (null utm_source -> 'direct')
   const networkSources = Array.from(new Set([
     ...events.map(e => e.utm_source ?? 'direct'),
-    ...leads.map(l => l.utm_source ?? 'direct'),
+    ...leads.map(l => l.source),
   ]));
 
   const byNetwork = networkSources.map(source => {
     const networkViews = events.filter(e => (e.utm_source ?? 'direct') === source).length;
-    const networkSubs = leads.filter(l => (l.utm_source ?? 'direct') === source).length;
+    const networkSubs = leads.filter(l => l.source === source).length;
     return {
       source,
       views: networkViews,
@@ -195,29 +209,6 @@ export async function GET(req: NextRequest) {
     byNetwork,
     byLocale,
     timeSeries,
-    leads: [
-      ...leads.map(l => ({
-        id: l.id,
-        created_at: l.created_at,
-        name: l.name,
-        email: l.email,
-        mobile: l.mobile,
-        locale: l.locale,
-        source: l.utm_source ?? 'direct',
-        consent_marketing: l.consent_marketing,
-        mail_url: null as string | null,
-      })),
-      ...emailLeads.map(l => ({
-        id: l.id,
-        created_at: l.created_at,
-        name: [l.name, l.apellidos].filter(Boolean).join(' ') || (l.name ?? '—'),
-        email: l.email ?? '—',
-        mobile: l.phone ?? '—',
-        locale: 'es',
-        source: 'website',
-        consent_marketing: false,
-        mail_url: gmailMessageUrl(l.gmail_message_id),
-      })),
-    ].sort((a, b) => b.created_at.localeCompare(a.created_at)),
+    leads,
   });
 }
