@@ -35,6 +35,10 @@
 - /lib/video-jobs.ts + /lib/process-video-jobs.ts → video_jobs state machine (generating → processing_ig → posted/failed) ticked by /api/cron/process-video-jobs every 5 minutes; drives both Pepe's immediate create_video tool and a scheduled marketing_plan video post (see publish-post.ts)
 - /lib/publish-post.ts              → single dispatch used by the post-schedule cron, the dashboard's manual "Retry", and Pepe's retry_post — branches on post_type: 'standard' posts go straight to LinkedIn/Facebook/Instagram, 'video' posts kick off HeyGen generation and hand off to process-video-jobs.ts
 - /lib/marketing-plan.ts            → marketing_plan (the weekly Planner) CRUD — draft → approved → posted/failed/generating
+- /lib/gmail.ts                     → Gmail API wrapper (OAuth2 refresh-token flow) — list/read messages, send mail as GMAIL_USER_EMAIL
+- /lib/lead-reply.ts                → shared warm "thanks for reaching out" email copy sent to both Persuadis and investor-form leads
+- /lib/process-email-leads.ts + /app/api/cron/process-email-leads → drains new leads@persuadis.com contact-form emails (email_leads table dedupes by Gmail message id), notifies Pepe's chat, auto-replies to the lead every 5 minutes
+- /lib/investor-leads.ts            → investor_leads CRUD + Telegram notify + warm auto-reply email for the /invest landing page form
 - /supabase/migrations/             → SQL migrations
 
 ## Claude Code Skills
@@ -75,6 +79,10 @@
 - HEYGEN_API_KEY            # HeyGen API key used by lib/heygen.ts (list avatars/voices, generate videos, poll status)
 - HEYGEN_DEFAULT_AVATAR_ID  # fallback avatar for create_video / a scheduled video post when no avatar_id is given
 - HEYGEN_DEFAULT_VOICE_ID   # fallback voice for create_video / a scheduled video post — there is no per-post voice override, only per-post avatar_id
+- GMAIL_CLIENT_ID           # OAuth2 client ID for lib/gmail.ts (Google Cloud Console)
+- GMAIL_CLIENT_SECRET       # OAuth2 client secret paired with GMAIL_CLIENT_ID
+- GMAIL_REFRESH_TOKEN       # long-lived refresh token for GMAIL_USER_EMAIL, scopes: gmail.readonly + gmail.send
+- GMAIL_USER_EMAIL          # the mailbox lib/gmail.ts reads from and sends as (koby@grupoyakgu.es) — until all four GMAIL_* vars are set, process-email-leads and the investor-form auto-reply silently no-op
 
 ## Telegram Commands
 - /post linkedin <message>              — text post

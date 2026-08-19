@@ -11,6 +11,7 @@
     { "path": "/api/cron/process-santi-delegations", "schedule": "*/5 * * * *" },
     { "path": "/api/cron/process-bot-consultations", "schedule": "*/5 * * * *" },
     { "path": "/api/cron/process-bot-followups", "schedule": "*/5 * * * *" },
-    { "path": "/api/cron/process-interaction-fetches", "schedule": "*/5 * * * *" }
+    { "path": "/api/cron/process-interaction-fetches", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/process-email-leads", "schedule": "*/5 * * * *" }
   ]
 }

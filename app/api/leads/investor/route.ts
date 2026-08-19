@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { recordInvestorLead, notifyNewInvestorLead } from '@/lib/investor-leads';
+import { recordInvestorLead, notifyNewInvestorLead, sendInvestorWelcomeEmail } from '@/lib/investor-leads';
 
 const VALID_LOCALES = ['es', 'en', 'he'];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
   try {
     const lead = await recordInvestorLead({ name, email, mobile, locale, utm_source, utm_medium, utm_campaign });
     await notifyNewInvestorLead(lead);
+    await sendInvestorWelcomeEmail(lead);
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error('[api/leads/investor] failed:', err);

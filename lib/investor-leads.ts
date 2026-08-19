@@ -1,6 +1,8 @@
 import { supabase } from './supabase';
 import { TelegramClient } from './telegram';
 import { getMostRecentPepeChatId } from './marketing-plan';
+import { sendEmail } from './gmail';
+import { buildWelcomeEmail } from './lead-reply';
 
 export interface InvestorLead {
   id: string;
@@ -55,5 +57,17 @@ export async function notifyNewInvestorLead(lead: InvestorLead): Promise<void> {
     );
   } catch (err) {
     console.error('[investor-leads] notify failed:', err);
+  }
+}
+
+/** Same warm auto-reply mechanism as the Persuadis email leads -- best
+ * effort and never throws, so a Gmail hiccup (or Gmail simply not being
+ * configured yet) can't fail the form submission itself. */
+export async function sendInvestorWelcomeEmail(lead: InvestorLead): Promise<void> {
+  try {
+    const { subject, text } = buildWelcomeEmail({ name: lead.name });
+    await sendEmail(lead.email, subject, text);
+  } catch (err) {
+    console.error('[investor-leads] welcome email failed:', err);
   }
 }
