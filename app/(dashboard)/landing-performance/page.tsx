@@ -523,17 +523,13 @@ export default function LandingPerformancePage() {
                       <td className="py-2.5 text-neutral-600 dark:text-neutral-300">{lead.mobile}</td>
                       <td className="py-2.5 text-center text-base">{LOCALE_FLAGS[lead.locale] ?? lead.locale}</td>
                       <td className="py-2.5">
-                        {lead.utm_source ? (
-                          <span className="flex items-center gap-1.5">
-                            <span
-                              className="h-1.5 w-1.5 rounded-full"
-                              style={{ backgroundColor: NETWORK_COLORS[lead.utm_source] ?? NETWORK_COLORS.direct }}
-                            />
-                            <span className="capitalize text-neutral-700 dark:text-neutral-300">{lead.utm_source}</span>
-                          </span>
-                        ) : (
-                          <span className="text-neutral-400">—</span>
-                        )}
+                        <span className="flex items-center gap-1.5">
+                          <span
+                            className="h-1.5 w-1.5 rounded-full"
+                            style={{ backgroundColor: NETWORK_COLORS[lead.utm_source ?? 'direct'] ?? NETWORK_COLORS.direct }}
+                          />
+                          <span className="capitalize text-neutral-700 dark:text-neutral-300">{lead.utm_source ?? 'direct'}</span>
+                        </span>
                       </td>
                       <td className="py-2.5 text-center">
                         {lead.consent_marketing
