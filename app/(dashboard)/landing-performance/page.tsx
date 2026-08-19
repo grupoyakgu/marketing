@@ -52,8 +52,9 @@ interface LeadRow {
   email: string;
   mobile: string;
   locale: string;
-  utm_source: string | null;
+  source: string;
   consent_marketing: boolean;
+  mail_url: string | null;
 }
 
 interface DashboardData {
@@ -92,6 +93,7 @@ const NETWORK_COLORS: Record<string, string> = {
   facebook: '#1877F2',
   instagram: '#E1306C',
   direct: '#6b7280',
+  website: '#8b5cf6',
 };
 
 const LOCALE_FLAGS: Record<string, string> = { es: '🇪🇸', en: '🇬🇧', he: '🇮🇱' };
@@ -514,7 +516,12 @@ export default function LandingPerformancePage() {
                 </thead>
                 <tbody className="divide-y divide-neutral-50 dark:divide-neutral-800">
                   {pagedLeads.map(lead => (
-                    <tr key={lead.id}>
+                    <tr
+                      key={lead.id}
+                      onClick={lead.mail_url ? () => window.open(lead.mail_url!, '_blank', 'noopener,noreferrer') : undefined}
+                      className={lead.mail_url ? 'cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800/50' : undefined}
+                      title={lead.mail_url ? 'Open in Gmail' : undefined}
+                    >
                       <td className="py-2.5 text-xs text-neutral-500 dark:text-neutral-400">
                         {new Date(lead.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' })}
                       </td>
@@ -526,9 +533,9 @@ export default function LandingPerformancePage() {
                         <span className="flex items-center gap-1.5">
                           <span
                             className="h-1.5 w-1.5 rounded-full"
-                            style={{ backgroundColor: NETWORK_COLORS[lead.utm_source ?? 'direct'] ?? NETWORK_COLORS.direct }}
+                            style={{ backgroundColor: NETWORK_COLORS[lead.source] ?? NETWORK_COLORS.direct }}
                           />
-                          <span className="capitalize text-neutral-700 dark:text-neutral-300">{lead.utm_source ?? 'direct'}</span>
+                          <span className="capitalize text-neutral-700 dark:text-neutral-300">{lead.source}</span>
                         </span>
                       </td>
                       <td className="py-2.5 text-center">

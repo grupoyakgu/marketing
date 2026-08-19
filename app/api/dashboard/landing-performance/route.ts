@@ -26,6 +26,24 @@ interface LeadRow {
   consent_marketing: boolean;
 }
 
+interface EmailLeadRow {
+  id: string;
+  created_at: string;
+  name: string | null;
+  apellidos: string | null;
+  phone: string | null;
+  email: string | null;
+  gmail_message_id: string;
+}
+
+/** Gmail's web client accepts a message's Gmail API id directly as a
+ * permalink fragment -- this opens that exact message in koby@grupoyakgu.es's
+ * inbox rather than just a compose window, so a click takes you straight to
+ * what the lead actually wrote. */
+function gmailMessageUrl(messageId: string): string {
+  return `https://mail.google.com/mail/u/0/#all/${messageId}`;
+}
+
 function isoDate(d: Date): string {
   return d.toISOString().split('T')[0];
 }
@@ -89,6 +107,28 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to load leads' }, { status: 500 });
   }
   const leads: LeadRow[] = leadsRaw ?? [];
+
+  // Fetch Persuadis leads captured via the koby@grupoyakgu.es email
+  // automation (lib/process-email-leads.ts) -- a separate intake from the
+  // BDS36 landing page's own form, with no page-view data behind it, so
+  // these are only added to the leads listing below, not folded into the
+  // views/submissions funnel or the by-network breakdown (which model that
+  // specific tracked funnel). Skipped when a specific social network filter
+  // is active, since none of these are ever attributed to one.
+  let emailLeads: EmailLeadRow[] = [];
+  if (!utmSourceFilter) {
+    const { data: emailLeadsRaw, error: emailLeadsError } = await supabase
+      .from('email_leads')
+      .select('id, created_at, name, apellidos, phone, email, gmail_message_id')
+      .gte('created_at', sinceTs)
+      .lte('created_at', untilTs)
+      .order('created_at', { ascending: false });
+    if (emailLeadsError) {
+      console.error('[api/dashboard/landing-performance] email_leads query failed:', emailLeadsError.message);
+      return NextResponse.json({ error: 'Failed to load email leads' }, { status: 500 });
+    }
+    emailLeads = emailLeadsRaw ?? [];
+  }
 
   const views = events.length;
   // Every lead counts as a submission -- one with no utm_source is real
@@ -155,15 +195,29 @@ export async function GET(req: NextRequest) {
     byNetwork,
     byLocale,
     timeSeries,
-    leads: leads.map(l => ({
-      id: l.id,
-      created_at: l.created_at,
-      name: l.name,
-      email: l.email,
-      mobile: l.mobile,
-      locale: l.locale,
-      utm_source: l.utm_source,
-      consent_marketing: l.consent_marketing,
-    })),
+    leads: [
+      ...leads.map(l => ({
+        id: l.id,
+        created_at: l.created_at,
+        name: l.name,
+        email: l.email,
+        mobile: l.mobile,
+        locale: l.locale,
+        source: l.utm_source ?? 'direct',
+        consent_marketing: l.consent_marketing,
+        mail_url: null as string | null,
+      })),
+      ...emailLeads.map(l => ({
+        id: l.id,
+        created_at: l.created_at,
+        name: [l.name, l.apellidos].filter(Boolean).join(' ') || (l.name ?? '—'),
+        email: l.email ?? '—',
+        mobile: l.phone ?? '—',
+        locale: 'es',
+        source: 'website',
+        consent_marketing: false,
+        mail_url: gmailMessageUrl(l.gmail_message_id),
+      })),
+    ].sort((a, b) => b.created_at.localeCompare(a.created_at)),
   });
 }
