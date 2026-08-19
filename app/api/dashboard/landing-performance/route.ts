@@ -91,20 +91,22 @@ export async function GET(req: NextRequest) {
   const leads: LeadRow[] = leadsRaw ?? [];
 
   const views = events.length;
-  // Submissions for funnel/conversion: only UTM-attributed leads (post-tracking)
-  const attributedLeads = leads.filter(l => l.utm_source !== null);
-  const submissions = attributedLeads.length;
+  // Every lead counts as a submission -- one with no utm_source is real
+  // direct traffic (someone who visited without a campaign link), not
+  // untracked data to exclude, so it's labeled 'direct' below rather than
+  // dropped from the totals.
+  const submissions = leads.length;
   const conversionRate = views > 0 ? submissions / views : 0;
 
-  // By network — group events and attributed leads by utm_source
+  // By network — group events and leads by utm_source (null -> 'direct')
   const networkSources = Array.from(new Set([
     ...events.map(e => e.utm_source ?? 'direct'),
-    ...attributedLeads.map(l => l.utm_source ?? 'direct'),
+    ...leads.map(l => l.utm_source ?? 'direct'),
   ]));
 
   const byNetwork = networkSources.map(source => {
     const networkViews = events.filter(e => (e.utm_source ?? 'direct') === source).length;
-    const networkSubs = attributedLeads.filter(l => (l.utm_source ?? 'direct') === source).length;
+    const networkSubs = leads.filter(l => (l.utm_source ?? 'direct') === source).length;
     return {
       source,
       views: networkViews,
@@ -136,7 +138,7 @@ export async function GET(req: NextRequest) {
     const existing = dateMap.get(date) ?? { views: 0, submissions: 0 };
     dateMap.set(date, { ...existing, views: existing.views + 1 });
   }
-  for (const l of attributedLeads) {
+  for (const l of leads) {
     const date = isoDate(new Date(l.created_at));
     const existing = dateMap.get(date) ?? { views: 0, submissions: 0 };
     dateMap.set(date, { ...existing, submissions: existing.submissions + 1 });
