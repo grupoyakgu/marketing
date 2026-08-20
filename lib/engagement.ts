@@ -122,6 +122,7 @@ export async function getInstagramPostEngagement(mediaId: string): Promise<PostE
     return null;
   }
   const d = await res.json();
+  console.log(`[Instagram engagement] ${mediaId}: media_product_type=${d.media_product_type} like_count=${d.like_count}`);
 
   // Insights require a separate call (only available on business accounts)
   let impressions = 0;
@@ -158,6 +159,7 @@ export async function getInstagramPostEngagement(mediaId: string): Promise<PostE
       if (likesIns.ok) {
         const likesInsData = await likesIns.json();
         const reelsLikes = likesInsData.data?.find((m: Record<string, string>) => m.name === 'likes')?.values?.[0]?.value;
+        console.log(`[Instagram engagement] ${mediaId}: reels likes insight raw=${JSON.stringify(likesInsData)}`);
         if (typeof reelsLikes === 'number') likes = reelsLikes;
       } else {
         console.error(`Instagram getPostEngagement reels likes insight failed for ${mediaId}: ${likesIns.status} ${await likesIns.text()}`);
