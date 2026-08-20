@@ -3,6 +3,7 @@ import {
   getAllAccountStats,
   recordAccountStatsSnapshot,
   upsertPostEngagementCache,
+  upsertPaidPostStatsCache,
   recordRefreshStatus,
   getFacebookPostEngagement,
   getInstagramPostEngagement,
@@ -11,6 +12,7 @@ import {
   type PostEngagement,
 } from '@/lib/engagement';
 import { getPostedPostsForCommentCheck } from '@/lib/marketing-plan';
+import { getPaidStatsByPostUrl, isMetaAdsConfigured } from '@/lib/meta-ads';
 
 export interface DashboardRefreshResult {
   durationMs: number;
@@ -24,10 +26,11 @@ export interface DashboardRefreshResult {
 export async function refreshDashboardData(): Promise<DashboardRefreshResult> {
   const start = Date.now();
 
-  const [accountStats, recentPosts, performancePosts] = await Promise.all([
+  const [accountStats, recentPosts, performancePosts, paidStats] = await Promise.all([
     getAllAccountStats(),
     getPostedPostsForCommentCheck(),
     getPostsForPerformanceRefresh(),
+    isMetaAdsConfigured() ? getPaidStatsByPostUrl() : Promise.resolve(new Map()),
   ]);
   // Two different windows with two different purposes, unioned and deduped:
   // getPostedPostsForCommentCheck's 7-30 day window is for comment-reply
@@ -57,6 +60,7 @@ export async function refreshDashboardData(): Promise<DashboardRefreshResult> {
   await Promise.all([
     accountStats.length > 0 ? recordAccountStatsSnapshot(accountStats) : Promise.resolve(),
     upsertPostEngagementCache(engagements),
+    upsertPaidPostStatsCache(paidStats),
   ]);
 
   const durationMs = Date.now() - start;

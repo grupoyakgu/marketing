@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { normalizePostUrl, type PaidPostStats as PaidPostStatsAggregate } from '@/lib/meta-ads';
 
 // v19.0 was already past Meta's ~2-year support window by the time this was
 // last touched — bumped to the current stable version. Also matters for the
@@ -466,6 +467,54 @@ export async function upsertPostEngagementCache(engagements: PostEngagement[]): 
   );
 }
 
+// ─── Paid post stats cache ──────────────────────────────────────────────────
+//
+// Separate from post_engagement_cache (organic) on purpose -- a post's paid
+// engagement is shown on the Performance page as its own column, never
+// folded into the organic likes/comments/shares/reach that scorePerformance
+// below ranks posts by, since the two aren't really the same signal (money
+// spent buying reach isn't the same as organic pull).
+
+export interface PaidPostStats {
+  spend: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  hasCampaign: boolean;
+}
+
+const EMPTY_PAID_STATS: PaidPostStats = { spend: 0, likes: 0, comments: 0, shares: 0, hasCampaign: false };
+
+export async function upsertPaidPostStatsCache(stats: Map<string, PaidPostStatsAggregate>): Promise<void> {
+  if (stats.size === 0) return;
+  const rows = Array.from(stats, ([postUrl, s]) => ({
+    post_url: postUrl,
+    spend: s.spend,
+    likes: s.likes,
+    comments: s.comments,
+    shares: s.shares,
+    impressions: s.impressions,
+    reach: s.reach,
+    updated_at: new Date().toISOString(),
+  }));
+  await supabase.from('paid_post_stats').upsert(rows, { onConflict: 'post_url' });
+}
+
+async function getCachedPaidPostStats(postUrls: string[]): Promise<Map<string, PaidPostStats>> {
+  const normalized = Array.from(new Set(postUrls.filter(Boolean).map(normalizePostUrl)));
+  if (normalized.length === 0) return new Map();
+  const { data, error } = await supabase
+    .from('paid_post_stats')
+    .select('post_url, spend, likes, comments, shares')
+    .in('post_url', normalized);
+  if (error) throw new Error(error.message);
+  const map = new Map<string, PaidPostStats>();
+  for (const row of data ?? []) {
+    map.set(row.post_url, { spend: row.spend, likes: row.likes, comments: row.comments, shares: row.shares, hasCampaign: true });
+  }
+  return map;
+}
+
 // ─── Engagement over time ───────────────────────────────────────────────────
 
 export interface EngagementOverTimePoint {
@@ -541,6 +590,7 @@ export interface PostPerformance {
   reach: number;
   engagementRate: number;
   postType?: 'video' | 'standard';
+  paid: PaidPostStats;
 }
 
 function performanceMetricValue(p: PostPerformance, metric: PerformanceMetric): number {
@@ -606,9 +656,12 @@ async function buildPostPerformance(rows: PostedRow[]): Promise<PostPerformance[
   const withPlatformPostId = rows.filter((r): r is PostedRow & { platform_post_id: string } => r.platform_post_id !== null);
   if (withPlatformPostId.length === 0) return [];
 
-  const engagements = await getCachedPostEngagements(
-    withPlatformPostId.map(p => ({ platform: p.platform, platform_post_id: p.platform_post_id }))
-  );
+  const [engagements, paidStatsByUrl] = await Promise.all([
+    getCachedPostEngagements(
+      withPlatformPostId.map(p => ({ platform: p.platform, platform_post_id: p.platform_post_id }))
+    ),
+    getCachedPaidPostStats(withPlatformPostId.map(p => p.post_url).filter((u): u is string => !!u)),
+  ]);
   const byKey = new Map(engagements.map(e => [`${e.platform}:${e.postId}`, e]));
 
   return withPlatformPostId
@@ -627,6 +680,7 @@ async function buildPostPerformance(rows: PostedRow[]): Promise<PostPerformance[
         shares: e.shares,
         impressions: e.impressions,
         reach: e.reach,
+        paid: p.post_url ? (paidStatsByUrl.get(normalizePostUrl(p.post_url)) ?? EMPTY_PAID_STATS) : EMPTY_PAID_STATS,
         engagementRate: computeEngagementRate(e),
         postType: p.post_type,
       };

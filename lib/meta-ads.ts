@@ -419,6 +419,82 @@ async function fetchCampaignPostLink(campaignId: string, token: string): Promise
   return null;
 }
 
+/** Both this file's ad-creative post links and marketing_plan's own stored
+ * post_url need to agree on exactly the same string to match a paid
+ * campaign back to the organic post it boosted -- there's no shared numeric
+ * ID between the Marketing API and organic post records. Strips any query
+ * string and forces a trailing slash + lowercase so trivial URL variations
+ * (tracking params, a missing trailing slash) don't break the match. */
+export function normalizePostUrl(url: string): string {
+  const withoutQuery = url.trim().split('?')[0];
+  const withSlash = withoutQuery.endsWith('/') ? withoutQuery : `${withoutQuery}/`;
+  return withSlash.toLowerCase();
+}
+
+export interface PaidPostStats {
+  spend: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  impressions: number;
+  reach: number;
+}
+
+/** All-time paid engagement for every post currently (or ever) boosted by a
+ * campaign, keyed by its normalized permalink -- scans every configured ad
+ * account's campaigns and resolves each to the post it boosts via
+ * fetchCampaignPostLink, then sums lifetime spend/impressions/reach/actions
+ * across every campaign that resolved to the same post. Two Graph API calls
+ * per campaign, so this is meant for the daily refresh cron
+ * (lib/dashboard-refresh.ts) to cache, not for a live page render. */
+export async function getPaidStatsByPostUrl(): Promise<Map<string, PaidPostStats>> {
+  const token = process.env.FACEBOOK_ADS_ACCESS_TOKEN;
+  const accountIds = getConfiguredAccountIds();
+  if (!token || accountIds.length === 0) return new Map();
+
+  const allCampaigns = (await Promise.all(accountIds.map(id => listRawCampaigns(id, token)))).flat();
+
+  const perCampaign = await Promise.all(
+    allCampaigns.map(async c => {
+      const [postLink, lifetimeBreakdown] = await Promise.all([
+        fetchCampaignPostLink(c.id, token),
+        fetchInsightsBreakdown(c.id, token, { datePreset: 'maximum' }),
+      ]);
+      if (!postLink) return null;
+      const actions = sumActions(lifetimeBreakdown);
+      const stats: PaidPostStats = {
+        spend: sumBreakdown(lifetimeBreakdown, 'spend'),
+        impressions: sumBreakdown(lifetimeBreakdown, 'impressions'),
+        reach: sumBreakdown(lifetimeBreakdown, 'reach'),
+        likes: actions.likes,
+        comments: actions.comments,
+        shares: actions.shares,
+      };
+      return { postUrl: normalizePostUrl(postLink), stats };
+    })
+  );
+
+  const map = new Map<string, PaidPostStats>();
+  for (const entry of perCampaign) {
+    if (!entry) continue;
+    const existing = map.get(entry.postUrl);
+    map.set(
+      entry.postUrl,
+      existing
+        ? {
+            spend: existing.spend + entry.stats.spend,
+            likes: existing.likes + entry.stats.likes,
+            comments: existing.comments + entry.stats.comments,
+            shares: existing.shares + entry.stats.shares,
+            impressions: existing.impressions + entry.stats.impressions,
+            reach: existing.reach + entry.stats.reach,
+          }
+        : entry.stats
+    );
+  }
+  return map;
+}
+
 export interface AdsDashboard {
   currency: string;
   campaigns: CampaignSummary[];

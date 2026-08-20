@@ -1,12 +1,12 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Trophy, ExternalLink, ArrowUp, ArrowDown, ArrowUpDown, Info, Video } from 'lucide-react';
+import { Trophy, ExternalLink, ArrowUp, ArrowDown, ArrowUpDown, Info, Video, DollarSign } from 'lucide-react';
 import { PlatformBadge } from '@/components/ui/PlatformBadge';
 import { cn } from '@/lib/cn';
 import type { RankedPostPerformance } from '@/lib/engagement';
 
-type SortKey = 'score' | 'likes' | 'comments' | 'shares' | 'impressions' | 'reach' | 'engagementRate';
+type SortKey = 'score' | 'likes' | 'comments' | 'shares' | 'impressions' | 'reach' | 'engagementRate' | 'paidLikes';
 type PlatformFilter = 'all' | 'linkedin' | 'instagram' | 'facebook';
 type DateRange = 'all' | '30' | '60' | '90';
 
@@ -17,8 +17,16 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'impressions', label: 'Impressions' },
   { key: 'reach', label: 'Reach' },
   { key: 'engagementRate', label: 'Eng. rate' },
+  { key: 'paidLikes', label: 'Paid likes' },
   { key: 'score', label: 'Score' },
 ];
+
+const PAID_TOOLTIP =
+  'Likes from Meta Ads campaigns that boosted this post, kept separate from organic likes above — not part of Score. 0 for posts with no paid campaign.';
+
+function sortValue(p: RankedPostPerformance, key: SortKey): number {
+  return key === 'paidLikes' ? p.paid.likes : p[key];
+}
 
 const PLATFORM_FILTERS: { value: PlatformFilter; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -58,19 +66,21 @@ export function PerformanceTable({ posts, total }: { posts: RankedPostPerformanc
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>('all');
   const [dateRange, setDateRange] = useState<DateRange>('all');
+  const [paidOnly, setPaidOnly] = useState(false);
 
   const filtered = useMemo(() => {
     const dateFrom = dateRange !== 'all' ? isoDateMinus(parseInt(dateRange, 10)) : null;
     return posts.filter(p => {
       if (platformFilter !== 'all' && p.platform !== platformFilter) return false;
       if (dateFrom && p.scheduledDate < dateFrom) return false;
+      if (paidOnly && !p.paid.hasCampaign) return false;
       return true;
     });
-  }, [posts, platformFilter, dateRange]);
+  }, [posts, platformFilter, dateRange, paidOnly]);
 
   const sorted = useMemo(() => {
     const copy = [...filtered];
-    copy.sort((a, b) => (sortDir === 'desc' ? b[sortKey] - a[sortKey] : a[sortKey] - b[sortKey]));
+    copy.sort((a, b) => (sortDir === 'desc' ? sortValue(b, sortKey) - sortValue(a, sortKey) : sortValue(a, sortKey) - sortValue(b, sortKey)));
     return copy;
   }, [filtered, sortKey, sortDir]);
 
@@ -125,6 +135,16 @@ export function PerformanceTable({ posts, total }: { posts: RankedPostPerformanc
             </button>
           ))}
         </div>
+
+        {/* Paid campaign filter */}
+        <button
+          type="button"
+          onClick={() => setPaidOnly(v => !v)}
+          className={cn(pillBase, paidOnly ? pillActive : pillInactive)}
+        >
+          <DollarSign className="h-3.5 w-3.5" />
+          Paid only
+        </button>
       </div>
 
       {/* Count line */}
@@ -195,6 +215,11 @@ export function PerformanceTable({ posts, total }: { posts: RankedPostPerformanc
                     {p.postType === 'video' && (
                       <Video className="h-3 w-3 text-blue-500" />
                     )}
+                    {p.paid.hasCampaign && (
+                      <span title={`Ran as a paid campaign — $${p.paid.spend.toFixed(2)} spent`}>
+                        <DollarSign className="h-3 w-3 text-emerald-500" />
+                      </span>
+                    )}
                     <span className="text-xs text-neutral-400">{formatDate(p.scheduledDate)}</span>
                     {p.postUrl && (
                       <a
@@ -216,6 +241,9 @@ export function PerformanceTable({ posts, total }: { posts: RankedPostPerformanc
                 <td className="px-2 py-3 text-right align-top tabular-nums text-neutral-700 dark:text-neutral-300">{p.impressions}</td>
                 <td className="px-2 py-3 text-right align-top tabular-nums text-neutral-700 dark:text-neutral-300">{p.reach}</td>
                 <td className="px-2 py-3 text-right align-top tabular-nums text-neutral-700 dark:text-neutral-300">{p.engagementRate.toFixed(1)}%</td>
+                <td className="px-2 py-3 text-right align-top tabular-nums text-neutral-700 dark:text-neutral-300" title={PAID_TOOLTIP}>
+                  {p.paid.likes}
+                </td>
                 <td className="px-4 py-3 text-right align-top tabular-nums font-semibold text-neutral-900 dark:text-white">{p.score.toFixed(1)}</td>
               </tr>
             ))
