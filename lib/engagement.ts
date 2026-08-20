@@ -115,7 +115,7 @@ export async function getInstagramPostEngagement(mediaId: string): Promise<PostE
   if (!token || !igId) return null;
   // Basic fields available on all media
   const res = await fetch(
-    `${GRAPH_API}/${mediaId}?fields=like_count,comments_count&access_token=${token}`
+    `${GRAPH_API}/${mediaId}?fields=like_count,comments_count,media_product_type&access_token=${token}`
   );
   if (!res.ok) {
     console.error(`Instagram getPostEngagement failed for ${mediaId}: ${res.status} ${await res.text()}`);
@@ -141,10 +141,36 @@ export async function getInstagramPostEngagement(mediaId: string): Promise<PostE
     console.error(`Instagram getPostEngagement insights threw for ${mediaId}:`, err);
   }
 
+  // The basic like_count field is known unreliable specifically for Reels
+  // (confirmed against real production data: a reel showing 35 likes on
+  // Instagram itself came back like_count=5 here) -- Meta's own Reels
+  // insights document `likes` as a supported metric there, separate from
+  // `views,reach` above since `likes` isn't a valid insights metric for
+  // non-Reels media and would 400 the whole combined call otherwise (the
+  // same failure mode already hit and fixed for Facebook's insights call).
+  // Best-effort: falls back to like_count on any failure.
+  let likes: number = d.like_count ?? 0;
+  if (d.media_product_type === 'REELS') {
+    try {
+      const likesIns = await fetch(
+        `${GRAPH_API}/${mediaId}/insights?metric=likes&access_token=${token}`
+      );
+      if (likesIns.ok) {
+        const likesInsData = await likesIns.json();
+        const reelsLikes = likesInsData.data?.find((m: Record<string, string>) => m.name === 'likes')?.values?.[0]?.value;
+        if (typeof reelsLikes === 'number') likes = reelsLikes;
+      } else {
+        console.error(`Instagram getPostEngagement reels likes insight failed for ${mediaId}: ${likesIns.status} ${await likesIns.text()}`);
+      }
+    } catch (err) {
+      console.error(`Instagram getPostEngagement reels likes insight threw for ${mediaId}:`, err);
+    }
+  }
+
   return {
     platform: 'instagram',
     postId: mediaId,
-    likes: d.like_count ?? 0,
+    likes,
     comments: d.comments_count ?? 0,
     shares: 0,
     impressions,
