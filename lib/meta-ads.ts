@@ -383,6 +383,32 @@ async function fetchFacebookPostPermalink(postId: string, token: string): Promis
   return permalink.startsWith('http') ? permalink : `https://www.facebook.com${permalink}`;
 }
 
+/** A boosted post can be an "unpublished"/dark ad post -- confirmed against
+ * a real boost whose creative resolved to a shortcode absent from this
+ * account's entire organic /media list (53 posts total, none matching).
+ * Dark posts have a real permalink and shortcode but are never part of the
+ * public feed, so there's no way to read one back except through the page
+ * post object Meta creates for it either way -- which requires
+ * pages_read_engagement (or "Page Public Content Access") on the token.
+ * Deliberately best-effort: returns null on the 400 this account's token
+ * currently gets rather than throwing, since a missing caption should only
+ * mean no fallback match, not a broken refresh. */
+async function fetchObjectStoryMessage(storyId: string, token: string): Promise<string | null> {
+  const params = new URLSearchParams({ fields: 'message', access_token: token });
+  const res = await fetch(`${GRAPH_API}/${storyId}?${params}`, { cache: 'no-store' });
+  if (!res.ok) {
+    console.error(`Meta Ads fetchObjectStoryMessage failed for ${storyId}: ${res.status} ${await res.text()}`);
+    return null;
+  }
+  const json = await res.json();
+  return (json.message as string | undefined) ?? null;
+}
+
+interface CampaignPostLink {
+  postLink: string;
+  caption: string | null;
+}
+
 /** Finds the post a campaign's ads are actually boosting, by reading each
  * ad's creative -- Meta's Marketing API doesn't surface this on the campaign
  * itself. Every campaign here boosts exactly one post in practice (see the
@@ -391,8 +417,11 @@ async function fetchFacebookPostPermalink(postId: string, token: string): Promis
  * instagram_permalink_url (a direct, ready-to-use link on the creative
  * itself) and falls back to resolving effective_object_story_id -- the
  * underlying page post's id -- into its real Facebook permalink the same way
- * lib/linkedin-poster.ts resolves a post id into its real web link. */
-async function fetchCampaignPostLink(campaignId: string, token: string): Promise<string | null> {
+ * lib/linkedin-poster.ts resolves a post id into its real web link. Also
+ * pulls that page post's own caption text alongside the link (see
+ * fetchObjectStoryMessage) for getPaidStatsByPostUrl's caption fallback
+ * match -- unused by callers that only need the link itself. */
+async function fetchCampaignPostLink(campaignId: string, token: string): Promise<CampaignPostLink | null> {
   const params = new URLSearchParams({
     fields: 'creative{instagram_permalink_url,effective_object_story_id}',
     limit: '100',
@@ -409,63 +438,20 @@ async function fetchCampaignPostLink(campaignId: string, token: string): Promise
     const creative = ad.creative as Record<string, unknown> | undefined;
     if (!creative) continue;
     const igLink = creative.instagram_permalink_url as string | undefined;
-    if (igLink) return igLink;
     const storyId = creative.effective_object_story_id as string | undefined;
+    if (igLink) {
+      const caption = storyId ? await fetchObjectStoryMessage(storyId, token) : null;
+      return { postLink: igLink, caption };
+    }
     if (storyId) {
       const link = await fetchFacebookPostPermalink(storyId, token);
-      if (link) return link;
+      if (link) {
+        const caption = await fetchObjectStoryMessage(storyId, token);
+        return { postLink: link, caption };
+      }
     }
   }
   return null;
-}
-
-/** Even a boost started directly from the "Boost" button under the live
- * Instagram post (not just Ads Manager's "Create Ad" flow) can end up
- * pointing its ad creative at a different, Meta-created Instagram media
- * object than the original post -- confirmed against a real boost, where
- * the creative's instagram_permalink_url resolved to a genuinely separate
- * media id with no object_story_spec at all to read a caption back from (the
- * account's ad token also lacks pages_read_engagement, so reading the
- * resulting page post's own `message` field 400s). Since the duplicate is
- * still a post on this same connected IG business account, its caption is
- * fetched here the same way any other organic post is read -- one paginated
- * scan of this account's own media list, mapped by shortcode -- rather than
- * from anything the Marketing API exposes about the ad itself. Capped at 5
- * pages (~500 posts) so one pathological account can't make every refresh
- * hang. */
-async function fetchOwnInstagramCaptionsByShortcode(): Promise<Map<string, string>> {
-  const token = process.env.INSTAGRAM_PAGE_ACCESS_TOKEN;
-  const igUserId = process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID;
-  const map = new Map<string, string>();
-  if (!token || !igUserId) {
-    console.log('[Paid stats] fetchOwnInstagramCaptionsByShortcode: INSTAGRAM_PAGE_ACCESS_TOKEN or INSTAGRAM_BUSINESS_ACCOUNT_ID not configured');
-    return map;
-  }
-
-  let url: string | null = `${GRAPH_API}/${igUserId}/media?${new URLSearchParams({
-    fields: 'caption,permalink',
-    limit: '100',
-    access_token: token,
-  })}`;
-  let totalRows = 0;
-  for (let page = 0; page < 5 && url; page++) {
-    const res: Response = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) {
-      console.error(`Meta Ads fetchOwnInstagramCaptionsByShortcode failed: ${res.status} ${await res.text()}`);
-      break;
-    }
-    const json = await res.json();
-    const rows: { caption?: string; permalink?: string }[] = json.data ?? [];
-    totalRows += rows.length;
-    for (const row of rows) {
-      if (!row.caption || !row.permalink) continue;
-      const shortcodeMatch = row.permalink.match(IG_SHORTCODE_RE);
-      if (shortcodeMatch) map.set(shortcodeMatch[1], row.caption);
-    }
-    url = json.paging?.next ?? null;
-  }
-  console.log(`[Paid stats] fetchOwnInstagramCaptionsByShortcode: scanned ${totalRows} media, mapped ${map.size} captions`);
-  return map;
 }
 
 // Instagram shortcodes are case-sensitive (they draw from a 64-char
@@ -494,9 +480,8 @@ export function normalizePostUrl(url: string): string {
 }
 
 // Fallback match key for when a boosted post's shortcode genuinely differs
-// from the organic post it was boosted from (see
-// fetchOwnInstagramCaptionsByShortcode) -- both sides' caption text still
-// originate from the same written copy, so a
+// from the organic post it was boosted from (see fetchObjectStoryMessage) --
+// both sides' caption text still originate from the same written copy, so a
 // normalized prefix of it survives as a shared key even when no ID does.
 // Unicode-aware so accented Spanish text survives; punctuation/emoji varies
 // too easily between the two copies (Meta sometimes appends a link or CTA)
@@ -535,21 +520,18 @@ export async function getPaidStatsByPostUrl(): Promise<Map<string, PaidPostStats
   const accountIds = getConfiguredAccountIds();
   if (!token || accountIds.length === 0) return new Map();
 
-  const [allCampaigns, ownCaptionsByShortcode] = await Promise.all([
-    Promise.all(accountIds.map(id => listRawCampaigns(id, token))).then(lists => lists.flat()),
-    fetchOwnInstagramCaptionsByShortcode(),
-  ]);
+  const allCampaigns = (await Promise.all(accountIds.map(id => listRawCampaigns(id, token)))).flat();
 
   const perCampaign = await Promise.all(
     allCampaigns.map(async c => {
-      const [postLink, lifetimeBreakdown] = await Promise.all([
+      const [resolved, lifetimeBreakdown] = await Promise.all([
         fetchCampaignPostLink(c.id, token),
         fetchInsightsBreakdown(c.id, token, { datePreset: 'maximum' }),
       ]);
-      if (!postLink) return null;
-      const shortcodeMatch = postLink.match(IG_SHORTCODE_RE);
-      const caption = shortcodeMatch ? ownCaptionsByShortcode.get(shortcodeMatch[1]) ?? null : null;
-      console.log(`[Paid stats] campaign ${c.id} (${c.name}): postLink=${postLink} caption=${caption?.slice(0, 60)}`);
+      console.log(
+        `[Paid stats] campaign ${c.id} (${c.name}): postLink=${resolved?.postLink} caption=${resolved?.caption?.slice(0, 60)}`
+      );
+      if (!resolved) return null;
       const actions = sumActions(lifetimeBreakdown);
       const stats: PaidPostStats = {
         spend: sumBreakdown(lifetimeBreakdown, 'spend'),
@@ -558,9 +540,9 @@ export async function getPaidStatsByPostUrl(): Promise<Map<string, PaidPostStats
         likes: actions.likes,
         comments: actions.comments,
         shares: actions.shares,
-        captionKey: caption ? normalizeCaption(caption) : null,
+        captionKey: resolved.caption ? normalizeCaption(resolved.caption) : null,
       };
-      return { postUrl: normalizePostUrl(postLink), stats };
+      return { postUrl: normalizePostUrl(resolved.postLink), stats };
     })
   );
 
@@ -609,7 +591,7 @@ export async function getAdsDashboard(opts: {
 
   const summaries = await Promise.all(
     campaigns.map(async c => {
-      const [windowBreakdown, lifetimeBreakdown, postLink] = await Promise.all([
+      const [windowBreakdown, lifetimeBreakdown, resolvedPostLink] = await Promise.all([
         fetchInsightsBreakdown(c.id, creds.token, { since: opts.since, until: opts.until }),
         fetchInsightsBreakdown(c.id, creds.token, { datePreset: 'maximum' }),
         fetchCampaignPostLink(c.id, creds.token),
@@ -631,7 +613,7 @@ export async function getAdsDashboard(opts: {
         windowReach: sumBreakdown(windowBreakdown, 'reach', opts.platform),
         windowActions: sumActions(windowBreakdown, opts.platform),
         platformBreakdown: windowBreakdown,
-        postLink,
+        postLink: resolvedPostLink?.postLink ?? null,
       };
       return summary;
     })
@@ -748,7 +730,7 @@ export async function getCampaignDetail(
     endTime: c.stop_time ?? null,
   };
 
-  const [adSets, currency, windowBreakdown, lifetimeBreakdown, dailySeries, postLink] = await Promise.all([
+  const [adSets, currency, windowBreakdown, lifetimeBreakdown, dailySeries, resolvedPostLink] = await Promise.all([
     listRawAdSets(creds.accountId, creds.token).then(all => all.filter(a => a.campaignId === campaignId)),
     fetchAccountCurrency(creds.accountId, creds.token),
     fetchInsightsBreakdown(campaignId, creds.token, { since: opts.since, until: opts.until }),
@@ -774,7 +756,7 @@ export async function getCampaignDetail(
     windowReach: sumBreakdown(windowBreakdown, 'reach', opts.platform),
     windowActions: sumActions(windowBreakdown, opts.platform),
     platformBreakdown: windowBreakdown,
-    postLink,
+    postLink: resolvedPostLink?.postLink ?? null,
     dailySeries,
     currency,
   };
