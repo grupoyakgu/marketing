@@ -437,13 +437,17 @@ async function fetchOwnInstagramCaptionsByShortcode(): Promise<Map<string, strin
   const token = process.env.INSTAGRAM_PAGE_ACCESS_TOKEN;
   const igUserId = process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID;
   const map = new Map<string, string>();
-  if (!token || !igUserId) return map;
+  if (!token || !igUserId) {
+    console.log('[Paid stats] fetchOwnInstagramCaptionsByShortcode: INSTAGRAM_PAGE_ACCESS_TOKEN or INSTAGRAM_BUSINESS_ACCOUNT_ID not configured');
+    return map;
+  }
 
   let url: string | null = `${GRAPH_API}/${igUserId}/media?${new URLSearchParams({
     fields: 'caption,permalink',
     limit: '100',
     access_token: token,
   })}`;
+  let totalRows = 0;
   for (let page = 0; page < 5 && url; page++) {
     const res: Response = await fetch(url, { cache: 'no-store' });
     if (!res.ok) {
@@ -452,6 +456,7 @@ async function fetchOwnInstagramCaptionsByShortcode(): Promise<Map<string, strin
     }
     const json = await res.json();
     const rows: { caption?: string; permalink?: string }[] = json.data ?? [];
+    totalRows += rows.length;
     for (const row of rows) {
       if (!row.caption || !row.permalink) continue;
       const shortcodeMatch = row.permalink.match(IG_SHORTCODE_RE);
@@ -459,6 +464,7 @@ async function fetchOwnInstagramCaptionsByShortcode(): Promise<Map<string, strin
     }
     url = json.paging?.next ?? null;
   }
+  console.log(`[Paid stats] fetchOwnInstagramCaptionsByShortcode: scanned ${totalRows} media, mapped ${map.size} captions`);
   return map;
 }
 
