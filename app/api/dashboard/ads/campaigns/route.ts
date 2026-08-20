@@ -34,6 +34,9 @@ export async function GET(req: Request) {
     console.log(
       `[ads/campaigns] configured=true account=${accountId ?? 'default'} platform=${platform ?? 'all'} since=${since} until=${until} campaigns=${dashboard.campaigns.length} currency=${dashboard.currency} names=${JSON.stringify(dashboard.campaigns.map(c => c.name))}`
     );
+    console.log(
+      `[ads/campaigns] postLinks=${JSON.stringify(dashboard.campaigns.map(c => ({ id: c.id, name: c.name, postLink: c.postLink })))}`
+    );
     return NextResponse.json(
       { configured: true, ...dashboard },
       { headers: { 'Cache-Control': 'no-store, must-revalidate' } }

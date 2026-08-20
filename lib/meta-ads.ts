@@ -395,7 +395,7 @@ async function fetchFacebookPostPermalink(postId: string, token: string): Promis
 async function fetchCampaignPostLink(campaignId: string, token: string): Promise<string | null> {
   const params = new URLSearchParams({
     fields: 'creative{instagram_permalink_url,effective_object_story_id}',
-    limit: '5',
+    limit: '100',
     access_token: token,
   });
   const res = await fetch(`${GRAPH_API}/${campaignId}/ads?${params}`, { cache: 'no-store' });
@@ -405,6 +405,11 @@ async function fetchCampaignPostLink(campaignId: string, token: string): Promise
   }
   const json = await res.json();
   const ads: Record<string, unknown>[] = json.data ?? [];
+  console.log(
+    `[Paid stats] campaign ${campaignId} ads=${ads.length} creatives=${JSON.stringify(
+      ads.map(ad => (ad.creative as Record<string, unknown> | undefined) ?? null)
+    )}`
+  );
   for (const ad of ads) {
     const creative = ad.creative as Record<string, unknown> | undefined;
     if (!creative) continue;
