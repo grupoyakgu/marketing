@@ -390,18 +390,25 @@ async function fetchFacebookPostPermalink(postId: string, token: string): Promis
  * real campaign whose creative had its own distinct instagram_permalink_url
  * and effective_object_story_id, neither matching the organic post it was
  * created from. Shortcode matching can never bridge that gap since Meta
- * genuinely treats them as two different media objects. The underlying page
- * post's own message text is the only thing still shared with the original
- * caption, so it's fetched here as a fallback matching key. */
-async function fetchObjectStoryMessage(storyId: string, token: string): Promise<string | null> {
-  const params = new URLSearchParams({ fields: 'message', access_token: token });
-  const res = await fetch(`${GRAPH_API}/${storyId}?${params}`, { cache: 'no-store' });
-  if (!res.ok) {
-    console.error(`Meta Ads fetchObjectStoryMessage failed for ${storyId}: ${res.status} ${await res.text()}`);
-    return null;
-  }
-  const json = await res.json();
-  return (json.message as string | undefined) ?? null;
+ * genuinely treats them as two different media objects. The creative's own
+ * object_story_spec carries the caption text used to author that post --
+ * pulled straight off the same /ads?fields=creative{...} response already
+ * fetched below (ads_read scope), unlike reading the resulting page post's
+ * own `message` field back (GET /{page-post-id}), which 400s on this
+ * account's token with "requires pages_read_engagement". Field name differs
+ * by creative type (link/photo/video), so all three are requested and
+ * checked in order. */
+function extractStoryCaption(spec: Record<string, unknown> | undefined): string | null {
+  if (!spec) return null;
+  const linkData = spec.link_data as Record<string, unknown> | undefined;
+  const photoData = spec.photo_data as Record<string, unknown> | undefined;
+  const videoData = spec.video_data as Record<string, unknown> | undefined;
+  return (
+    (linkData?.message as string | undefined) ??
+    (photoData?.caption as string | undefined) ??
+    (videoData?.message as string | undefined) ??
+    null
+  );
 }
 
 interface CampaignPostLink {
@@ -418,12 +425,12 @@ interface CampaignPostLink {
  * itself) and falls back to resolving effective_object_story_id -- the
  * underlying page post's id -- into its real Facebook permalink the same way
  * lib/linkedin-poster.ts resolves a post id into its real web link. Also
- * grabs that page post's caption text alongside the link (see
- * fetchObjectStoryMessage) for getPaidStatsByPostUrl's caption fallback
- * match -- unused by callers that only need the link itself. */
+ * pulls the creative's own caption text alongside the link (see
+ * extractStoryCaption) for getPaidStatsByPostUrl's caption fallback match --
+ * unused by callers that only need the link itself. */
 async function fetchCampaignPostLink(campaignId: string, token: string): Promise<CampaignPostLink | null> {
   const params = new URLSearchParams({
-    fields: 'creative{instagram_permalink_url,effective_object_story_id}',
+    fields: 'creative{instagram_permalink_url,effective_object_story_id,object_story_spec}',
     limit: '100',
     access_token: token,
   });
@@ -439,16 +446,12 @@ async function fetchCampaignPostLink(campaignId: string, token: string): Promise
     if (!creative) continue;
     const igLink = creative.instagram_permalink_url as string | undefined;
     const storyId = creative.effective_object_story_id as string | undefined;
-    if (igLink) {
-      const caption = storyId ? await fetchObjectStoryMessage(storyId, token) : null;
-      return { postLink: igLink, caption };
-    }
+    const caption = extractStoryCaption(creative.object_story_spec as Record<string, unknown> | undefined);
+    console.log(`[Paid stats] campaign ${campaignId} object_story_spec=${JSON.stringify(creative.object_story_spec)}`);
+    if (igLink) return { postLink: igLink, caption };
     if (storyId) {
       const link = await fetchFacebookPostPermalink(storyId, token);
-      if (link) {
-        const caption = await fetchObjectStoryMessage(storyId, token);
-        return { postLink: link, caption };
-      }
+      if (link) return { postLink: link, caption };
     }
   }
   return null;
