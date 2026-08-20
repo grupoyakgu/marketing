@@ -419,13 +419,26 @@ async function fetchCampaignPostLink(campaignId: string, token: string): Promise
   return null;
 }
 
+// Instagram shortcodes are case-sensitive (they draw from a 64-char
+// alphabet including uppercase) and Meta's ad creative returns them under
+// /p/ even for a Reel, while marketing_plan.post_url stores that same post
+// under /reel/ (see the earlier Instagram permalink fix) -- two posts with
+// the identical shortcode but a different path segment, or differing only
+// in case, are still the same post.
+const IG_SHORTCODE_RE = /instagram\.com\/(?:p|reel|tv)\/([^/?]+)/i;
+
 /** Both this file's ad-creative post links and marketing_plan's own stored
- * post_url need to agree on exactly the same string to match a paid
- * campaign back to the organic post it boosted -- there's no shared numeric
- * ID between the Marketing API and organic post records. Strips any query
- * string and forces a trailing slash + lowercase so trivial URL variations
- * (tracking params, a missing trailing slash) don't break the match. */
+ * post_url need to resolve to the same key to match a paid campaign back to
+ * the organic post it boosted -- there's no shared numeric ID between the
+ * Marketing API and organic post records. For Instagram, keys on the
+ * case-sensitive shortcode alone (ignoring /p/ vs /reel/ vs /tv/) rather
+ * than the full URL. Everything else (Facebook, whose post ids aren't
+ * case-sensitive) falls back to a lowercased, query-stripped, trailing-
+ * slash form. */
 export function normalizePostUrl(url: string): string {
+  const igMatch = url.match(IG_SHORTCODE_RE);
+  if (igMatch) return `instagram:${igMatch[1]}`;
+
   const withoutQuery = url.trim().split('?')[0];
   const withSlash = withoutQuery.endsWith('/') ? withoutQuery : `${withoutQuery}/`;
   return withSlash.toLowerCase();
