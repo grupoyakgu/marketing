@@ -383,6 +383,32 @@ async function fetchFacebookPostPermalink(postId: string, token: string): Promis
   return permalink.startsWith('http') ? permalink : `https://www.facebook.com${permalink}`;
 }
 
+/** Boosting a post through Ads Manager's "Create Ad" flow (rather than
+ * tapping "Boost" directly under the live post) can make Meta publish a
+ * brand-new Instagram post carrying the same caption as its ad creative,
+ * instead of referencing the original post's media id -- confirmed against a
+ * real campaign whose creative had its own distinct instagram_permalink_url
+ * and effective_object_story_id, neither matching the organic post it was
+ * created from. Shortcode matching can never bridge that gap since Meta
+ * genuinely treats them as two different media objects. The underlying page
+ * post's own message text is the only thing still shared with the original
+ * caption, so it's fetched here as a fallback matching key. */
+async function fetchObjectStoryMessage(storyId: string, token: string): Promise<string | null> {
+  const params = new URLSearchParams({ fields: 'message', access_token: token });
+  const res = await fetch(`${GRAPH_API}/${storyId}?${params}`, { cache: 'no-store' });
+  if (!res.ok) {
+    console.error(`Meta Ads fetchObjectStoryMessage failed for ${storyId}: ${res.status} ${await res.text()}`);
+    return null;
+  }
+  const json = await res.json();
+  return (json.message as string | undefined) ?? null;
+}
+
+interface CampaignPostLink {
+  postLink: string;
+  caption: string | null;
+}
+
 /** Finds the post a campaign's ads are actually boosting, by reading each
  * ad's creative -- Meta's Marketing API doesn't surface this on the campaign
  * itself. Every campaign here boosts exactly one post in practice (see the
@@ -391,8 +417,11 @@ async function fetchFacebookPostPermalink(postId: string, token: string): Promis
  * instagram_permalink_url (a direct, ready-to-use link on the creative
  * itself) and falls back to resolving effective_object_story_id -- the
  * underlying page post's id -- into its real Facebook permalink the same way
- * lib/linkedin-poster.ts resolves a post id into its real web link. */
-async function fetchCampaignPostLink(campaignId: string, token: string): Promise<string | null> {
+ * lib/linkedin-poster.ts resolves a post id into its real web link. Also
+ * grabs that page post's caption text alongside the link (see
+ * fetchObjectStoryMessage) for getPaidStatsByPostUrl's caption fallback
+ * match -- unused by callers that only need the link itself. */
+async function fetchCampaignPostLink(campaignId: string, token: string): Promise<CampaignPostLink | null> {
   const params = new URLSearchParams({
     fields: 'creative{instagram_permalink_url,effective_object_story_id}',
     limit: '100',
@@ -405,20 +434,21 @@ async function fetchCampaignPostLink(campaignId: string, token: string): Promise
   }
   const json = await res.json();
   const ads: Record<string, unknown>[] = json.data ?? [];
-  console.log(
-    `[Paid stats] campaign ${campaignId} ads=${ads.length} creatives=${JSON.stringify(
-      ads.map(ad => (ad.creative as Record<string, unknown> | undefined) ?? null)
-    )}`
-  );
   for (const ad of ads) {
     const creative = ad.creative as Record<string, unknown> | undefined;
     if (!creative) continue;
     const igLink = creative.instagram_permalink_url as string | undefined;
-    if (igLink) return igLink;
     const storyId = creative.effective_object_story_id as string | undefined;
+    if (igLink) {
+      const caption = storyId ? await fetchObjectStoryMessage(storyId, token) : null;
+      return { postLink: igLink, caption };
+    }
     if (storyId) {
       const link = await fetchFacebookPostPermalink(storyId, token);
-      if (link) return link;
+      if (link) {
+        const caption = await fetchObjectStoryMessage(storyId, token);
+        return { postLink: link, caption };
+      }
     }
   }
   return null;
@@ -449,6 +479,25 @@ export function normalizePostUrl(url: string): string {
   return withSlash.toLowerCase();
 }
 
+// Fallback match key for when a boosted post's shortcode genuinely differs
+// from the organic post it was boosted from (see fetchObjectStoryMessage) --
+// both sides' caption text still originate from the same written copy, so a
+// normalized prefix of it survives as a shared key even when no ID does.
+// Unicode-aware so accented Spanish text survives; punctuation/emoji varies
+// too easily between the two copies (Meta sometimes appends a link or CTA)
+// to be part of the key. Returns null below a length floor -- a short or
+// near-empty caption isn't a safe/unique-enough key to match on.
+export function normalizeCaption(text: string): string | null {
+  const stripped = text
+    .normalize('NFKC')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+    .slice(0, 120);
+  return stripped.length >= 20 ? stripped : null;
+}
+
 export interface PaidPostStats {
   spend: number;
   likes: number;
@@ -456,6 +505,7 @@ export interface PaidPostStats {
   shares: number;
   impressions: number;
   reach: number;
+  captionKey: string | null;
 }
 
 /** All-time paid engagement for every post currently (or ever) boosted by a
@@ -474,12 +524,14 @@ export async function getPaidStatsByPostUrl(): Promise<Map<string, PaidPostStats
 
   const perCampaign = await Promise.all(
     allCampaigns.map(async c => {
-      const [postLink, lifetimeBreakdown] = await Promise.all([
+      const [resolved, lifetimeBreakdown] = await Promise.all([
         fetchCampaignPostLink(c.id, token),
         fetchInsightsBreakdown(c.id, token, { datePreset: 'maximum' }),
       ]);
-      console.log(`[Paid stats] campaign ${c.id} (${c.name}): postLink=${postLink}`);
-      if (!postLink) return null;
+      console.log(
+        `[Paid stats] campaign ${c.id} (${c.name}): postLink=${resolved?.postLink} caption=${resolved?.caption?.slice(0, 60)}`
+      );
+      if (!resolved) return null;
       const actions = sumActions(lifetimeBreakdown);
       const stats: PaidPostStats = {
         spend: sumBreakdown(lifetimeBreakdown, 'spend'),
@@ -488,8 +540,9 @@ export async function getPaidStatsByPostUrl(): Promise<Map<string, PaidPostStats
         likes: actions.likes,
         comments: actions.comments,
         shares: actions.shares,
+        captionKey: resolved.caption ? normalizeCaption(resolved.caption) : null,
       };
-      return { postUrl: normalizePostUrl(postLink), stats };
+      return { postUrl: normalizePostUrl(resolved.postLink), stats };
     })
   );
 
@@ -507,6 +560,7 @@ export async function getPaidStatsByPostUrl(): Promise<Map<string, PaidPostStats
             shares: existing.shares + entry.stats.shares,
             impressions: existing.impressions + entry.stats.impressions,
             reach: existing.reach + entry.stats.reach,
+            captionKey: existing.captionKey ?? entry.stats.captionKey,
           }
         : entry.stats
     );
@@ -537,7 +591,7 @@ export async function getAdsDashboard(opts: {
 
   const summaries = await Promise.all(
     campaigns.map(async c => {
-      const [windowBreakdown, lifetimeBreakdown, postLink] = await Promise.all([
+      const [windowBreakdown, lifetimeBreakdown, resolvedPostLink] = await Promise.all([
         fetchInsightsBreakdown(c.id, creds.token, { since: opts.since, until: opts.until }),
         fetchInsightsBreakdown(c.id, creds.token, { datePreset: 'maximum' }),
         fetchCampaignPostLink(c.id, creds.token),
@@ -559,7 +613,7 @@ export async function getAdsDashboard(opts: {
         windowReach: sumBreakdown(windowBreakdown, 'reach', opts.platform),
         windowActions: sumActions(windowBreakdown, opts.platform),
         platformBreakdown: windowBreakdown,
-        postLink,
+        postLink: resolvedPostLink?.postLink ?? null,
       };
       return summary;
     })
@@ -676,7 +730,7 @@ export async function getCampaignDetail(
     endTime: c.stop_time ?? null,
   };
 
-  const [adSets, currency, windowBreakdown, lifetimeBreakdown, dailySeries, postLink] = await Promise.all([
+  const [adSets, currency, windowBreakdown, lifetimeBreakdown, dailySeries, resolvedPostLink] = await Promise.all([
     listRawAdSets(creds.accountId, creds.token).then(all => all.filter(a => a.campaignId === campaignId)),
     fetchAccountCurrency(creds.accountId, creds.token),
     fetchInsightsBreakdown(campaignId, creds.token, { since: opts.since, until: opts.until }),
@@ -702,7 +756,7 @@ export async function getCampaignDetail(
     windowReach: sumBreakdown(windowBreakdown, 'reach', opts.platform),
     windowActions: sumActions(windowBreakdown, opts.platform),
     platformBreakdown: windowBreakdown,
-    postLink,
+    postLink: resolvedPostLink?.postLink ?? null,
     dailySeries,
     currency,
   };

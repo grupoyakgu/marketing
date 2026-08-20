@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { normalizePostUrl, type PaidPostStats as PaidPostStatsAggregate } from '@/lib/meta-ads';
+import { normalizePostUrl, normalizeCaption, type PaidPostStats as PaidPostStatsAggregate } from '@/lib/meta-ads';
 
 // v19.0 was already past Meta's ~2-year support window by the time this was
 // last touched — bumped to the current stable version. Also matters for the
@@ -495,24 +495,55 @@ export async function upsertPaidPostStatsCache(stats: Map<string, PaidPostStatsA
     shares: s.shares,
     impressions: s.impressions,
     reach: s.reach,
+    caption_key: s.captionKey,
     updated_at: new Date().toISOString(),
   }));
   await supabase.from('paid_post_stats').upsert(rows, { onConflict: 'post_url' });
 }
 
-async function getCachedPaidPostStats(postUrls: string[]): Promise<Map<string, PaidPostStats>> {
-  const normalized = Array.from(new Set(postUrls.filter(Boolean).map(normalizePostUrl)));
-  if (normalized.length === 0) return new Map();
-  const { data, error } = await supabase
-    .from('paid_post_stats')
-    .select('post_url, spend, likes, comments, shares')
-    .in('post_url', normalized);
-  if (error) throw new Error(error.message);
-  const map = new Map<string, PaidPostStats>();
-  for (const row of data ?? []) {
-    map.set(row.post_url, { spend: row.spend, likes: row.likes, comments: row.comments, shares: row.shares, hasCampaign: true });
+/** Matches each post to its paid stats primarily by normalized permalink
+ * (post_url), falling back to a shared caption fingerprint (caption_key) --
+ * boosting a post via Ads Manager's "Create Ad" flow can make Meta publish a
+ * brand-new Instagram post for the ad rather than reference the original
+ * post's media id, so the two sides' permalinks genuinely never match (see
+ * normalizeCaption in lib/meta-ads.ts). Two separate `.in()` queries rather
+ * than one `.or()` filter -- caption text can contain characters (commas,
+ * quotes) that would need careful escaping in a raw PostgREST filter string,
+ * while `.in()` parameterizes safely. */
+async function getCachedPaidPostStats(
+  posts: { id: string; post_url: string | null; content: string }[]
+): Promise<Map<string, PaidPostStats>> {
+  const shortcodeKeys = Array.from(new Set(posts.map(p => p.post_url).filter((u): u is string => !!u).map(normalizePostUrl)));
+  const captionKeys = Array.from(new Set(posts.map(p => normalizeCaption(p.content)).filter((c): c is string => !!c)));
+  if (shortcodeKeys.length === 0 && captionKeys.length === 0) return new Map();
+
+  const [byUrlRes, byCaptionRes] = await Promise.all([
+    shortcodeKeys.length > 0
+      ? supabase.from('paid_post_stats').select('post_url, caption_key, spend, likes, comments, shares').in('post_url', shortcodeKeys)
+      : Promise.resolve({ data: [], error: null }),
+    captionKeys.length > 0
+      ? supabase.from('paid_post_stats').select('post_url, caption_key, spend, likes, comments, shares').in('caption_key', captionKeys)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (byUrlRes.error) throw new Error(byUrlRes.error.message);
+  if (byCaptionRes.error) throw new Error(byCaptionRes.error.message);
+
+  const byPostUrl = new Map<string, PaidPostStats>();
+  const byCaptionKey = new Map<string, PaidPostStats>();
+  for (const row of [...(byUrlRes.data ?? []), ...(byCaptionRes.data ?? [])]) {
+    const stats: PaidPostStats = { spend: row.spend, likes: row.likes, comments: row.comments, shares: row.shares, hasCampaign: true };
+    byPostUrl.set(row.post_url, stats);
+    if (row.caption_key) byCaptionKey.set(row.caption_key, stats);
   }
-  return map;
+
+  const result = new Map<string, PaidPostStats>();
+  for (const p of posts) {
+    const urlKey = p.post_url ? normalizePostUrl(p.post_url) : null;
+    const captionKey = normalizeCaption(p.content);
+    const stats = (urlKey ? byPostUrl.get(urlKey) : undefined) ?? (captionKey ? byCaptionKey.get(captionKey) : undefined);
+    if (stats) result.set(p.id, stats);
+  }
+  return result;
 }
 
 // ─── Engagement over time ───────────────────────────────────────────────────
@@ -656,11 +687,11 @@ async function buildPostPerformance(rows: PostedRow[]): Promise<PostPerformance[
   const withPlatformPostId = rows.filter((r): r is PostedRow & { platform_post_id: string } => r.platform_post_id !== null);
   if (withPlatformPostId.length === 0) return [];
 
-  const [engagements, paidStatsByUrl] = await Promise.all([
+  const [engagements, paidStatsByPostId] = await Promise.all([
     getCachedPostEngagements(
       withPlatformPostId.map(p => ({ platform: p.platform, platform_post_id: p.platform_post_id }))
     ),
-    getCachedPaidPostStats(withPlatformPostId.map(p => p.post_url).filter((u): u is string => !!u)),
+    getCachedPaidPostStats(withPlatformPostId.map(p => ({ id: p.id, post_url: p.post_url, content: p.content }))),
   ]);
   const byKey = new Map(engagements.map(e => [`${e.platform}:${e.postId}`, e]));
 
@@ -680,7 +711,7 @@ async function buildPostPerformance(rows: PostedRow[]): Promise<PostPerformance[
         shares: e.shares,
         impressions: e.impressions,
         reach: e.reach,
-        paid: p.post_url ? (paidStatsByUrl.get(normalizePostUrl(p.post_url)) ?? EMPTY_PAID_STATS) : EMPTY_PAID_STATS,
+        paid: paidStatsByPostId.get(p.id) ?? EMPTY_PAID_STATS,
         engagementRate: computeEngagementRate(e),
         postType: p.post_type,
       };
