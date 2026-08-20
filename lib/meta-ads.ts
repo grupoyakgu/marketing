@@ -473,6 +473,7 @@ export async function getPaidStatsByPostUrl(): Promise<Map<string, PaidPostStats
         fetchCampaignPostLink(c.id, token),
         fetchInsightsBreakdown(c.id, token, { datePreset: 'maximum' }),
       ]);
+      console.log(`[Paid stats] campaign ${c.id} (${c.name}): postLink=${postLink}`);
       if (!postLink) return null;
       const actions = sumActions(lifetimeBreakdown);
       const stats: PaidPostStats = {
