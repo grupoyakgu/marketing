@@ -367,6 +367,56 @@ export interface CampaignSummary {
   windowReach: number;
   windowActions: ActionTotals;
   platformBreakdown: PlatformSpend[];
+  postLink: string | null;
+}
+
+async function fetchFacebookPostPermalink(postId: string, token: string): Promise<string | null> {
+  const params = new URLSearchParams({ fields: 'permalink_url', access_token: token });
+  const res = await fetch(`${GRAPH_API}/${postId}?${params}`, { cache: 'no-store' });
+  if (!res.ok) {
+    console.error(`Meta Ads fetchFacebookPostPermalink failed for ${postId}: ${res.status} ${await res.text()}`);
+    return null;
+  }
+  const json = await res.json();
+  const permalink = json.permalink_url as string | undefined;
+  if (!permalink) return null;
+  return permalink.startsWith('http') ? permalink : `https://www.facebook.com${permalink}`;
+}
+
+/** Finds the post a campaign's ads are actually boosting, by reading each
+ * ad's creative -- Meta's Marketing API doesn't surface this on the campaign
+ * itself. Every campaign here boosts exactly one post in practice (see the
+ * comment on hasActivePaidCampaigns above), so this stops at the first ad
+ * whose creative resolves to a link rather than checking every ad. Prefers
+ * instagram_permalink_url (a direct, ready-to-use link on the creative
+ * itself) and falls back to resolving effective_object_story_id -- the
+ * underlying page post's id -- into its real Facebook permalink the same way
+ * lib/linkedin-poster.ts resolves a post id into its real web link. */
+async function fetchCampaignPostLink(campaignId: string, token: string): Promise<string | null> {
+  const params = new URLSearchParams({
+    fields: 'creative{instagram_permalink_url,effective_object_story_id}',
+    limit: '5',
+    access_token: token,
+  });
+  const res = await fetch(`${GRAPH_API}/${campaignId}/ads?${params}`, { cache: 'no-store' });
+  if (!res.ok) {
+    console.error(`Meta Ads fetchCampaignPostLink failed for ${campaignId}: ${res.status} ${await res.text()}`);
+    return null;
+  }
+  const json = await res.json();
+  const ads: Record<string, unknown>[] = json.data ?? [];
+  for (const ad of ads) {
+    const creative = ad.creative as Record<string, unknown> | undefined;
+    if (!creative) continue;
+    const igLink = creative.instagram_permalink_url as string | undefined;
+    if (igLink) return igLink;
+    const storyId = creative.effective_object_story_id as string | undefined;
+    if (storyId) {
+      const link = await fetchFacebookPostPermalink(storyId, token);
+      if (link) return link;
+    }
+  }
+  return null;
 }
 
 export interface AdsDashboard {
@@ -392,9 +442,10 @@ export async function getAdsDashboard(opts: {
 
   const summaries = await Promise.all(
     campaigns.map(async c => {
-      const [windowBreakdown, lifetimeBreakdown] = await Promise.all([
+      const [windowBreakdown, lifetimeBreakdown, postLink] = await Promise.all([
         fetchInsightsBreakdown(c.id, creds.token, { since: opts.since, until: opts.until }),
         fetchInsightsBreakdown(c.id, creds.token, { datePreset: 'maximum' }),
+        fetchCampaignPostLink(c.id, creds.token),
       ]);
       const resolved = resolveBudgetAndSchedule(c, adSets);
 
@@ -413,6 +464,7 @@ export async function getAdsDashboard(opts: {
         windowReach: sumBreakdown(windowBreakdown, 'reach', opts.platform),
         windowActions: sumActions(windowBreakdown, opts.platform),
         platformBreakdown: windowBreakdown,
+        postLink,
       };
       return summary;
     })
@@ -529,12 +581,13 @@ export async function getCampaignDetail(
     endTime: c.stop_time ?? null,
   };
 
-  const [adSets, currency, windowBreakdown, lifetimeBreakdown, dailySeries] = await Promise.all([
+  const [adSets, currency, windowBreakdown, lifetimeBreakdown, dailySeries, postLink] = await Promise.all([
     listRawAdSets(creds.accountId, creds.token).then(all => all.filter(a => a.campaignId === campaignId)),
     fetchAccountCurrency(creds.accountId, creds.token),
     fetchInsightsBreakdown(campaignId, creds.token, { since: opts.since, until: opts.until }),
     fetchInsightsBreakdown(campaignId, creds.token, { datePreset: 'maximum' }),
     getCampaignDailySeries(campaignId, opts.since, opts.until, opts.platform),
+    fetchCampaignPostLink(campaignId, creds.token),
   ]);
 
   const resolved = resolveBudgetAndSchedule(campaign, adSets.map(a => ({ ...a, campaignId })));
@@ -554,6 +607,7 @@ export async function getCampaignDetail(
     windowReach: sumBreakdown(windowBreakdown, 'reach', opts.platform),
     windowActions: sumActions(windowBreakdown, opts.platform),
     platformBreakdown: windowBreakdown,
+    postLink,
     dailySeries,
     currency,
   };

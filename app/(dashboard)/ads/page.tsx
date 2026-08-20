@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Megaphone, Wallet, TrendingUp, Eye, Calendar, Landmark, Pencil, Heart, MousePointerClick, Sparkles, ListFilter } from 'lucide-react';
+import { Megaphone, Wallet, TrendingUp, Eye, Calendar, Landmark, Pencil, Heart, MousePointerClick, Sparkles, ListFilter, ExternalLink } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { PlatformBadge } from '@/components/ui/PlatformBadge';
@@ -26,6 +26,7 @@ interface CampaignRow {
   windowReach: number;
   windowActions: ActionTotals;
   platformBreakdown: { platform: AdPlatform; spend: number; impressions: number; reach: number }[];
+  postLink: string | null;
 }
 
 function engagementTotal(a: ActionTotals): number {
@@ -414,6 +415,17 @@ export default function AdsPage() {
                           <span className="inline-flex items-center gap-1">
                             <Sparkles className="h-3 w-3" /> {engagementTotal(c.windowActions).toLocaleString()} engagement
                           </span>
+                          {c.postLink && (
+                            <a
+                              href={c.postLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              className="inline-flex items-center gap-1 text-amber-600 hover:underline dark:text-amber-400"
+                            >
+                              <ExternalLink className="h-3 w-3" /> View post
+                            </a>
+                          )}
                         </div>
                       </div>
                       <div className="shrink-0 text-right">

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, Pause, Play, Calendar, Wallet, Heart, UserCheck } from 'lucide-react';
+import { X, Pause, Play, Calendar, Wallet, Heart, UserCheck, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { PlatformBadge } from '@/components/ui/PlatformBadge';
@@ -23,6 +23,7 @@ interface CampaignDetail {
   windowReach: number;
   windowActions: ActionTotals;
   platformBreakdown: { platform: AdPlatform; spend: number; impressions: number; reach: number }[];
+  postLink: string | null;
   dailySeries: DailyStat[];
   currency: string;
 }
@@ -164,6 +165,16 @@ export function CampaignDetailPanel({
               </div>
               <h3 className="text-base font-semibold text-neutral-900 dark:text-white">{detail.name}</h3>
               <p className="text-xs text-neutral-400">{detail.objective}</p>
+              {detail.postLink && (
+                <a
+                  href={detail.postLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 inline-flex items-center gap-1 text-xs text-amber-600 hover:underline dark:text-amber-400"
+                >
+                  <ExternalLink className="h-3 w-3" /> View post
+                </a>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3 rounded-xl border border-neutral-200 p-3 text-sm dark:border-neutral-700">
