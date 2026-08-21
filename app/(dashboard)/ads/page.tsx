@@ -10,6 +10,7 @@ import { CampaignDetailPanel } from '@/components/ads/CampaignDetailPanel';
 import { MetricChart, METRIC_OPTIONS, type DailyStat, type ActionTotals, type MetricKey } from '@/components/charts/MetricChart';
 import { cn } from '@/lib/cn';
 import type { AdPlatform } from '@/lib/meta-ads';
+import { useCurrentRole } from '@/lib/useCurrentRole';
 
 interface CampaignRow {
   id: string;
@@ -81,6 +82,7 @@ interface AdAccountOption {
 }
 
 export default function AdsPage() {
+  const role = useCurrentRole();
   const [accounts, setAccounts] = useState<AdAccountOption[] | null>(null);
   const [accountId, setAccountId] = useState<string | null>(null);
   const [platform, setPlatform] = useState<AdPlatform | 'all'>('all');
@@ -252,13 +254,15 @@ export default function AdsPage() {
                       )}
                     >
                       <button onClick={() => handleAccountChange(a.id)}>{a.name}</button>
-                      <button
-                        onClick={() => handleRenameAccount(a)}
-                        className="opacity-0 transition group-hover:opacity-100"
-                        title="Rename account"
-                      >
-                        <Pencil className="h-3 w-3" />
-                      </button>
+                      {role !== 'demo' && (
+                        <button
+                          onClick={() => handleRenameAccount(a)}
+                          className="opacity-0 transition group-hover:opacity-100"
+                          title="Rename account"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -483,6 +487,7 @@ export default function AdsPage() {
           onStatusChanged={(id, status) =>
             setCampaigns(prev => prev?.map(c => (c.id === id ? { ...c, status } : c)) ?? prev)
           }
+          readOnly={role === 'demo'}
         />
       )}
     </div>

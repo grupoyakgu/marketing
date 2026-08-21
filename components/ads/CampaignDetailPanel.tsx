@@ -69,6 +69,7 @@ export function CampaignDetailPanel({
   until,
   onClose,
   onStatusChanged,
+  readOnly = false,
 }: {
   campaignId: string;
   accountId: string;
@@ -77,6 +78,7 @@ export function CampaignDetailPanel({
   until: string;
   onClose: () => void;
   onStatusChanged: (campaignId: string, status: 'ACTIVE' | 'PAUSED') => void;
+  readOnly?: boolean;
 }) {
   const [detail, setDetail] = useState<CampaignDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -301,14 +303,14 @@ export function CampaignDetailPanel({
               <MetricChart data={detail.dailySeries} metric={metric} currency={detail.currency} />
             </div>
 
-            {detail.status === 'ACTIVE' && (
+            {!readOnly && detail.status === 'ACTIVE' && (
               <Button variant="danger" onClick={handlePause} disabled={updatingStatus} className="w-full">
                 <Pause className="h-4 w-4" />
                 {updatingStatus ? 'Pausing…' : 'Pause campaign'}
               </Button>
             )}
 
-            {detail.status === 'PAUSED' && (
+            {!readOnly && detail.status === 'PAUSED' && (
               <Button variant="primary" onClick={handleResume} disabled={updatingStatus} className="w-full">
                 <Play className="h-4 w-4" />
                 {updatingStatus ? 'Resuming…' : 'Resume campaign'}

@@ -51,6 +51,12 @@ export default function UsersPage() {
 
   useEffect(() => {
     load();
+    // Browsers happily autofill a bare username/password pair with the
+    // admin's own saved dashboard login, even with autoComplete set on the
+    // inputs -- clearing explicitly on mount catches that, not just after
+    // a successful create.
+    setNewUsername('');
+    setNewPassword('');
   }, [load]);
 
   async function handleCreate(e: React.FormEvent) {
@@ -130,6 +136,7 @@ export default function UsersPage() {
               value={newUsername}
               onChange={e => setNewUsername(e.target.value)}
               required
+              autoComplete="off"
               className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-800 dark:text-white"
             />
           </div>
@@ -140,6 +147,7 @@ export default function UsersPage() {
               value={newPassword}
               onChange={e => setNewPassword(e.target.value)}
               required
+              autoComplete="new-password"
               className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-800 dark:text-white"
             />
           </div>

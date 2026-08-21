@@ -43,11 +43,13 @@ export function PostEditor({
   onClose,
   onSaved,
   onPostUpdated,
+  readOnly = false,
 }: {
   post: MarketingPost | null;
   onClose: () => void;
   onSaved: () => void;
   onPostUpdated: (post: MarketingPost) => void;
+  readOnly?: boolean;
 }) {
   const [content, setContent] = useState('');
   const [scheduledDate, setScheduledDate] = useState('');
@@ -73,7 +75,7 @@ export function PostEditor({
   const [engagementError, setEngagementError] = useState<string | null>(null);
   const [loadingEngagement, setLoadingEngagement] = useState(false);
 
-  const editable = post ? post.status === 'draft' || post.status === 'approved' : false;
+  const editable = post ? (post.status === 'draft' || post.status === 'approved') && !readOnly : false;
 
   useEffect(() => {
     if (!post) return;
@@ -314,7 +316,13 @@ export function PostEditor({
           </button>
         </div>
 
-        {!editable && (
+        {!editable && readOnly && (post.status === 'draft' || post.status === 'approved') && (
+          <div className="mb-4 rounded-xl bg-neutral-100 px-3 py-2 text-sm text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+            Demo accounts are view-only and can&apos;t edit posts.
+          </div>
+        )}
+
+        {!editable && !readOnly && (
           <div className="mb-4 rounded-xl bg-neutral-100 px-3 py-2 text-sm text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
             This post is{' '}
             <Badge tone={post.status === 'posted' ? 'positive' : post.status === 'generating' ? 'neutral' : 'negative'}>
@@ -330,7 +338,7 @@ export function PostEditor({
           </div>
         )}
 
-        {post.status === 'failed' && (
+        {post.status === 'failed' && !readOnly && (
           <Button onClick={handleRetry} disabled={saving} className="mb-4 w-full">
             <RotateCw className="h-4 w-4" />
             {saving ? 'Retrying…' : 'Retry — publish now'}
@@ -674,7 +682,7 @@ export function PostEditor({
           </div>
         )}
 
-        {post.status === 'posted' && (
+        {post.status === 'posted' && !readOnly && (
           <div className="mt-6 flex">
             <Button variant="danger" onClick={handleDeletePosted} disabled={saving} className="ml-auto">
               <Trash2 className="h-4 w-4" />

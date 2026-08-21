@@ -6,6 +6,7 @@ import { PostCard } from '@/components/planner/PostCard';
 import { PostEditor } from '@/components/planner/PostEditor';
 import { Skeleton } from '@/components/ui/Skeleton';
 import type { MarketingPost } from '@/lib/marketing-plan';
+import { useCurrentRole } from '@/lib/useCurrentRole';
 
 const DAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -21,6 +22,7 @@ export default function PlannerPage() {
   const [weeklyLeaders, setWeeklyLeaders] = useState<Partial<Record<'linkedin' | 'instagram' | 'facebook', string>>>({});
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<MarketingPost | null>(null);
+  const role = useCurrentRole();
 
   const load = useCallback(async () => {
     setPosts(null);
@@ -96,6 +98,7 @@ export default function PlannerPage() {
 
       <PostEditor
         post={selected}
+        readOnly={role === 'demo'}
         onClose={() => setSelected(null)}
         onSaved={() => {
           setSelected(null);
