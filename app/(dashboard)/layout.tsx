@@ -13,7 +13,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar buildVersion={buildVersion} />
+      <Sidebar buildVersion={buildVersion} role={session?.role} />
       <div className="flex flex-1 flex-col">
         <header className="flex h-16 items-center justify-end gap-3 border-b border-neutral-200 bg-white px-6 dark:border-neutral-800 dark:bg-neutral-900">
           <UnviewedCommentsButton />

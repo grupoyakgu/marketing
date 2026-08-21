@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { ensureAdminSeeded, verifyPassword } from '@/lib/auth';
-import { getUserByUsername } from '@/lib/users';
+import { getUserByUsername, touchLastLogin } from '@/lib/users';
 import { createSessionToken, SESSION_COOKIE_NAME, SESSION_MAX_AGE } from '@/lib/session';
 
 export async function POST(req: Request) {
@@ -15,6 +15,8 @@ export async function POST(req: Request) {
   if (!user || user.disabled || !(await verifyPassword(password, user.password_hash))) {
     return NextResponse.json({ error: 'Invalid username or password.' }, { status: 401 });
   }
+
+  await touchLastLogin(user.id);
 
   const token = await createSessionToken({ sub: user.id, username: user.username, role: user.role });
 

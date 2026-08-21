@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase';
 
-export type UserRole = 'admin' | 'user';
+export type UserRole = 'admin' | 'user' | 'demo';
 
 export interface User {
   id: string;
@@ -9,6 +9,7 @@ export interface User {
   role: UserRole;
   disabled: boolean;
   created_at: string;
+  last_login_at: string | null;
 }
 
 export type PublicUser = Omit<User, 'password_hash'>;
@@ -65,6 +66,16 @@ export async function setUserRole(id: string, role: UserRole): Promise<void> {
 
 export async function setUserPassword(id: string, passwordHash: string): Promise<void> {
   const { error } = await supabase.from('users').update({ password_hash: passwordHash }).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+/** Called on every successful login (see app/api/auth/login/route.ts) so
+ * Settings > Users can show when each user was last active -- the session
+ * cookie lasts 7 days without hitting this route again, so "last login"
+ * is the practical proxy for "last visit" rather than tracking every
+ * request. */
+export async function touchLastLogin(id: string): Promise<void> {
+  const { error } = await supabase.from('users').update({ last_login_at: new Date().toISOString() }).eq('id', id);
   if (error) throw new Error(error.message);
 }
 

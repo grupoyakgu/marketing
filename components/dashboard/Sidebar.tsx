@@ -22,7 +22,12 @@ import { Logo } from '@/components/Logo';
 
 const COLLAPSE_KEY = 'sidebar-collapsed';
 
-export function Sidebar({ buildVersion }: { buildVersion: string }) {
+// Demo accounts can't reach these sections at all (see middleware.ts's
+// DEMO_HIDDEN_PREFIXES) -- hidden here too so the sidebar doesn't dangle
+// links a demo user would just get redirected away from.
+const DEMO_HIDDEN_HREFS = new Set(['/interactions', '/hashtags', '/costs', '/settings']);
+
+export function Sidebar({ buildVersion, role }: { buildVersion: string; role?: string }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
 
@@ -43,7 +48,7 @@ export function Sidebar({ buildVersion }: { buildVersion: string }) {
     });
   }
 
-  const links = [
+  const allLinks = [
     { href: '/', label: 'Overview', icon: LayoutDashboard },
     { href: '/planner', label: 'Planner', icon: CalendarDays },
     { href: '/performance', label: 'Performance', icon: Trophy },
@@ -55,6 +60,7 @@ export function Sidebar({ buildVersion }: { buildVersion: string }) {
     { href: '/costs', label: 'Costs', icon: DollarSign },
     { href: '/settings', label: 'Settings', icon: Settings },
   ];
+  const links = role === 'demo' ? allLinks.filter(l => !DEMO_HIDDEN_HREFS.has(l.href)) : allLinks;
 
   return (
     <aside

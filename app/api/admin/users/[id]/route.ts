@@ -7,14 +7,14 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const session = await getServerSession();
   const body = await req.json();
 
-  if (params.id === session?.sub && (body.disabled === true || body.role === 'user')) {
+  if (params.id === session?.sub && (body.disabled === true || body.role === 'user' || body.role === 'demo')) {
     return NextResponse.json({ error: 'You cannot disable or demote your own account.' }, { status: 400 });
   }
 
   if (typeof body.disabled === 'boolean') {
     await setUserDisabled(params.id, body.disabled);
   }
-  if (body.role === 'admin' || body.role === 'user') {
+  if (body.role === 'admin' || body.role === 'user' || body.role === 'demo') {
     await setUserRole(params.id, body.role as UserRole);
   }
   if (typeof body.password === 'string' && body.password.length > 0) {

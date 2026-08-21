@@ -16,10 +16,27 @@ export const config = {
     '/hashtags/:path*',
     '/landing-performance/:path*',
     '/landing-performance',
+    '/costs/:path*',
+    '/costs',
     '/api/dashboard/:path*',
     '/api/admin/:path*',
   ],
 };
+
+// Sections a 'demo' user can't reach at all -- redirected away from (pages)
+// or 403'd (their APIs), not just unlinked in the sidebar, since a demo
+// session is otherwise a normal authenticated session that could hit these
+// routes directly.
+const DEMO_HIDDEN_PREFIXES = [
+  '/settings',
+  '/costs',
+  '/hashtags',
+  '/interactions',
+  '/api/dashboard/refresh',
+  '/api/dashboard/costs',
+  '/api/dashboard/hashtags',
+  '/api/dashboard/interactions',
+];
 
 export async function middleware(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE_NAME)?.value;
@@ -38,6 +55,21 @@ export async function middleware(req: NextRequest) {
   if (isAdminRoute && session.role !== 'admin') {
     if (isApi) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     return NextResponse.redirect(new URL('/', req.url));
+  }
+
+  if (session.role === 'demo') {
+    const isHidden = DEMO_HIDDEN_PREFIXES.some(
+      prefix => req.nextUrl.pathname === prefix || req.nextUrl.pathname.startsWith(`${prefix}/`)
+    );
+    if (isHidden) {
+      if (isApi) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      return NextResponse.redirect(new URL('/', req.url));
+    }
+    // Everything else is view-only: demo can load any dashboard API to see
+    // data, but never mutate it.
+    if (isApi && req.method !== 'GET' && req.method !== 'HEAD') {
+      return NextResponse.json({ error: 'Demo accounts are read-only.' }, { status: 403 });
+    }
   }
 
   return NextResponse.next();

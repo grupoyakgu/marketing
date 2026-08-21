@@ -34,7 +34,7 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
     if (
       typeof payload.sub !== 'string' ||
       typeof payload.username !== 'string' ||
-      (payload.role !== 'admin' && payload.role !== 'user')
+      (payload.role !== 'admin' && payload.role !== 'user' && payload.role !== 'demo')
     ) {
       return null;
     }

@@ -14,7 +14,7 @@ export async function POST(req: Request) {
   if (typeof username !== 'string' || typeof password !== 'string' || !username || !password) {
     return NextResponse.json({ error: 'Username and password are required.' }, { status: 400 });
   }
-  const resolvedRole: UserRole = role === 'admin' ? 'admin' : 'user';
+  const resolvedRole: UserRole = role === 'admin' || role === 'demo' ? role : 'user';
 
   if (await getUserByUsername(username)) {
     return NextResponse.json({ error: 'That username is already taken.' }, { status: 409 });

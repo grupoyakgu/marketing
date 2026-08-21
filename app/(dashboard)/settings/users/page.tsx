@@ -11,9 +11,21 @@ import { UserPlus, Trash2, KeyRound } from 'lucide-react';
 interface UserRow {
   id: string;
   username: string;
-  role: 'admin' | 'user';
+  role: 'admin' | 'user' | 'demo';
   disabled: boolean;
   created_at: string;
+  last_login_at: string | null;
+}
+
+function formatLastSeen(iso: string | null): string {
+  if (!iso) return 'Never';
+  return new Date(iso).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 }
 
 export default function UsersPage() {
@@ -21,7 +33,7 @@ export default function UsersPage() {
   const [error, setError] = useState<string | null>(null);
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [newRole, setNewRole] = useState<'admin' | 'user'>('user');
+  const [newRole, setNewRole] = useState<'admin' | 'user' | 'demo'>('user');
   const [creating, setCreating] = useState(false);
 
   const load = useCallback(async () => {
@@ -74,7 +86,7 @@ export default function UsersPage() {
     await load();
   }
 
-  async function changeRole(user: UserRow, role: 'admin' | 'user') {
+  async function changeRole(user: UserRow, role: 'admin' | 'user' | 'demo') {
     await fetch(`/api/admin/users/${user.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -135,11 +147,12 @@ export default function UsersPage() {
             <label className="mb-1 block text-xs font-medium text-neutral-500">Role</label>
             <select
               value={newRole}
-              onChange={e => setNewRole(e.target.value as 'admin' | 'user')}
+              onChange={e => setNewRole(e.target.value as 'admin' | 'user' | 'demo')}
               className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-800 dark:text-white"
             >
               <option value="user">User</option>
               <option value="admin">Admin</option>
+              <option value="demo">Demo</option>
             </select>
           </div>
           <Button type="submit" disabled={creating}>
@@ -166,6 +179,7 @@ export default function UsersPage() {
                 <th className="px-5 py-3 font-medium">Username</th>
                 <th className="px-5 py-3 font-medium">Role</th>
                 <th className="px-5 py-3 font-medium">Status</th>
+                <th className="px-5 py-3 font-medium">Last seen</th>
                 <th className="px-5 py-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
@@ -176,17 +190,21 @@ export default function UsersPage() {
                   <td className="px-5 py-3">
                     <select
                       value={user.role}
-                      onChange={e => changeRole(user, e.target.value as 'admin' | 'user')}
+                      onChange={e => changeRole(user, e.target.value as 'admin' | 'user' | 'demo')}
                       className="rounded-lg border border-neutral-200 bg-transparent px-2 py-1 text-xs dark:border-neutral-700"
                     >
                       <option value="user">User</option>
                       <option value="admin">Admin</option>
+                      <option value="demo">Demo</option>
                     </select>
                   </td>
                   <td className="px-5 py-3">
                     <Badge tone={user.disabled ? 'negative' : 'positive'}>
                       {user.disabled ? 'Disabled' : 'Active'}
                     </Badge>
+                  </td>
+                  <td className="px-5 py-3 text-neutral-500 dark:text-neutral-400">
+                    {formatLastSeen(user.last_login_at)}
                   </td>
                   <td className="px-5 py-3">
                     <div className="flex justify-end gap-1.5">
