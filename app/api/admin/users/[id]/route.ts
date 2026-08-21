@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { setUserDisabled, setUserRole, setUserPassword, deleteUser, type UserRole } from '@/lib/users';
+import { setUserDisabled, setUserRole, setUserPassword, setUserEmail, deleteUser, type UserRole } from '@/lib/users';
 import { hashPassword } from '@/lib/auth';
 import { getServerSession } from '@/lib/server-session';
 
@@ -19,6 +19,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
   if (typeof body.password === 'string' && body.password.length > 0) {
     await setUserPassword(params.id, await hashPassword(body.password));
+  }
+  if (typeof body.email === 'string') {
+    await setUserEmail(params.id, body.email.trim() || null);
   }
 
   return NextResponse.json({ ok: true });

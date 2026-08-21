@@ -11,6 +11,7 @@ import { UserPlus, Trash2, KeyRound } from 'lucide-react';
 interface UserRow {
   id: string;
   username: string;
+  email: string | null;
   role: 'admin' | 'user' | 'demo';
   disabled: boolean;
   created_at: string;
@@ -32,9 +33,12 @@ export default function UsersPage() {
   const [users, setUsers] = useState<UserRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [newUsername, setNewUsername] = useState('');
+  const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newRole, setNewRole] = useState<'admin' | 'user' | 'demo'>('user');
   const [creating, setCreating] = useState(false);
+  const [editingEmailId, setEditingEmailId] = useState<string | null>(null);
+  const [emailDraft, setEmailDraft] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -56,6 +60,7 @@ export default function UsersPage() {
     // inputs -- clearing explicitly on mount catches that, not just after
     // a successful create.
     setNewUsername('');
+    setNewEmail('');
     setNewPassword('');
   }, [load]);
 
@@ -67,7 +72,7 @@ export default function UsersPage() {
       const res = await fetch('/api/admin/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: newUsername, password: newPassword, role: newRole }),
+        body: JSON.stringify({ username: newUsername, email: newEmail, password: newPassword, role: newRole }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -75,6 +80,7 @@ export default function UsersPage() {
         return;
       }
       setNewUsername('');
+      setNewEmail('');
       setNewPassword('');
       setNewRole('user');
       await load();
@@ -111,6 +117,16 @@ export default function UsersPage() {
     });
   }
 
+  async function saveEmail(user: UserRow) {
+    await fetch(`/api/admin/users/${user.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: emailDraft }),
+    });
+    setEditingEmailId(null);
+    await load();
+  }
+
   async function removeUser(user: UserRow) {
     if (!window.confirm(`Delete ${user.username}? This can't be undone.`)) return;
     await fetch(`/api/admin/users/${user.id}`, { method: 'DELETE' });
@@ -137,6 +153,17 @@ export default function UsersPage() {
               onChange={e => setNewUsername(e.target.value)}
               required
               autoComplete="off"
+              className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-800 dark:text-white"
+            />
+          </div>
+          <div className="flex-1 min-w-[160px]">
+            <label className="mb-1 block text-xs font-medium text-neutral-500">Email</label>
+            <input
+              type="email"
+              value={newEmail}
+              onChange={e => setNewEmail(e.target.value)}
+              autoComplete="off"
+              placeholder="for password resets"
               className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm outline-none focus:border-neutral-400 dark:border-neutral-700 dark:bg-neutral-800 dark:text-white"
             />
           </div>
@@ -185,6 +212,7 @@ export default function UsersPage() {
             <thead>
               <tr className="border-b border-neutral-200 text-left text-xs text-neutral-400 dark:border-neutral-800">
                 <th className="px-5 py-3 font-medium">Username</th>
+                <th className="px-5 py-3 font-medium">Email</th>
                 <th className="px-5 py-3 font-medium">Role</th>
                 <th className="px-5 py-3 font-medium">Status</th>
                 <th className="px-5 py-3 font-medium">Last seen</th>
@@ -195,6 +223,33 @@ export default function UsersPage() {
               {users.map(user => (
                 <tr key={user.id} className="border-b border-neutral-100 last:border-0 dark:border-neutral-800">
                   <td className="px-5 py-3 font-medium text-neutral-900 dark:text-white">{user.username}</td>
+                  <td className="px-5 py-3">
+                    {editingEmailId === user.id ? (
+                      <input
+                        type="email"
+                        autoFocus
+                        value={emailDraft}
+                        onChange={e => setEmailDraft(e.target.value)}
+                        onBlur={() => saveEmail(user)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') saveEmail(user);
+                          if (e.key === 'Escape') setEditingEmailId(null);
+                        }}
+                        className="w-full rounded-lg border border-neutral-200 bg-transparent px-2 py-1 text-xs outline-none focus:border-neutral-400 dark:border-neutral-700"
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingEmailId(user.id);
+                          setEmailDraft(user.email ?? '');
+                        }}
+                        className="text-left text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white"
+                      >
+                        {user.email ?? <span className="italic text-neutral-300 dark:text-neutral-600">Add email</span>}
+                      </button>
+                    )}
+                  </td>
                   <td className="px-5 py-3">
                     <select
                       value={user.role}
