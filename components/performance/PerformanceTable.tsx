@@ -9,6 +9,7 @@ import type { RankedPostPerformance } from '@/lib/engagement';
 type SortKey = 'score' | 'likes' | 'comments' | 'shares' | 'impressions' | 'reach' | 'engagementRate' | 'paidLikes';
 type PlatformFilter = 'all' | 'linkedin' | 'instagram' | 'facebook';
 type DateRange = 'all' | '30' | '60' | '90';
+type ContentTypeFilter = 'all' | 'video' | 'standard';
 
 const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'likes', label: 'Likes' },
@@ -42,6 +43,22 @@ const DATE_RANGES: { value: DateRange; label: string }[] = [
   { value: '90', label: 'Last 90 days' },
 ];
 
+// Posts predating post_type (or any future gap) come back with it undefined
+// -- those should still show up under "All" and, since everything shipped so
+// far that isn't a HeyGen video is a standard image/text post, under
+// "Standard" too rather than disappearing from both specific filters.
+const CONTENT_TYPE_FILTERS: { value: ContentTypeFilter; label: string }[] = [
+  { value: 'all', label: 'All types' },
+  { value: 'video', label: 'Video' },
+  { value: 'standard', label: 'Standard' },
+];
+
+function matchesContentType(p: RankedPostPerformance, filter: ContentTypeFilter): boolean {
+  if (filter === 'all') return true;
+  if (filter === 'video') return p.postType === 'video';
+  return p.postType !== 'video';
+}
+
 const SCORE_TOOLTIP =
   'Score = min-max normalized composite: Comments 25%, Likes 20%, Shares 20%, Eng. rate 20%, Reach 15%. Impressions excluded (unavailable for Facebook).';
 
@@ -66,6 +83,7 @@ export function PerformanceTable({ posts, total }: { posts: RankedPostPerformanc
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>('all');
   const [dateRange, setDateRange] = useState<DateRange>('all');
+  const [contentTypeFilter, setContentTypeFilter] = useState<ContentTypeFilter>('all');
   const [paidOnly, setPaidOnly] = useState(false);
 
   const filtered = useMemo(() => {
@@ -74,9 +92,10 @@ export function PerformanceTable({ posts, total }: { posts: RankedPostPerformanc
       if (platformFilter !== 'all' && p.platform !== platformFilter) return false;
       if (dateFrom && p.scheduledDate < dateFrom) return false;
       if (paidOnly && !p.paid.hasCampaign) return false;
+      if (!matchesContentType(p, contentTypeFilter)) return false;
       return true;
     });
-  }, [posts, platformFilter, dateRange, paidOnly]);
+  }, [posts, platformFilter, dateRange, paidOnly, contentTypeFilter]);
 
   const sorted = useMemo(() => {
     const copy = [...filtered];
@@ -117,6 +136,21 @@ export function PerformanceTable({ posts, total }: { posts: RankedPostPerformanc
               {value !== 'all' && (
                 <PlatformBadge platform={value} size="sm" />
               )}
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Content type pills */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {CONTENT_TYPE_FILTERS.map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setContentTypeFilter(value)}
+              className={cn(pillBase, contentTypeFilter === value ? pillActive : pillInactive)}
+            >
+              {value === 'video' && <Video className="h-3.5 w-3.5" />}
               {label}
             </button>
           ))}
