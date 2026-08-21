@@ -6,6 +6,7 @@ export interface User {
   id: string;
   username: string;
   password_hash: string;
+  email: string | null;
   role: UserRole;
   disabled: boolean;
   created_at: string;
@@ -24,6 +25,11 @@ export async function getUserByUsername(username: string): Promise<User | null> 
   return data;
 }
 
+export async function getUserByEmail(email: string): Promise<User | null> {
+  const { data } = await supabase.from('users').select('*').ilike('email', email).maybeSingle();
+  return data;
+}
+
 export async function getUserById(id: string): Promise<User | null> {
   const { data } = await supabase.from('users').select('*').eq('id', id).maybeSingle();
   return data;
@@ -37,11 +43,12 @@ export async function hasAnyAdmin(): Promise<boolean> {
 export async function createUser(
   username: string,
   passwordHash: string,
-  role: UserRole
+  role: UserRole,
+  email?: string | null
 ): Promise<PublicUser> {
   const { data, error } = await supabase
     .from('users')
-    .insert({ username, password_hash: passwordHash, role })
+    .insert({ username, password_hash: passwordHash, role, email: email || null })
     .select()
     .single();
   if (error) throw new Error(error.message);
@@ -66,6 +73,11 @@ export async function setUserRole(id: string, role: UserRole): Promise<void> {
 
 export async function setUserPassword(id: string, passwordHash: string): Promise<void> {
   const { error } = await supabase.from('users').update({ password_hash: passwordHash }).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+export async function setUserEmail(id: string, email: string | null): Promise<void> {
+  const { error } = await supabase.from('users').update({ email: email || null }).eq('id', id);
   if (error) throw new Error(error.message);
 }
 
