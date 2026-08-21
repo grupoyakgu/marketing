@@ -383,18 +383,46 @@ async function fetchFacebookPostPermalink(postId: string, token: string): Promis
   return permalink.startsWith('http') ? permalink : `https://www.facebook.com${permalink}`;
 }
 
+// Reading a Page post's content (its `message` field) with a User or System
+// User token still 400s with "requires pages_read_engagement" even once
+// that token genuinely has the permission and the Page is an assigned asset
+// -- confirmed against this exact account after fixing both. Graph API's
+// content endpoints want the Page's own derived access token, not the
+// token of whatever User/System User administers it. GET /{page-id} with
+// fields=access_token exchanges one for the other using the System User
+// token's existing Page access -- no separate manual credential needed.
+// Cached per page id since every campaign here shares the same one Page.
+const pageAccessTokenCache = new Map<string, Promise<string | null>>();
+
+async function fetchPageAccessToken(pageId: string, systemUserToken: string): Promise<string | null> {
+  const cached = pageAccessTokenCache.get(pageId);
+  if (cached) return cached;
+  const promise = (async () => {
+    const params = new URLSearchParams({ fields: 'access_token', access_token: systemUserToken });
+    const res = await fetch(`${GRAPH_API}/${pageId}?${params}`, { cache: 'no-store' });
+    if (!res.ok) {
+      console.error(`Meta Ads fetchPageAccessToken failed for ${pageId}: ${res.status} ${await res.text()}`);
+      return null;
+    }
+    const json = await res.json();
+    return (json.access_token as string | undefined) ?? null;
+  })();
+  pageAccessTokenCache.set(pageId, promise);
+  return promise;
+}
+
 /** A boosted post can be an "unpublished"/dark ad post -- confirmed against
  * a real boost whose creative resolved to a shortcode absent from this
  * account's entire organic /media list (53 posts total, none matching).
  * Dark posts have a real permalink and shortcode but are never part of the
  * public feed, so there's no way to read one back except through the page
- * post object Meta creates for it either way -- which requires
- * pages_read_engagement (or "Page Public Content Access") on the token.
- * Deliberately best-effort: returns null on the 400 this account's token
- * currently gets rather than throwing, since a missing caption should only
- * mean no fallback match, not a broken refresh. */
-async function fetchObjectStoryMessage(storyId: string, token: string): Promise<string | null> {
-  const params = new URLSearchParams({ fields: 'message', access_token: token });
+ * post object Meta creates for it either way. Deliberately best-effort:
+ * returns null on any failure rather than throwing, since a missing
+ * caption should only mean no fallback match, not a broken refresh. */
+async function fetchObjectStoryMessage(storyId: string, systemUserToken: string): Promise<string | null> {
+  const pageId = storyId.split('_')[0];
+  const pageToken = pageId ? await fetchPageAccessToken(pageId, systemUserToken) : null;
+  const params = new URLSearchParams({ fields: 'message', access_token: pageToken ?? systemUserToken });
   const res = await fetch(`${GRAPH_API}/${storyId}?${params}`, { cache: 'no-store' });
   if (!res.ok) {
     console.error(`Meta Ads fetchObjectStoryMessage failed for ${storyId}: ${res.status} ${await res.text()}`);
